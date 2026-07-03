@@ -19,7 +19,6 @@ vi.mock('../db/role-queries.js', () => ({
   getRoleById: vi.fn(),
   createRole: vi.fn(),
   updateRole: vi.fn(),
-  deleteRole: vi.fn(),
   deleteRoleById: vi.fn(),
   setRolePermissions: vi.fn(),
   getAllPermissions: vi.fn(),
@@ -400,7 +399,7 @@ describe('Routes - Roles', () => {
     });
 
     it('should fetch the role exactly once (issue #1200: no redundant inner SELECT)', async () => {
-      const { getRoleById, deleteRole, deleteRoleById } = await import('../db/role-queries.js');
+      const { getRoleById, deleteRoleById } = await import('../db/role-queries.js');
       const { getRoleInUseCount } = await import('../repositories/role-repository.js');
       (getRoleById as any).mockResolvedValue(mockCustomRole);
       (getRoleInUseCount as any).mockResolvedValue(0);
@@ -416,8 +415,6 @@ describe('Routes - Roles', () => {
 
       expect(getRoleById).toHaveBeenCalledTimes(1);
       expect(deleteRoleById).toHaveBeenCalledTimes(1);
-      // The pre-fix deleteRole did its own SELECT inside the route — it must not be called.
-      expect(deleteRole).not.toHaveBeenCalled();
     });
   });
 
@@ -507,7 +504,6 @@ describe('Routes - Roles / Permission guards', () => {
       getRoleById: vi.fn(),
       createRole: vi.fn(),
       updateRole: vi.fn(),
-      deleteRole: vi.fn(),
       deleteRoleById: vi.fn(),
       setRolePermissions: vi.fn(),
       getAllPermissions: vi.fn(),

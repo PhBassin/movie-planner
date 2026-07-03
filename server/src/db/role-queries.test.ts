@@ -7,7 +7,6 @@ import {
   getRoleByName,
   createRole,
   updateRole,
-  deleteRole,
   deleteRoleById,
   getAllPermissions,
   getRolePermissions,
@@ -202,58 +201,6 @@ describe('Role & Permission Queries', () => {
       const result = await updateRole(mockDb, 999, { name: 'ghost' });
 
       expect(result).toBeUndefined();
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // deleteRole
-  // -------------------------------------------------------------------------
-  describe('deleteRole', () => {
-    it('should delete a non-system role and return true', async () => {
-      const mockRole: Role = {
-        id: 3, name: 'moderator', description: null, is_system: false, created_at: '2024-01-01T00:00:00Z',
-      };
-
-      vi.mocked(mockDb.query)
-        .mockResolvedValueOnce({ rows: [mockRole], rowCount: 1 } as any)  // lookup
-        .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);           // delete
-
-      const result = await deleteRole(mockDb, 3);
-
-      expect(result).toBe(true);
-    });
-
-    it('should return false if role is a system role (is_system=true)', async () => {
-      const systemRole: Role = {
-        id: 1, name: 'admin', description: 'Administrateur', is_system: true, created_at: '2024-01-01T00:00:00Z',
-      };
-
-      vi.mocked(mockDb.query).mockResolvedValue({ rows: [systemRole], rowCount: 1 } as any);
-
-      const result = await deleteRole(mockDb, 1);
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false for non-existent role', async () => {
-      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
-
-      const result = await deleteRole(mockDb, 999);
-
-      expect(result).toBe(false);
-    });
-
-    it('should not issue DELETE query for system roles', async () => {
-      const systemRole: Role = {
-        id: 1, name: 'admin', description: null, is_system: true, created_at: '2024-01-01T00:00:00Z',
-      };
-
-      vi.mocked(mockDb.query).mockResolvedValue({ rows: [systemRole], rowCount: 1 } as any);
-
-      await deleteRole(mockDb, 1);
-
-      // Only lookup query should have been called, not a DELETE
-      expect(mockDb.query).toHaveBeenCalledTimes(1);
     });
   });
 

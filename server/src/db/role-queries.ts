@@ -140,30 +140,6 @@ export async function updateRole(
 }
 
 /**
- * Delete a role by ID
- * Returns false if the role is a system role (is_system=true) or not found
- * Returns true if successfully deleted
- */
-export async function deleteRole(db: DB, roleId: number): Promise<boolean> {
-  const lookupResult = await db.query<Role>(
-    'SELECT id, name, description, is_system, created_at FROM roles WHERE id = $1',
-    [roleId]
-  );
-
-  if (lookupResult.rows.length === 0) {
-    return false;
-  }
-
-  const role = lookupResult.rows[0];
-  if (role.is_system) {
-    return false;
-  }
-
-  await db.query('DELETE FROM roles WHERE id = $1', [roleId]);
-  return true;
-}
-
-/**
  * Delete a role by ID without any pre-checks.
  *
  * Callers MUST have already verified existence and `is_system` (typically via
