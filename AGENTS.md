@@ -9,6 +9,7 @@ Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) 
 - Each workspace has its OWN `utils/logger.js`. `packages/logger` is not a real workspace — ignore it.
 - Dependency installs use `npm install --legacy-peer-deps` (peer-dep conflicts exist; plain `npm install` may fail). CI deletes `package-lock.json` before installing.
 - **Never add a dependency without explicit user consent.** Prefer existing libraries already in the relevant workspace.
+- **`CONTEXT.md` at the repo root is the project's domain glossary.** Before introducing or naming a domain concept (entity, FSM, wire-format type), read it first and extend it in the same change. New code MUST use the canonical terms it defines; new or overloaded concepts MUST be added there with cross-references to the source files.
 
 ## Commands (run inside the workspace dir or via `--workspace`)
 
