@@ -48,5 +48,27 @@ describe('role-repository', () => {
 
       expect(result).toBe(0);
     });
+
+    it('throws when count is null (malformed row, not a legitimate empty result)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: null }],
+        rowCount: 1,
+      } as any);
+
+      await expect(getRoleInUseCount(mockDb, 11)).rejects.toThrow(
+        /getRoleInUseCount: unexpected non-numeric count from database/
+      );
+    });
+
+    it('throws when count is non-numeric (malformed row, not a legitimate empty result)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: 'not-a-number' }],
+        rowCount: 1,
+      } as any);
+
+      await expect(getRoleInUseCount(mockDb, 13)).rejects.toThrow(
+        /getRoleInUseCount: unexpected non-numeric count from database/
+      );
+    });
   });
 });
