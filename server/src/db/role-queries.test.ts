@@ -8,6 +8,7 @@ import {
   createRole,
   updateRole,
   deleteRole,
+  deleteRoleById,
   getAllPermissions,
   getRolePermissions,
   assignPermissionsToRole,
@@ -253,6 +254,41 @@ describe('Role & Permission Queries', () => {
 
       // Only lookup query should have been called, not a DELETE
       expect(mockDb.query).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // deleteRoleById
+  // -------------------------------------------------------------------------
+  describe('deleteRoleById', () => {
+    it('should delete a role by id and return true when the row exists', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
+
+      const result = await deleteRoleById(mockDb, 3);
+
+      expect(result).toBe(true);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM roles'),
+        [3]
+      );
+    });
+
+    it('should return false when no role matches the id (rowCount=0)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      const result = await deleteRoleById(mockDb, 999);
+
+      expect(result).toBe(false);
+    });
+
+    it('should issue exactly one DELETE query and never a SELECT on roles', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
+
+      await deleteRoleById(mockDb, 3);
+
+      expect(mockDb.query).toHaveBeenCalledTimes(1);
+      const [sql] = vi.mocked(mockDb.query).mock.calls[0];
+      expect(sql).toMatch(/^\s*DELETE\s+FROM\s+roles\s+WHERE\s+id\s+=\s+\$1\s*;?\s*$/i);
     });
   });
 
