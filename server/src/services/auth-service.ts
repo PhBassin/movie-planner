@@ -13,8 +13,51 @@ import { ValidationError, AuthError, NotFoundError } from '../utils/errors.js';
 // Pre-computed hash for 'dummy' (cost 10) to prevent timing attacks
 const DUMMY_HASH = 'scrypt:16384:8:1:00000000000000000000000000000000:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
 
+/**
+ * Minimum user shape required to mint an access token. Both UserRow and
+ * UserWithRoleRow extend this — callers pass whichever they already hold.
+ */
+export interface AccessTokenSubject {
+  id: number;
+  username: string;
+  role_id: number;
+  role_name: string;
+  is_system_role: boolean;
+}
+
 export class AuthService {
   constructor(private db: DB) {}
+
+  /**
+   * Mint an HS256 access token for `user`. The canonical payload shape
+   * ({ id, username, role_name, is_system_role, permissions }) lives here
+   * — every code path that issues an access token MUST go through this
+   * method so the claim set stays in lockstep.
+   *
+   * @param user - Subject of the token. `db` is passed explicitly so the
+   *               refresh route can mint against the same DB handle it
+   *               already loaded the user from, without re-deriving it
+   *               from the service's constructor-injected DB.
+   */
+  async mintAccessToken(user: AccessTokenSubject, db: DB): Promise<string> {
+    const permissions = (await getPermissionNamesByRoleId(db, user.role_id)) as PermissionName[];
+
+    const secret = getCurrentSecret();
+
+    const expiresIn = parseJwtExpiration(process.env.JWT_EXPIRES_IN || '1h');
+
+    return jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        role_name: user.role_name,
+        is_system_role: user.is_system_role,
+        permissions,
+      },
+      secret,
+      { algorithm: 'HS256', expiresIn: expiresIn as any }
+    );
+  }
 
   async login(username?: string, password?: string) {
     if (!username || !password) {
@@ -29,24 +72,7 @@ export class AuthService {
       throw new AuthError('Invalid credentials');
     }
 
-    const permissions = await getPermissionNamesByRoleId(this.db, user.role_id) as PermissionName[];
-
-    const secret = getCurrentSecret();
-
-    // Parse JWT expiration from env var (default: 1h)
-    const expiresIn = parseJwtExpiration(process.env.JWT_EXPIRES_IN || '1h');
-
-    const token = jwt.sign(
-      {
-        id: user.id,
-        username: user.username,
-        role_name: user.role_name,
-        is_system_role: user.is_system_role,
-        permissions,
-      },
-      secret,
-      { algorithm: 'HS256', expiresIn: expiresIn as any }
-    );
+    const token = await this.mintAccessToken(user, this.db);
 
     return {
       token,
@@ -56,7 +82,7 @@ export class AuthService {
         role_id: user.role_id,
         role_name: user.role_name,
         is_system_role: user.is_system_role,
-        permissions,
+        permissions: await getPermissionNamesByRoleId(this.db, user.role_id) as PermissionName[],
       },
     };
   }
