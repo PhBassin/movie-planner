@@ -15,6 +15,7 @@ import {
 import type { PermissionName } from '../types/role.js';
 import { logger } from '../utils/logger.js';
 import { getUserWithRoleById } from '../db/user-queries.js';
+import { getPermissionNamesByRoleId } from '../db/role-queries.js';
 import crypto from 'crypto';
 
 const router = express.Router();
@@ -197,6 +198,7 @@ router.post('/change-password', authLimiter, requireAuth, async (req: AuthReques
 router.post('/refresh', authLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const db: DB = req.app.get('db');
+        const authService = new AuthService(db);
 
         const refreshToken = req.cookies?.refresh_token;
         if (!refreshToken) {
@@ -236,27 +238,9 @@ router.post('/refresh', authLimiter, async (req: Request, res: Response, next: N
         // Atomically rotate: generate new token AND revoke old one in one transaction
         const newRefreshToken = await rotateRefreshToken(db, userId, refreshToken);
 
-        // Generate new access token
-        const jwt = await import('jsonwebtoken');
-        const { getCurrentSecret } = await import('../utils/jwt-secrets.js');
-        const { parseJwtExpiration } = await import('../utils/jwt-config.js');
-        const { getPermissionNamesByRoleId } = await import('../db/role-queries.js');
-
-        const secret = getCurrentSecret();
-        const expiresIn = parseJwtExpiration(process.env.JWT_EXPIRES_IN || '1h');
-        const permissions = await getPermissionNamesByRoleId(db, user.role_id);
-
-        const accessToken = jwt.sign(
-            {
-                id: user.id,
-                username: user.username,
-                role_name: user.role_name,
-                is_system_role: user.is_system_role,
-                permissions,
-            },
-            secret,
-            { algorithm: 'HS256', expiresIn: expiresIn as any }
-        );
+        // Mint a fresh access token via the canonical AuthService seam — same
+        // payload shape as the login flow, no duplicate signing code.
+        const accessToken = await authService.mintAccessToken(user, db);
 
         // Set new refresh token cookie
         setRefreshTokenCookie(res, newRefreshToken);
@@ -277,7 +261,7 @@ router.post('/refresh', authLimiter, async (req: Request, res: Response, next: N
                     role_id: user.role_id,
                     role_name: user.role_name,
                     is_system_role: user.is_system_role,
-                    permissions,
+                    permissions: await getPermissionNamesByRoleId(db, user.role_id),
                 },
             },
         });
