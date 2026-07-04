@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx --env-file-if-exists=.env watch src/index.ts",
+    "prebuild": "npm run build --workspace=allo-scrapper-scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/schema.ts",
@@ -22,6 +23,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "allo-scrapper-scraper-protocol": "*",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.2.1",
