@@ -39,7 +39,7 @@ describe('Rate Limit Refresher Service', () => {
     });
   });
 
-  it('does not log debug when loadFromDb returns false (no row / not changed)', async () => {
+  it('does not log debug when loadFromDb returns false (no row found)', async () => {
     vi.mocked(loadFromDb).mockResolvedValue(false);
     startConfigRefresher(mockDb);
     await vi.waitFor(() => expect(loadFromDb).toHaveBeenCalledTimes(1));
