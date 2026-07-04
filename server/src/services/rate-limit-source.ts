@@ -161,14 +161,18 @@ export async function getAuditInfo(db: DB): Promise<RateLimitAuditInfo> {
       const row = result.rows[0];
       let updatedBy: { id: number; username: string } | null = null;
       if (row.updated_by !== null) {
-        const userResult = await db.query<{ username: string }>(
-          'SELECT username FROM users WHERE id = $1',
-          [row.updated_by]
-        );
-        updatedBy = {
-          id: row.updated_by,
-          username: userResult.rows[0]?.username ?? '',
-        };
+        try {
+          const userResult = await db.query<{ username: string }>(
+            'SELECT username FROM users WHERE id = $1',
+            [row.updated_by]
+          );
+          updatedBy = {
+            id: row.updated_by,
+            username: userResult.rows[0]?.username ?? '',
+          };
+        } catch {
+          updatedBy = { id: row.updated_by, username: '' };
+        }
       }
       return {
         config: rowToConfig(row),

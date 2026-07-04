@@ -407,6 +407,22 @@ describe('RateLimitSource — getAuditInfo (admin display only)', () => {
     expect(info.updatedBy).toEqual({ id: 11, username: '' });
   });
 
+  it('keeps source as "database" when the username lookup throws', async () => {
+    vi.resetModules();
+    const { getAuditInfo } = await import('./rate-limit-source.js');
+
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [makeDbRow({ updated_by: 11, environment: 'production' })] })
+      .mockRejectedValueOnce(new Error('users table unavailable'));
+    const db = { query } as unknown as DB;
+
+    const info = await getAuditInfo(db);
+    expect(info.source).toBe('database');
+    expect(info.updatedBy).toEqual({ id: 11, username: '' });
+    expect(info.environment).toBe('production');
+  });
+
   it('reports source as "env" when DB has no row and at least one env var is set', async () => {
     process.env.RATE_LIMIT_GENERAL_MAX = '300';
     vi.resetModules();
