@@ -18,6 +18,7 @@ COPY package.json package-lock.json ./
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 COPY scraper/package.json ./scraper/
+COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
 
 # Install scraper workspace dependencies (including devDependencies for build)
 # Use --omit=optional to skip platform-specific bindings
@@ -32,19 +33,20 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Copy node_modules from deps stage (both root and workspace)
+# Copy node_modules from deps stage (everything is hoisted to the root).
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/scraper/node_modules ./scraper/node_modules
 
 # Copy root files
 COPY package.json package-lock.json ./
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 COPY scraper/package.json ./scraper/
+COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
 
 # Copy source
 COPY scraper/src ./scraper/src
 COPY scraper/tsconfig.json ./scraper/
+COPY packages/scraper-protocol/ ./packages/scraper-protocol/
 
 # Build TypeScript
 RUN npm run build --workspace=allo-scrapper-scraper && \
@@ -84,6 +86,7 @@ COPY --chown=nodejs:nodejs package.json package-lock.json ./
 COPY --chown=nodejs:nodejs client/package.json ./client/
 COPY --chown=nodejs:nodejs server/package.json ./server/
 COPY --chown=nodejs:nodejs scraper/package.json ./scraper/
+COPY --chown=nodejs:nodejs packages/scraper-protocol/package.json ./packages/scraper-protocol/
 
 # Install production dependencies only for scraper workspace
 # Use --omit=optional to skip platform-specific bindings
