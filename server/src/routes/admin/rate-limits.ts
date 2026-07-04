@@ -1,7 +1,6 @@
 import express from 'express';
 import type { DB } from '../../db/index.js';
 import {
-  getRateLimits,
   updateRateLimits,
   resetRateLimits,
   getRateLimitAuditLog,
@@ -10,8 +9,7 @@ import {
 import { requireAuth, type AuthRequest } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permission.js';
 import { protectedLimiter } from '../../middleware/rate-limit.js';
-import { invalidateRateLimitCache, getRateLimitConfig } from '../../config/rate-limits.js';
-import { refreshRateLimits } from '../../middleware/rate-limit.js';
+import { getAuditInfo, loadFromDb } from '../../services/rate-limit-source.js';
 import type { ApiResponse } from '../../types/api.js';
 import { ValidationError } from '../../utils/errors.js';
 import { parseStrictInt } from '../../utils/number.js';
@@ -20,12 +18,12 @@ const router = express.Router();
 
 /**
  * GET /api/admin/rate-limits
- * Get current rate limit configuration
+ * Get current rate limit configuration (audit-aware)
  */
 router.get('/', protectedLimiter, requireAuth, requirePermission('ratelimits:read'), async (req, res, next) => {
   try {
     const db: DB = req.app.get('db');
-    const rateLimits = await getRateLimits(db);
+    const rateLimits = await getAuditInfo(db);
 
     const response: ApiResponse = {
       success: true,
@@ -71,11 +69,9 @@ router.put('/', protectedLimiter, requireAuth, requirePermission('ratelimits:upd
     }
 
     const updated = await updateRateLimits(db, updates, user.id, user.username, user.role_name, userIp, userAgent);
-    
-    // Invalidate cache and refresh live limiters
-    invalidateRateLimitCache();
-    const dbConfig = await getRateLimitConfig(db);
-    refreshRateLimits(dbConfig);
+
+    // Refresh the source's memoized state from DB so middleware picks up changes immediately
+    await loadFromDb(db);
 
     const response: ApiResponse = {
       success: true,
@@ -102,8 +98,8 @@ router.post('/reset', protectedLimiter, requireAuth, requirePermission('ratelimi
     const userAgent = req.headers['user-agent'] ?? 'unknown';
 
     const reset = await resetRateLimits(db, user.id, user.username, user.role_name, userIp, userAgent);
-    
-    invalidateRateLimitCache();
+
+    await loadFromDb(db);
 
     const response: ApiResponse = {
       success: true,
