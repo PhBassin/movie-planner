@@ -20,6 +20,7 @@ COPY package.json package-lock.json ./
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 COPY scraper/package.json ./scraper/
+COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
 
 # Install all dependencies using legacy-peer-deps for React hooks ESLint plugin
 # Remove package-lock.json to regenerate with correct platform-specific bindings
@@ -64,6 +65,7 @@ COPY package.json package-lock.json ./
 
 # Copy backend source
 COPY server/ ./server/
+COPY packages/ ./packages/
 
 # Build backend workspace
 RUN npm run build --workspace=allo-scrapper-server && \
@@ -93,6 +95,7 @@ COPY --chown=nodejs:nodejs package.json package-lock.json ./
 COPY --chown=nodejs:nodejs client/package.json ./client/
 COPY --chown=nodejs:nodejs server/package.json ./server/
 COPY --chown=nodejs:nodejs scraper/package.json ./scraper/
+COPY --chown=nodejs:nodejs packages/scraper-protocol/package.json ./packages/scraper-protocol/
 
 # Install only production dependencies for the server workspace
 # Remove package-lock.json and regenerate to get correct platform-specific bindings

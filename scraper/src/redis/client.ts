@@ -1,53 +1,24 @@
 import Redis from 'ioredis';
-import type { ProgressEvent, ScrapeSummary } from '../types/scraper.js';
+import type {
+  ProgressEvent,
+  ScrapeJob,
+  ScrapeJobScrape,
+  ScrapeJobAddTheater,
+  ScheduleChangeEvent,
+} from 'allo-scrapper-scraper-protocol';
 import { logger } from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
-// Types
+// Types — re-exported from allo-scrapper-scraper-protocol so existing
+// importers keep working without churn. The wire contract lives in one place.
 // ---------------------------------------------------------------------------
 
-export interface ScheduleChangeEvent {
-  action: 'created' | 'updated' | 'deleted';
-  scheduleId: number;
-  schedule?: {
-    id: number;
-    name: string;
-    cron_expression: string;
-    enabled: boolean;
-    target_theaters?: string[] | null;
-  };
-}
-
-interface BaseScrapeJob {
-  reportId: number;
-  /** OpenTelemetry trace context propagated from the HTTP request */
-  traceContext?: Record<string, string>;
-}
-
-export interface ScrapeJobScrape extends BaseScrapeJob {
-  type: 'scrape';
-  triggerType: 'manual' | 'cron';
-  options?: {
-    mode?: 'weekly' | 'from_today' | 'from_today_limited';
-    days?: number;
-    theaterId?: string;
-    movieId?: number;
-  };
-}
-
-export interface ScrapeJobAddTheater extends BaseScrapeJob {
-  type: 'add_theater';
-  triggerType: 'manual';
-  /** The Allociné theater URL to add and scrape */
-  url: string;
-}
-
-/**
- * Discriminated union of all job types the scraper can process.
- * Use `job.type` (or check for presence of the field for legacy jobs) to
- * narrow to a concrete job variant.
- */
-export type ScrapeJob = ScrapeJobScrape | ScrapeJobAddTheater;
+export type {
+  ScrapeJob,
+  ScrapeJobScrape,
+  ScrapeJobAddTheater,
+  ScheduleChangeEvent,
+} from 'allo-scrapper-scraper-protocol';
 
 // ---------------------------------------------------------------------------
 // RedisProgressPublisher – implements ProgressPublisher interface

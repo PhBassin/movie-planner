@@ -83,9 +83,7 @@ Terminal states: `success`, `failed`, `rate_limited`, `not_attempted`. There is 
 
 ### ScrapeSummary
 
-The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **One definition, two byte-identical copies:** the canonical declaration lives in `scraper/src/types/scraper.ts:113` and is re-declared in `server/src/services/progress-tracker.ts:19`. Both exist today because no shared protocol package exists yet — the same pattern repeats for `ProgressEvent`, `ScrapeJob`, and `ScheduleChangeEvent`. When the protocol package lands, these converge.
-
-The scrape-side and server-side shapes are identical *today* (both include `total_dates` and `status`), so for new code pick either copy; the arrival of a protocol package will move both into it.
+The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The server-side copy at `server/src/services/progress-tracker.ts:19` and the scraper-side copy at `scraper/src/types/scraper.ts:113` are now re-exports from the protocol package; the duplicate declarations are gone.
 
 ### Resume
 
@@ -99,21 +97,21 @@ A Resume always produces a **new** ScrapeReport with `parent_report_id` set to t
 
 A unit of work submitted by the server over the Redis `scrape:jobs` list for the scraper microservice to execute. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId` and an optional OpenTelemetry `traceContext`.
 
-Two byte-identical copies live at `server/src/services/redis-client.ts:50` and `scraper/src/redis/client.ts:50`. **Canonical home is the forthcoming protocol package** (issue #<TBD>); when that lands, both sites re-export from it. Until then, edit both — `grep -r 'export type ScrapeJob' server/src scraper/src` is the audit.
+**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). Both `server/src/services/redis-client.ts` and `scraper/src/redis/client.ts` re-export the type and the `serializeJob` / `parseJob` helpers from the protocol package; the previous duplicate declarations are gone. `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
 
-**Drift to be aware of (not fixed by this entry):** the server-side `ScrapeJobScrape.options` shape (`server/src/services/redis-client.ts:30-37`) includes `resumeMode` and `pendingAttempts` for the Resume case; the structurally-identical scraper-side declaration (`scraper/src/redis/client.ts:30-36`) does not. The scraper consumes those fields via its own `ScrapeOptions` type (`scraper/src/scraper/index.ts:140`), which is why this works in practice today. The protocol-package work should converge all three.
+The `ScrapeJobScrape.options` shape now has a single canonical declaration that includes `resumeMode` and `pendingAttempts` for the Resume case. Both sides of the wire agree, and the scraper's local `ScrapeOptions` (`scraper/src/scraper/index.ts:140`) is now a scraper-internal type that no longer needs to redeclare wire fields.
 
 ### ProgressEvent
 
 A discrete event published by the scraper onto the Redis `scrape:progress` pub/sub channel during a run, fanned out by the server to connected SSE clients. The union covers run start (`started`), per-theater and per-date lifecycle (`theater_started`, `date_started`, `date_completed`, `date_failed`, `date_stale`), per-movie lifecycle (`movie_started`, `movie_completed`, `movie_failed`), run completion (`completed` with the ScrapeSummary), and fatal failure (`failed`).
 
-Declared at `scraper/src/types/scraper.ts:98` and re-declared at `server/src/services/progress-tracker.ts:4`. Same two-sites, one concept pattern as `ScrapeJob` and `ScrapeSummary`. Canonical home is the forthcoming protocol package.
+**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The scraper's local declaration at `scraper/src/types/scraper.ts:98` and the server's re-declaration at `server/src/services/progress-tracker.ts:4` are now re-exports from the protocol package.
 
 ### ScheduleChangeEvent
 
 A fire-and-forget pub/sub notification on the Redis `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the schedules table; the scraper subscribes and re-evaluates its in-process cron jobs in response.
 
-Declared identically at `scraper/src/redis/client.ts:9` and `server/src/services/redis-client.ts:15`. Same forthcoming protocol-package note as the other wire types.
+**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The previous scraper-side declaration at `scraper/src/redis/client.ts:9` and server-side declaration at `server/src/services/redis-client.ts:15` are now re-exports from the protocol package.
 
 **ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
 

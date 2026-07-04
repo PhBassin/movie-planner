@@ -33,7 +33,7 @@ scraper/src/
 │   ├── scrape-attempt-queries.ts
 │   └── report-queries.ts
 ├── redis/
-│   └── client.ts               # Redis (BullMQ) publisher/consumer
+│   └── client.ts               # Redis transport (publisher / consumer / subscriber)
 ├── scraper/                    # Core scraping logic
 │   ├── index.ts                # Scraper orchestration
 │   ├── http-client.ts          # Puppeteer/Cheerio HTTP client
@@ -46,7 +46,7 @@ scraper/src/
 │       ├── IScraperStrategy.ts      # Strategy interface
 │       └── AllocineScraperStrategy.ts # AlloCiné-specific strategy
 ├── types/
-│   └── scraper.ts              # TypeScript types for scrape jobs
+│   └── scraper.ts              # Internal data shapes (Theater, Movie, Showtime, …) — re-exports wire types from scraper-protocol
 └── utils/
     ├── logger.ts               # Winston logger
     ├── date.ts                 # Date utilities (scrape windows)
@@ -134,6 +134,8 @@ Communication between server and scraper uses **BullMQ** over Redis:
 | `ScrapeJobAddTheater` | Server → Scraper | Add + scrape new theater |
 | Progress Events | Scraper → Server | Real-time status updates |
 | Results | Scraper → Server | Scraped data delivery |
+
+**Wire contract** — the `ScrapeJob` discriminated union, `ProgressEvent`, `ScheduleChangeEvent`, and `ScrapeSummary` live in the shared workspace `packages/scraper-protocol` (re-exported by `scraper/src/redis/client.ts` and `scraper/src/types/scraper.ts` for backward-compatible import paths). `serializeJob` / `parseJob` validate the discriminated union at the parse boundary so drift between the two adapters cannot land silently.
 
 **Redis Client:** `scraper/src/redis/client.ts`
 - Publisher: Send results/progress to server

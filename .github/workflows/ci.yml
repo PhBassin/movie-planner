@@ -38,6 +38,9 @@ jobs:
           rm -f package-lock.json
           npm install --legacy-peer-deps
 
+      - name: Build scraper-protocol workspace
+        run: npm run build --workspace=allo-scrapper-scraper-protocol
+
       - name: TypeScript type-check (server)
         run: npx tsc --noEmit
         working-directory: server
@@ -57,3 +60,6 @@ jobs:
       - name: Check test coverage
         run: npm run test:coverage
         working-directory: server
+
+      - name: Scraper-protocol tests & coverage
+        run: npm run test:coverage --workspace=allo-scrapper-scraper-protocol
