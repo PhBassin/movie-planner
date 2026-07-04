@@ -6,7 +6,7 @@ import { assertRateLimitPutRejected } from '../../test-utils/rate-limit.js';
 
 // Mock dependencies BEFORE importing the router
 vi.mock('../../db/rate-limit-queries.js');
-vi.mock('../../config/rate-limits.js');
+vi.mock('../../services/rate-limit-source.js');
 vi.mock('../../utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
@@ -26,7 +26,6 @@ vi.mock('../../middleware/auth.js', () => ({
 }));
 vi.mock('../../middleware/rate-limit.js', () => ({
   protectedLimiter: (req: any, res: any, next: any) => next(),
-  refreshRateLimits: vi.fn(),
 }));
 vi.mock('../../middleware/permission.js', () => ({
   requirePermission: (..._perms: string[]) => (req: any, res: any, next: any) => next(),
@@ -34,7 +33,7 @@ vi.mock('../../middleware/permission.js', () => ({
 
 // Import mocked modules
 import * as rateLimitQueries from '../../db/rate-limit-queries.js';
-import * as rateLimitsConfig from '../../config/rate-limits.js';
+import * as rateLimitSource from '../../services/rate-limit-source.js';
 
 // Import router AFTER mocks are set up
 import rateLimitsRouter from './rate-limits.js';
@@ -76,8 +75,8 @@ describe('Routes - Admin - Rate Limits', () => {
   });
 
   describe('GET /api/admin/rate-limits', () => {
-    it('should return current rate limit configuration', async () => {
-      vi.mocked(rateLimitQueries.getRateLimits).mockResolvedValue(mockRateLimitConfig);
+    it('should return current rate limit configuration (audit info from source)', async () => {
+      vi.mocked(rateLimitSource.getAuditInfo).mockResolvedValue(mockRateLimitConfig);
 
       const response = await request(app)
         .get('/api/admin/rate-limits')
@@ -86,7 +85,7 @@ describe('Routes - Admin - Rate Limits', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data).toEqual(mockRateLimitConfig);
-      expect(rateLimitQueries.getRateLimits).toHaveBeenCalledWith(mockDb);
+      expect(rateLimitSource.getAuditInfo).toHaveBeenCalledWith(mockDb);
     });
 
     it('should require authentication', async () => {
@@ -128,18 +127,7 @@ describe('Routes - Admin - Rate Limits', () => {
       });
 
       vi.mocked(rateLimitQueries.updateRateLimits).mockResolvedValue(updatedConfig);
-      vi.mocked(rateLimitsConfig.getRateLimitConfig).mockResolvedValue({
-        windowMs: 900000,
-        generalMax: 150,
-        authMax: 5,
-        registerMax: 3,
-        registerWindowMs: 3600000,
-        protectedMax: 60,
-        scraperMax: 20,
-        publicMax: 100,
-        healthMax: 10,
-        healthWindowMs: 60000,
-      });
+      vi.mocked(rateLimitSource.loadFromDb).mockResolvedValue(true);
 
       const response = await request(app)
         .put('/api/admin/rate-limits')
@@ -162,7 +150,7 @@ describe('Routes - Admin - Rate Limits', () => {
         expect.any(String)
       );
 
-      expect(rateLimitsConfig.invalidateRateLimitCache).toHaveBeenCalled();
+      expect(rateLimitSource.loadFromDb).toHaveBeenCalledWith(mockDb);
     });
 
     it('should reject non-numeric values', async () => {
@@ -216,8 +204,9 @@ describe('Routes - Admin - Rate Limits', () => {
   });
 
   describe('POST /api/admin/rate-limits/reset', () => {
-    it('should reset rate limits to defaults and invalidate cache', async () => {
+    it('should reset rate limits to defaults and refresh source from DB', async () => {
       vi.mocked(rateLimitQueries.resetRateLimits).mockResolvedValue(mockRateLimitConfig);
+      vi.mocked(rateLimitSource.loadFromDb).mockResolvedValue(true);
 
       const response = await request(app)
         .post('/api/admin/rate-limits/reset')
@@ -236,7 +225,7 @@ describe('Routes - Admin - Rate Limits', () => {
         expect.any(String)
       );
 
-      expect(rateLimitsConfig.invalidateRateLimitCache).toHaveBeenCalled();
+      expect(rateLimitSource.loadFromDb).toHaveBeenCalledWith(mockDb);
     });
 
     it('should require authentication', async () => {

@@ -1,10 +1,11 @@
 // Set secure JWT_SECRET BEFORE importing rate-limit
 process.env.JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import type { DB } from '../db/index.js';
 import {
   generalLimiter,
   authLimiter,
@@ -455,10 +456,77 @@ describe('Rate Limiting Middleware', () => {
       const limitedResponse = await request(tightApp)
         .get('/health')
         .set('X-Forwarded-For', clientIp);
-      
+
       expect(limitedResponse.status).toBe(429);
       expect(limitedResponse.body.success).toBe(false);
       expect(limitedResponse.body.error).toBe('Too many health check requests');
+    });
+  });
+
+  describe('live source subscription', () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.resetModules();
+    });
+
+    function makeDb(rows: any[]): DB {
+      return {
+        query: vi.fn().mockResolvedValue({ rows }),
+      } as unknown as DB;
+    }
+
+    it('picks up new limits after source.loadFromDb updates the source', async () => {
+      const source = await import('../services/rate-limit-source.js');
+      const middleware = await import('./rate-limit.js');
+
+      await source.loadFromDb(makeDb([{
+        window_ms: 60000,
+        general_max: 1,
+        auth_max: 5,
+        register_max: 3,
+        register_window_ms: 3600000,
+        protected_max: 60,
+        scraper_max: 10,
+        public_max: 100,
+        health_max: 10,
+        health_window_ms: 60000,
+        updated_at: '2026-04-01T00:00:00.000Z',
+        updated_by: null,
+        environment: 'test',
+      }]));
+
+      const app = express();
+      app.set('trust proxy', 1);
+      app.get('/t', middleware.generalLimiter, (_req, res) => res.json({ ok: true }));
+
+      const r1 = await request(app).get('/t');
+      expect(r1.status).toBe(200);
+
+      const r2 = await request(app).get('/t');
+      expect(r2.status).toBe(429);
+    });
+
+    it('keeps env-derived limits when loadFromDb fails', async () => {
+      const source = await import('../services/rate-limit-source.js');
+      const middleware = await import('./rate-limit.js');
+
+      const failingDb = {
+        query: vi.fn().mockRejectedValue(new Error('DB down')),
+      } as unknown as DB;
+
+      await source.loadFromDb(failingDb);
+
+      const app = express();
+      app.set('trust proxy', 1);
+      app.get('/t', middleware.generalLimiter, (_req, res) => res.json({ ok: true }));
+
+      for (let i = 0; i < 10; i++) {
+        const r = await request(app).get('/t');
+        expect(r.status).toBe(200);
+      }
     });
   });
 });

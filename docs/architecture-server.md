@@ -20,8 +20,6 @@ Routes (HTTP handlers) → Services (business logic) → DB Queries (data access
 server/src/
 ├── app.ts              # Express app setup, middleware registration
 ├── index.ts            # Entry point — HTTP server bootstrap
-├── config/             # Configuration constants
-│   └── rate-limits.ts  
 ├── db/                 # Database layer (Drizzle ORM)
 │   ├── client.ts       # PostgreSQL connection
 │   ├── schema.ts       # Table definitions
@@ -30,8 +28,7 @@ server/src/
 ├── middleware/          # Express middleware
 │   ├── auth.ts         # JWT authentication
 │   ├── permission.ts   # Role-based authorization
-│   ├── rate-limit.ts   # Rate limit enforcement
-│   ├── rate-limiter.ts # Rate limiter factory
+│   ├── rate-limit.ts   # Rate limit enforcement (subscribes to source)
 │   └── error-handler.ts
 ├── routes/             # HTTP route handlers
 │   ├── auth.ts         # Authentication endpoints
@@ -53,7 +50,9 @@ server/src/
 │   ├── system-info.ts
 │   ├── theme-generator.ts
 │   ├── progress-tracker.ts
-│   └── redis-client.ts
+│   ├── redis-client.ts
+│   ├── rate-limit-source.ts      # Single source of truth for rate-limit config
+│   └── rate-limit-refresher.ts   # 60s poller → source.loadFromDb
 ├── types/              # TypeScript type definitions
 │   ├── api.ts
 │   ├── user.ts
@@ -84,7 +83,7 @@ server/src/
 2. **CORS** → `utils/cors-config.ts`
 3. **Security Headers** → Helmet
 4. **Body Parsing** → express.json()
-5. **Rate Limiting** → `middleware/rate-limiter.ts`
+5. **Rate Limiting** → `middleware/rate-limit.ts` (subscribes to `services/rate-limit-source.ts`)
 6. **Route Matching** → Express router
 7. **JWT Auth** → `middleware/auth.ts` (if route requires)
 8. **Permission Check** → `middleware/permission.ts` (if route requires)
@@ -110,8 +109,11 @@ server/src/
 
 ### Rate Limiting
 - Configurable per-endpoint rate limits
-- Stored in database (`rate_limits` table)
-- Admin panel for configuration at `/api/admin/rate-limits`
+- Single source of truth at `services/rate-limit-source.ts`: holds the flat `RateLimitConfig` consumed by middleware and the wrapped `RateLimitAuditInfo` returned to the admin display only
+- Resolution order (DB row in `rate_limit_configs` → `RATE_LIMIT_*` env vars → built-in defaults) lives in one place; the env-var parsing happens at module-load and is replaced when the source loads from DB
+- `middleware/rate-limit.ts` subscribes to the source; every successful `loadFromDb` rebuilds the limiter delegates, so the per-request hot path is sync
+- `services/rate-limit-refresher.ts` polls the DB every 60s and calls `source.loadFromDb(db)`
+- Admin panel for configuration at `/api/admin/rate-limits` (uses `getAuditInfo(db)` for display)
 
 ### Redis Integration
 - BullMQ for job queues (scraper communication)
