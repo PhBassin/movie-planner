@@ -152,9 +152,3 @@ subscribe(() => {
     m.refresh();
   }
 });
-
-export function refreshRateLimits(): void {
-  for (const m of allMiddleware) {
-    m.refresh();
-  }
-}

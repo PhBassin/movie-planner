@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { QueryResult } from 'pg';
 import {
-  getRateLimits,
   updateRateLimits,
   resetRateLimits,
   getRateLimitAuditLog,
@@ -23,7 +22,6 @@ function mockQueryResult<T = any>(rows: T[]): QueryResult<T> {
 
 describe('rate-limit-queries', () => {
   const mockConfigRow: RateLimitConfigRow = {
-    id: 1,
     window_ms: 900000,
     general_max: 100,
     auth_max: 5,
@@ -38,57 +36,6 @@ describe('rate-limit-queries', () => {
     updated_by: 1,
     environment: 'production',
   };
-
-  describe('getRateLimits', () => {
-    it('should fetch rate limit config from database', async () => {
-      const mockDb = {
-        query: vi.fn()
-          .mockResolvedValueOnce({ rows: [mockConfigRow] })
-          .mockResolvedValueOnce({ rows: [{ username: 'admin' }] }),
-        end: vi.fn(),
-      } as any as DB;
-
-      const config = await getRateLimits(mockDb);
-
-      expect(config.config).toEqual({
-        windowMs: 900000,
-        generalMax: 100,
-        authMax: 5,
-        registerMax: 3,
-        registerWindowMs: 3600000,
-        protectedMax: 60,
-        scraperMax: 10,
-        publicMax: 100,
-        healthMax: 10,
-        healthWindowMs: 60000,
-      });
-      expect(config.source).toBe('database');
-      expect(config.updatedBy).toEqual({ id: 1, username: 'admin' });
-      expect(config.environment).toBe('production');
-    });
-
-    it('should throw error if config not found', async () => {
-      const mockDb = {
-        query: vi.fn().mockResolvedValue({ rows: [] }),
-        end: vi.fn(),
-      } as any as DB;
-
-      await expect(getRateLimits(mockDb)).rejects.toThrow('Rate limit configuration not found');
-    });
-
-    it('should handle null updated_by', async () => {
-      const mockDb = {
-        query: vi.fn().mockResolvedValue({
-          rows: [{ ...mockConfigRow, updated_by: null }]
-        }),
-        end: vi.fn(),
-      } as any as DB;
-
-      const config = await getRateLimits(mockDb);
-
-      expect(config.updatedBy).toBeNull();
-    });
-  });
 
   describe('updateRateLimits', () => {
     it('should update rate limits and create audit log', async () => {

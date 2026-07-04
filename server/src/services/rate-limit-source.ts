@@ -37,7 +37,7 @@ export interface RateLimitAuditInfo {
   environment: string | null;
 }
 
-export const DEFAULT_CONFIG: RateLimitConfig = {
+const DEFAULT_CONFIG: RateLimitConfig = {
   windowMs: 15 * 60 * 1000,
   generalMax: 100,
   authMax: 5,
@@ -63,15 +63,11 @@ const RATE_LIMIT_ENV_KEYS = [
   'RATE_LIMIT_HEALTH_WINDOW_MS',
 ] as const;
 
-export function parseEnvInt(key: string, defaultValue: number): number {
+function parseEnvInt(key: string, defaultValue: number): number {
   const val = process.env[key];
   if (!val) return defaultValue;
   const parsed = parseInt(val, 10);
   return Number.isFinite(parsed) ? parsed : defaultValue;
-}
-
-export function getDefaults(): RateLimitConfig {
-  return { ...DEFAULT_CONFIG };
 }
 
 function readFromEnv(): RateLimitConfig {
