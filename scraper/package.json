@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx --env-file-if-exists=.env watch src/index.ts",
+    "prebuild": "npm run build --workspace=allo-scrapper-scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "test": "vitest",
@@ -21,6 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
+    "allo-scrapper-scraper-protocol": "*",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
     "@opentelemetry/instrumentation-http": "^0.218.0",
     "@opentelemetry/instrumentation-pg": "^0.70.0",
