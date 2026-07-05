@@ -1,5 +1,10 @@
 import type { DB } from './index.js';
-import type { RateLimitAuditInfo, RateLimitConfigRow } from '../services/rate-limit-source.js';
+import {
+  DEFAULT_CONFIG,
+  type RateLimitAuditInfo,
+  type RateLimitConfig,
+  type RateLimitConfigRow,
+} from '../services/rate-limit-source.js';
 
 export type { RateLimitConfigRow };
 
@@ -39,7 +44,7 @@ function rowToConfig(row: RateLimitConfigRow, source: 'database' | 'env' | 'defa
 
 export async function updateRateLimits(
   db: DB,
-  updates: Partial<Record<string, number>>,
+  updates: Partial<RateLimitConfig>,
   userId: number,
   username: string,
   roleName: string,
@@ -79,7 +84,7 @@ export async function updateRateLimits(
     
     for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
       if (camelKey in updates) {
-        const newValue = updates[camelKey];
+        const newValue = updates[camelKey as keyof RateLimitConfig];
         const oldValue = current[snakeKey as keyof RateLimitConfigRow];
         
         if (newValue !== oldValue && newValue !== undefined) {
@@ -142,21 +147,7 @@ export async function resetRateLimits(
   userIp: string,
   userAgent: string
 ): Promise<RateLimitAuditInfo> {
-  // Use updateRateLimits with default values
-  const defaults = {
-    windowMs: 900000,
-    generalMax: 100,
-    authMax: 5,
-    registerMax: 3,
-    registerWindowMs: 3600000,
-    protectedMax: 60,
-    scraperMax: 10,
-    publicMax: 100,
-    healthMax: 10,
-    healthWindowMs: 60000,
-  };
-  
-  return updateRateLimits(db, defaults, userId, username, roleName, userIp, userAgent);
+  return updateRateLimits(db, DEFAULT_CONFIG, userId, username, roleName, userIp, userAgent);
 }
 
 export async function getRateLimitAuditLog(
