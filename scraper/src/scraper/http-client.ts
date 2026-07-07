@@ -3,7 +3,7 @@
 
 import puppeteer, { type Browser } from 'puppeteer-core';
 import { logger } from '../utils/logger.js';
-import { ALLOCINE_BASE_URL } from './utils.js';
+import { ALLOCINE_BASE_URL, isValidAllocineUrl } from './utils.js';
 import { HttpError, RateLimitError } from '../utils/errors.js';
 
 const USER_AGENT =
@@ -80,6 +80,10 @@ export interface TheaterInitialData {
  * separately via the JSON API (fetchShowtimesJson).
  */
 export async function fetchTheaterPage(theaterBaseUrl: string): Promise<TheaterInitialData> {
+  if (!isValidAllocineUrl(theaterBaseUrl)) {
+    throw new Error(`SSRF guard: invalid Allociné URL: ${theaterBaseUrl}`);
+  }
+
   const browser = await getBrowser();
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
