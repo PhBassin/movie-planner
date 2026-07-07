@@ -37,7 +37,7 @@ export interface RateLimitAuditInfo {
   environment: string | null;
 }
 
-const DEFAULT_CONFIG: RateLimitConfig = {
+export const DEFAULT_CONFIG: RateLimitConfig = {
   windowMs: 15 * 60 * 1000,
   generalMax: 100,
   authMax: 5,

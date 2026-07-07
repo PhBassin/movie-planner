@@ -228,6 +228,51 @@ describe('rate-limit-queries', () => {
       expect(config.config.generalMax).toBe(100);
       expect(config.config.authMax).toBe(5);
     });
+
+    it('should source defaults from the canonical RateLimitSource — single source of truth', async () => {
+      const { DEFAULT_CONFIG } = await import('../services/rate-limit-source.js');
+
+      const dirtyRow = {
+        ...mockConfigRow,
+        general_max: 500,
+        auth_max: 20,
+        scraper_max: 99,
+      };
+
+      const updateCalls: { params: any[] }[] = [];
+      const mockDb = {
+        query: vi.fn((sql: string, params?: any[]) => {
+          if (sql === 'BEGIN' || sql === 'COMMIT') {
+            return Promise.resolve({ rows: [] });
+          }
+          if (sql.includes('FOR UPDATE')) {
+            return Promise.resolve({ rows: [dirtyRow] });
+          }
+          if (sql.includes('UPDATE rate_limit_configs')) {
+            updateCalls.push({ params: params ?? [] });
+            return Promise.resolve({ rows: [mockConfigRow] });
+          }
+          if (sql.includes('INSERT INTO rate_limit_audit_log')) {
+            return Promise.resolve({ rows: [] });
+          }
+          return Promise.resolve({ rows: [] });
+        }),
+        end: vi.fn(),
+      } as any as DB;
+
+      await resetRateLimits(mockDb, 1, 'admin', 'admin', '127.0.0.1', 'Test');
+
+      expect(updateCalls).toHaveLength(1);
+      const params = updateCalls[0].params;
+      const expected = [
+        DEFAULT_CONFIG.generalMax,
+        DEFAULT_CONFIG.authMax,
+        DEFAULT_CONFIG.scraperMax,
+      ];
+      for (const value of expected) {
+        expect(params).toContain(value);
+      }
+    });
   });
 
   describe('getRateLimitAuditLog', () => {
