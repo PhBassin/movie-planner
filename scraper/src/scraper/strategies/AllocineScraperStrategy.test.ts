@@ -5,11 +5,11 @@ const mocks = vi.hoisted(() => ({
   upsertWeeklyPrograms: vi.fn(),
   upsertMovie: vi.fn(),
   getMovie: vi.fn(),
-  fetchShowtimesJson: vi.fn(),
-  fetchMoviePage: vi.fn(),
-  delay: vi.fn(),
   parseShowtimesJson: vi.fn(),
   parseMoviePage: vi.fn(),
+  delay: vi.fn(),
+  browserTransportFetchPage: vi.fn(),
+  fetchTransportFetchPage: vi.fn(),
 }));
 
 vi.mock('../../db/showtime-queries.js', () => ({
@@ -20,12 +20,6 @@ vi.mock('../../db/showtime-queries.js', () => ({
 vi.mock('../../db/movie-queries.js', () => ({
   upsertMovie: mocks.upsertMovie,
   getMovie: mocks.getMovie,
-}));
-
-vi.mock('../http-client.js', () => ({
-  fetchShowtimesJson: mocks.fetchShowtimesJson,
-  fetchMoviePage: mocks.fetchMoviePage,
-  delay: mocks.delay,
 }));
 
 vi.mock('../theater-json-parser.js', () => ({
@@ -40,6 +34,22 @@ import {
   AllocineScraperStrategy,
   shouldRefreshMovieDetails,
 } from './AllocineScraperStrategy.js';
+import type { Transport } from '../transports/transport.js';
+
+const browserTransport: Transport = {
+  fetchPage: mocks.browserTransportFetchPage,
+};
+const fetchTransport: Transport = {
+  fetchPage: mocks.fetchTransportFetchPage,
+};
+
+function makeStrategy() {
+  return new AllocineScraperStrategy(
+    browserTransport,
+    fetchTransport,
+    mocks.delay,
+  );
+}
 
 describe('shouldRefreshMovieDetails', () => {
   it('returns true when existing movie is missing', () => {
@@ -72,7 +82,18 @@ describe('AllocineScraperStrategy scrapeTheater detail refresh fallback', () => 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mocks.fetchShowtimesJson.mockResolvedValue({});
+    // fetchTransport returns the JSON blob the showtimes API would yield.
+    // The strategy does JSON.parse + parseShowtimesJson; the parser is
+    // mocked so the test controls the parsed shape.
+    mocks.fetchTransportFetchPage.mockImplementation(async (url: string) => {
+      if (url.includes('/_/showtimes/')) {
+        return { html: JSON.stringify({ results: [] }) };
+      }
+      if (url.includes('/film/fichefilm')) {
+        return { html: '<html></html>' };
+      }
+      throw new Error(`Unexpected URL in test: ${url}`);
+    });
     mocks.parseShowtimesJson.mockReturnValue([
       {
         movie: {
@@ -94,7 +115,8 @@ describe('AllocineScraperStrategy scrapeTheater detail refresh fallback', () => 
       trailer_url: 'https://www.allocine.fr/video/player_gen_cmedia=99&cfilm=123.html',
     });
 
-    mocks.fetchMoviePage.mockRejectedValue(new Error('Rate limit exceeded for movie 123'));
+    // fetchTransport for the movie page throws — the strategy catches and
+    // logs, then falls back to the existing trailer_url.
     mocks.parseMoviePage.mockReturnValue({});
 
     mocks.upsertShowtimes.mockResolvedValue(undefined);
@@ -104,7 +126,7 @@ describe('AllocineScraperStrategy scrapeTheater detail refresh fallback', () => 
   });
 
   it('preserves existing trailer_url when movie detail fetch fails', async () => {
-    const strategy = new AllocineScraperStrategy();
+    const strategy = makeStrategy();
 
     await strategy.scrapeTheater(
       {} as any,
@@ -126,7 +148,7 @@ describe('AllocineScraperStrategy scrapeTheater detail refresh fallback', () => 
   });
 
   it('applies movie delay even when movie detail fetch fails', async () => {
-    const strategy = new AllocineScraperStrategy();
+    const strategy = makeStrategy();
 
     await strategy.scrapeTheater(
       {} as any,
@@ -141,5 +163,28 @@ describe('AllocineScraperStrategy scrapeTheater detail refresh fallback', () => 
     );
 
     expect(mocks.delay).toHaveBeenCalledWith(750);
+  });
+
+  it('builds the showtimes URL via the fetch transport, not the browser transport', async () => {
+    const strategy = makeStrategy();
+
+    await strategy.scrapeTheater(
+      {} as any,
+      {
+        id: 'C0001',
+        name: 'Theater Test',
+        url: 'https://www.allocine.fr/seance/salle_gen_csalle=C0001.html',
+        source: 'allocine',
+      },
+      '2026-03-28',
+      500
+    );
+
+    // The browser transport is for JS-rendered pages only; showtimes go
+    // through the fetch transport. Puppeteer never gets called.
+    expect(mocks.browserTransportFetchPage).not.toHaveBeenCalled();
+    expect(mocks.fetchTransportFetchPage).toHaveBeenCalledWith(
+      'https://www.allocine.fr/_/showtimes/theater-C0001/d-2026-03-28/'
+    );
   });
 });

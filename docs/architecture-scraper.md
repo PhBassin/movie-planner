@@ -36,7 +36,12 @@ scraper/src/
 │   └── client.ts               # Redis transport (publisher / consumer / subscriber)
 ├── scraper/                    # Core scraping logic
 │   ├── index.ts                # Scraper orchestration
-│   ├── http-client.ts          # Two transports (Puppeteer + fetch) with shared SSRF guard
+│   ├── http-client.ts          # Thin facade: URL construction + input validation; delegates I/O to transports/
+│   ├── transports/             # Transport adapter interface + implementations
+│   │   ├── transport.ts        #   Transport interface { fetchPage(url) → { html, availableDates? } }
+│   │   ├── puppeteer-transport.ts  #   Puppeteer impl (owns shared browser lifecycle)
+│   │   ├── fetch-transport.ts      #   Plain-fetch impl
+│   │   └── index.ts            #   Barrel
 │   ├── theater-parser.ts       # HTML theater page parser
 │   ├── movie-parser.ts         # Movie showtime parser
 │   ├── theater-json-parser.ts  # JSON-LD structured data parser
@@ -100,7 +105,7 @@ Concrete implementation for AlloCiné.fr:
 │         │       ▼                                        │
 │         │   AllocineScraperStrategy                      │
 │         │       │                                        │
-│         │       ├─► http-client.ts (two transports)      │
+│         │       ├─► http-client.ts (facade)              │
 │         │       │       │                                │
 │         │       │       ├─► PuppeteerTransport            │
 │         │       │       │       ▼                        │
