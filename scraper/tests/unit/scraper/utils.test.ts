@@ -4,6 +4,7 @@ import {
   isStaleResponse,
   isValidAllocineUrl,
   cleanTheaterUrl,
+  validateExternalUrl,
   ALLOCINE_BASE_URL,
 } from '../../../src/scraper/utils.js';
 
@@ -127,5 +128,31 @@ describe('isStaleResponse', () => {
       { date: '2026-02-21' } as any,
     ];
     expect(isStaleResponse('2026-02-22', '2026-02-22', showtimes)).toBe(true);
+  });
+});
+
+describe('validateExternalUrl', () => {
+  it('accepts an https allocine.fr URL', () => {
+    expect(() =>
+      validateExternalUrl('https://www.allocine.fr/seance/salle_gen_csalle=C0072.html')
+    ).not.toThrow();
+  });
+
+  it('rejects a non-allocine host', () => {
+    expect(() => validateExternalUrl('https://evil.com/theater/foo')).toThrow(/SSRF/i);
+  });
+
+  it('rejects http:// on the allocine host (TLS downgrade)', () => {
+    expect(() =>
+      validateExternalUrl('http://www.allocine.fr/theater/foo')
+    ).toThrow(/SSRF/i);
+  });
+
+  it('rejects an internal/loopback address (SSRF target)', () => {
+    expect(() => validateExternalUrl('http://localhost:8080/admin')).toThrow(/SSRF/i);
+  });
+
+  it('rejects a malformed URL', () => {
+    expect(() => validateExternalUrl('not-a-url')).toThrow(/SSRF/i);
   });
 });

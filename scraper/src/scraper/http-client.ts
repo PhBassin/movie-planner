@@ -3,7 +3,7 @@
 
 import puppeteer, { type Browser } from 'puppeteer-core';
 import { logger } from '../utils/logger.js';
-import { ALLOCINE_BASE_URL, isValidAllocineUrl } from './utils.js';
+import { ALLOCINE_BASE_URL, validateExternalUrl } from './utils.js';
 import { HttpError, RateLimitError } from '../utils/errors.js';
 
 const USER_AGENT =
@@ -80,9 +80,7 @@ export interface TheaterInitialData {
  * separately via the JSON API (fetchShowtimesJson).
  */
 export async function fetchTheaterPage(theaterBaseUrl: string): Promise<TheaterInitialData> {
-  if (!isValidAllocineUrl(theaterBaseUrl)) {
-    throw new Error(`SSRF guard: invalid Allociné URL: ${theaterBaseUrl}`);
-  }
+  validateExternalUrl(theaterBaseUrl);
 
   const browser = await getBrowser();
   const context = await browser.createBrowserContext();
@@ -123,14 +121,10 @@ export async function fetchShowtimesJson(theaterId: string, date: string): Promi
   validateTheaterId(theaterId);
   validateDate(date);
 
-  // Construct URL via URL object and re-validate hostname to satisfy SSRF guard.
-  // Even though theaterId and date are already strictly validated above, building
-  // the URL with new URL() and asserting the final hostname prevents any future
-  // taint from reaching the fetch call.
+  // Construct URL from validated inputs + the constant base, then re-validate
+  // via the shared rule so any future drift in ALLOCINE_BASE_URL is caught.
   const constructed = new URL(`/_/showtimes/theater-${theaterId}/d-${date}/`, ALLOCINE_BASE_URL);
-  if (constructed.hostname !== 'www.allocine.fr' || constructed.protocol !== 'https:') {
-    throw new Error(`SSRF guard: unexpected host in constructed URL ${constructed.href}`);
-  }
+  validateExternalUrl(constructed.href);
   const url = constructed.href;
   logger.info('Fetching showtimes JSON', { url });
 
@@ -168,11 +162,10 @@ export async function fetchMoviePage(movieId: number): Promise<string> {
   // Validate input before using in URL to prevent SSRF
   validateMovieId(movieId);
 
-  // Construct URL via URL object and re-validate hostname (SSRF guard).
+  // Construct URL from validated inputs + the constant base, then re-validate
+  // via the shared rule so any future drift in ALLOCINE_BASE_URL is caught.
   const constructed = new URL(`/film/fichefilm_gen_cfilm=${movieId}.html`, ALLOCINE_BASE_URL);
-  if (constructed.hostname !== 'www.allocine.fr' || constructed.protocol !== 'https:') {
-    throw new Error(`SSRF guard: unexpected host in constructed URL ${constructed.href}`);
-  }
+  validateExternalUrl(constructed.href);
   const url = constructed.href;
 
   logger.info('Fetching movie page', { url });
