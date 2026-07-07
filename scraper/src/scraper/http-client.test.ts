@@ -134,7 +134,7 @@ describe('HTTP Client - Error Handling', () => {
         mockFetch.mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockData,
+          text: async () => JSON.stringify(mockData),
         });
 
         const result = await fetchShowtimesJson('C0072', '2026-03-24');

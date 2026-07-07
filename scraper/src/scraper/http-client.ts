@@ -1,20 +1,25 @@
-// fallow-ignore-file security-sink
-// HTTP client for fetching theater and movie pages from source website
+// Public HTTP facade for the scraper.
+//
+// The actual fetches are owned by the two Transport adapters in
+// ./transports/. This module is a thin facade: it validates the
+// caller's input (theater id, date, movie id) and constructs the
+// final URL, then delegates the I/O to the right transport. The
+// transport owns the SSRF guard and the wire format.
 
-import puppeteer, { type Browser } from 'puppeteer-core';
-import { logger } from '../utils/logger.js';
-import { ALLOCINE_BASE_URL, validateExternalUrl } from './utils.js';
-import { HttpError, RateLimitError } from '../utils/errors.js';
+import { ALLOCINE_BASE_URL } from './utils.js';
+import { FetchTransport, PuppeteerTransport } from './transports/index.js';
+import { closeBrowser } from './transports/puppeteer-transport.js';
 
-const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+// Process-wide transport instances. The Puppeteer one owns the
+// shared browser lifecycle (see ./transports/puppeteer-transport.ts).
+const _puppeteerTransport = new PuppeteerTransport();
+const _fetchTransport = new FetchTransport();
 
 /**
  * Validates theater ID format (e.g., "C0072", "W7517")
  * @throws {Error} if format is invalid
  */
 function validateTheaterId(theaterId: string): void {
-  // Theater IDs must match: letter + 4-5 digits
   if (!/^[A-Z]\d{4,5}$/.test(theaterId)) {
     throw new Error(`Invalid theater ID format: ${theaterId}`);
   }
@@ -28,7 +33,6 @@ function validateDate(date: string): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new Error(`Invalid date format: ${date}`);
   }
-  // Validate it's a real date
   const parsed = new Date(date);
   if (isNaN(parsed.getTime())) {
     throw new Error(`Invalid date: ${date}`);
@@ -45,34 +49,13 @@ function validateMovieId(movieId: number): void {
   }
 }
 
-// Shared browser instance to avoid launching a new browser for every request
-let _browser: Browser | null = null;
-
-async function getBrowser(): Promise<Browser> {
-  if (!_browser || !_browser.connected) {
-    _browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.CHROME_PATH ?? '/usr/bin/chromium-headless-shell',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-  }
-  return _browser;
-}
-
-export async function closeBrowser(): Promise<void> {
-  if (_browser) {
-    await _browser.close();
-    _browser = null;
-  }
-}
-
 export interface TheaterInitialData {
   html: string;           // Full initial HTML (for theater metadata parsing)
   availableDates: string[]; // Parsed data-showtimes-dates
 }
 
 /**
- * Load the theater page once using Puppeteer to get:
+ * Load the theater page once using the Puppeteer transport to get:
  * - Theater metadata (data-theater attribute)
  * - Available showtime dates (data-showtimes-dates attribute)
  *
@@ -80,127 +63,37 @@ export interface TheaterInitialData {
  * separately via the JSON API (fetchShowtimesJson).
  */
 export async function fetchTheaterPage(theaterBaseUrl: string): Promise<TheaterInitialData> {
-  validateExternalUrl(theaterBaseUrl);
-
-  const browser = await getBrowser();
-  const context = await browser.createBrowserContext();
-  const page = await context.newPage();
-
-  try {
-    await page.setUserAgent(USER_AGENT);
-    logger.info('Loading theater page', { url: theaterBaseUrl });
-    await page.goto(theaterBaseUrl, { waitUntil: 'networkidle0', timeout: 60000 });
-
-    const html = await page.content();
-
-    // Extract available dates from the data-showtimes-dates attribute
-    const availableDates = await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const el = (globalThis as any).document?.querySelector('#theaterpage-showtimes-index-ui');
-      const raw = el?.getAttribute('data-showtimes-dates');
-      if (!raw) return [] as string[];
-      try { return JSON.parse(raw) as string[]; } catch { return [] as string[]; }
-    });
-
-    logger.info('Available dates on page', { dates: availableDates });
-    return { html, availableDates };
-  } finally {
-    await context.close();
-  }
+  const { html, availableDates } = await _puppeteerTransport.fetchPage(theaterBaseUrl);
+  return { html, availableDates: availableDates ?? [] };
 }
 
 /**
  * Fetch the showtimes JSON for a specific date from the Allociné internal API.
- * This is a plain HTTP request — no browser needed.
+ * This goes through the Fetch transport.
  *
  * @param theaterId - e.g. "C0072"
  * @param date     - e.g. "2026-02-22"
  */
 export async function fetchShowtimesJson(theaterId: string, date: string): Promise<unknown> {
-  // Validate inputs before using in URL to prevent SSRF
   validateTheaterId(theaterId);
   validateDate(date);
 
-  // Construct URL from validated inputs + the constant base, then re-validate
-  // via the shared rule so any future drift in ALLOCINE_BASE_URL is caught.
   const constructed = new URL(`/_/showtimes/theater-${theaterId}/d-${date}/`, ALLOCINE_BASE_URL);
-  validateExternalUrl(constructed.href);
-  const url = constructed.href;
-  logger.info('Fetching showtimes JSON', { url });
-
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      Accept: 'application/json',
-      'Accept-Language': 'fr-FR,fr;q=0.9',
-      Referer: `${ALLOCINE_BASE_URL}/seance/salle_gen_csalle=${theaterId}.html`,
-    },
-  });
-
-  if (!response.ok) {
-    // Detect rate limiting specifically
-    if (response.status === 429) {
-      throw new RateLimitError(
-        `Rate limit exceeded for ${theaterId} on ${date}`,
-        response.status,
-        url
-      );
-    }
-
-    // Throw generic HttpError for other failures
-    throw new HttpError(
-      `Failed to fetch showtimes JSON for ${theaterId} on ${date}: ${response.status} ${response.statusText}`,
-      response.status,
-      url
-    );
-  }
-
-  return response.json();
+  const { html } = await _fetchTransport.fetchPage(constructed.href);
+  return JSON.parse(html) as unknown;
 }
 
 export async function fetchMoviePage(movieId: number): Promise<string> {
-  // Validate input before using in URL to prevent SSRF
   validateMovieId(movieId);
-
-  // Construct URL from validated inputs + the constant base, then re-validate
-  // via the shared rule so any future drift in ALLOCINE_BASE_URL is caught.
   const constructed = new URL(`/film/fichefilm_gen_cfilm=${movieId}.html`, ALLOCINE_BASE_URL);
-  validateExternalUrl(constructed.href);
-  const url = constructed.href;
-
-  logger.info('Fetching movie page', { url });
-
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Cache-Control': 'no-cache',
-    },
-  });
-
-  if (!response.ok) {
-    // Detect rate limiting specifically
-    if (response.status === 429) {
-      throw new RateLimitError(
-        `Rate limit exceeded for movie ${movieId}`,
-        response.status,
-        url
-      );
-    }
-
-    // Throw generic HttpError for other failures
-    throw new HttpError(
-      `Failed to fetch movie page ${movieId}: ${response.status} ${response.statusText}`,
-      response.status,
-      url
-    );
-  }
-
-  return response.text();
+  const { html } = await _fetchTransport.fetchPage(constructed.href);
+  return html;
 }
 
 // Ajouter un délai entre les requêtes pour éviter le rate limiting
 export async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// Re-export so existing callers (tests, server) keep working.
+export { closeBrowser };

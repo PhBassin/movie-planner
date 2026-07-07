@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // --- Mocks ---
 
 const mockUpsertTheater = vi.fn().mockResolvedValue(undefined);
-const mockFetchTheaterPage = vi.fn();
-const mockFetchShowtimesJson = vi.fn();
+const mockBrowserTransportFetchPage = vi.fn();
+const mockFetchTransportFetchPage = vi.fn();
 const mockParseTheaterPage = vi.fn();
 const mockParseShowtimesJson = vi.fn().mockReturnValue([]);
 
@@ -24,12 +24,17 @@ vi.mock('../../../src/db/theater-queries.js', () => ({
   getTheaterConfigs: vi.fn(),
 }));
 
-vi.mock('../../../src/scraper/http-client.js', () => ({
-  fetchTheaterPage: mockFetchTheaterPage,
-  fetchShowtimesJson: mockFetchShowtimesJson,
-  fetchMoviePage: vi.fn(),
-  delay: vi.fn(),
+vi.mock('../../../src/scraper/transports/puppeteer-transport.js', () => ({
+  PuppeteerTransport: class {
+    fetchPage = mockBrowserTransportFetchPage;
+  },
   closeBrowser: vi.fn(),
+}));
+
+vi.mock('../../../src/scraper/transports/fetch-transport.js', () => ({
+  FetchTransport: class {
+    fetchPage = mockFetchTransportFetchPage;
+  },
 }));
 
 vi.mock('../../../src/scraper/theater-parser.js', () => ({
@@ -79,7 +84,7 @@ describe('loadTheaterMetadata', () => {
       // url is NOT present — parser does not extract it
     };
 
-    mockFetchTheaterPage.mockResolvedValue({
+    mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
       availableDates: ['2026-03-10'],
     });
@@ -112,7 +117,7 @@ describe('loadTheaterMetadata', () => {
       name: 'Test Theater From HTML',
     };
 
-    mockFetchTheaterPage.mockResolvedValue({
+    mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
       availableDates: ['2026-03-10', '2026-03-11'],
     });
@@ -143,12 +148,12 @@ describe('addTheaterAndScrape', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchTheaterPage.mockResolvedValue({
+    mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
       availableDates: [],
     });
     mockParseTheaterPage.mockReturnValue({ theater: parsedTheater, movies: [] });
-    mockFetchShowtimesJson.mockResolvedValue({});
+    mockFetchTransportFetchPage.mockResolvedValue({ html: '{}' });
     mockParseShowtimesJson.mockReturnValue([]);
   });
 
@@ -186,8 +191,8 @@ describe('addTheaterAndScrape', () => {
 
     await addTheaterAndScrape({} as any, dirtyUrl);
 
-    expect(mockFetchTheaterPage).toHaveBeenCalledOnce();
-    const calledUrl: string = mockFetchTheaterPage.mock.calls[0][0];
+    expect(mockBrowserTransportFetchPage).toHaveBeenCalledOnce();
+    const calledUrl: string = mockBrowserTransportFetchPage.mock.calls[0][0];
     // URL should be cleaned (no query params)
     expect(calledUrl).not.toContain('utm_source');
     expect(calledUrl).toContain('C0072');
@@ -196,15 +201,15 @@ describe('addTheaterAndScrape', () => {
   it('should scrape all available dates', async () => {
     const { addTheaterAndScrape } = await import('../../../src/scraper/index.js');
 
-    mockFetchTheaterPage.mockResolvedValue({
+    mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
       availableDates: ['2026-03-10', '2026-03-11', '2026-03-12'],
     });
 
     await addTheaterAndScrape({} as any, VALID_URL);
 
-    // fetchShowtimesJson called once per date
-    expect(mockFetchShowtimesJson).toHaveBeenCalledTimes(3);
+    // fetchTransport.fetchPage called once per date
+    expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(3);
   });
 
   it('should return the upserted theater data with URL', async () => {
@@ -219,7 +224,7 @@ describe('addTheaterAndScrape', () => {
   it('should emit progress events when publisher provided', async () => {
     const { addTheaterAndScrape } = await import('../../../src/scraper/index.js');
 
-    mockFetchTheaterPage.mockResolvedValue({
+    mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
       availableDates: ['2026-03-10'],
     });
@@ -234,18 +239,18 @@ describe('addTheaterAndScrape', () => {
   it('should continue scraping remaining dates even if one date fails', async () => {
     const { addTheaterAndScrape } = await import('../../../src/scraper/index.js');
 
-    mockFetchTheaterPage.mockResolvedValue({
+    mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
       availableDates: ['2026-03-10', '2026-03-11'],
     });
 
     // First date fails, second succeeds
-    mockFetchShowtimesJson
+    mockFetchTransportFetchPage
       .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValueOnce({});
+      .mockResolvedValueOnce({ html: '{}' });
 
     // Should not throw — errors on individual dates are swallowed
     await expect(addTheaterAndScrape({} as any, VALID_URL)).resolves.toBeDefined();
-    expect(mockFetchShowtimesJson).toHaveBeenCalledTimes(2);
+    expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(2);
   });
 });
