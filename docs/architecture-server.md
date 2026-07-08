@@ -47,6 +47,7 @@ server/src/
 │   ├── movie-service.ts
 │   ├── scraper-service.ts
 │   ├── theater-service.ts
+│   ├── user-service.ts           # Admin CRUD; owns last-admin invariant
 │   ├── system-info.ts
 │   ├── theme-generator.ts
 │   ├── progress-tracker.ts
@@ -106,6 +107,7 @@ server/src/
 - Role-based access control (RBAC)
 - Granular permissions per role
 - Middleware: `requirePermission` checks against user roles
+- The "at least one admin remains" invariant lives in `services/user-service.ts` (`assertNotLastAdmin`) and is the only place that calls `db/user-queries.getAdminCount`. Both `updateUserRole` and `deleteUser` delegate to it so adding a third entry point (admin CLI, scheduled job) cannot accidentally re-implement the rule.
 
 ### Rate Limiting
 - Configurable per-endpoint rate limits
