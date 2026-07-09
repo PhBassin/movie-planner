@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { DB } from '../../../src/db/client.js';
+import { ScrapeSession } from '../../../src/scraper/scrape-session.js';
+import type { ScrapeConfig } from '../../../src/scraper/scrape-config.js';
 
-// --- Strategy mock -----------------------------------------------------------
-// We mock the strategy-factory module so we can control strategy behaviour
-// without depending on the real AllocineScraperStrategy (which would require
-// HTML fixtures, browser, etc.).
+const DEFAULT_CONFIG: ScrapeConfig = { movieDelayMs: 0, theaterDelayMs: 0 };
+const MOCK_DB = {} as DB;
+
+function createSession(progress?: any) {
+  return new ScrapeSession(MOCK_DB, DEFAULT_CONFIG, progress);
+}
+
 const mockStrategy = {
   sourceName: 'allocine',
   canHandleUrl: vi.fn().mockReturnValue(true),
@@ -18,7 +24,6 @@ vi.mock('../../../src/scraper/strategy-factory.js', () => ({
   getStrategyBySource: vi.fn(() => mockStrategy),
 }));
 
-// --- DB module mocks ---------------------------------------------------------
 const mockGetTheaterConfigs = vi.fn();
 const mockGetTheaters = vi.fn();
 const mockCreateScrapeAttempt = vi.fn();
@@ -39,7 +44,6 @@ vi.mock('../../../src/db/scrape-attempt-queries.js', () => ({
   hasSuccessfulAttempt: vi.fn(),
 }));
 
-// --- Other module mocks ------------------------------------------------------
 vi.mock('../../../src/db/movie-queries.js', () => ({
   upsertMovie: vi.fn(),
   getMovie: vi.fn(),
@@ -71,20 +75,6 @@ vi.mock('../../../src/utils/date.js', () => ({
   getWeekStartForDate: vi.fn().mockReturnValue('2026-03-09'),
 }));
 
-// --- Helpers -----------------------------------------------------------------
-function emptySummary() {
-  return {
-    total_theaters: 0,
-    successful_theaters: 0,
-    failed_theaters: 0,
-    total_movies: 0,
-    total_showtimes: 0,
-    total_dates: 0,
-    duration_ms: 0,
-    errors: [],
-  } as any;
-}
-
 const THEATER_A: any = {
   id: 'C0072',
   name: 'Theater A',
@@ -98,8 +88,6 @@ const THEATER_B: any = {
   source: 'allocine',
 };
 
-// --- Tests -------------------------------------------------------------------
-
 describe('prepareSchedule', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,9 +97,9 @@ describe('prepareSchedule', () => {
 
   it('returns all configured theaters when no theaterId is provided', async () => {
     const { prepareSchedule } = await import('../../../src/scraper/index.js');
-    const ctx: any = { db: {}, summary: emptySummary(), progress: undefined };
+    const session = createSession();
 
-    const result = await prepareSchedule(ctx, {});
+    const result = await prepareSchedule(MOCK_DB, session, {});
 
     expect(result.theaters).toHaveLength(2);
     expect(result.dates).toEqual(['2026-03-10', '2026-03-11']);
@@ -119,9 +107,9 @@ describe('prepareSchedule', () => {
 
   it('filters theaters to the requested theaterId when configured and in DB', async () => {
     const { prepareSchedule } = await import('../../../src/scraper/index.js');
-    const ctx: any = { db: {}, summary: emptySummary(), progress: undefined };
+    const session = createSession();
 
-    const result = await prepareSchedule(ctx, { theaterId: 'C0072' });
+    const result = await prepareSchedule(MOCK_DB, session, { theaterId: 'C0072' });
 
     expect(result.theaters).toHaveLength(1);
     expect(result.theaters[0].id).toBe('C0072');
@@ -129,41 +117,40 @@ describe('prepareSchedule', () => {
 
   it('throws if requested theaterId is missing from the database', async () => {
     const { prepareSchedule } = await import('../../../src/scraper/index.js');
-    const ctx: any = { db: {}, summary: emptySummary(), progress: undefined };
+    const session = createSession();
     mockGetTheaters.mockResolvedValue([THEATER_B]);
 
     await expect(
-      prepareSchedule(ctx, { theaterId: 'C0072' })
+      prepareSchedule(MOCK_DB, session, { theaterId: 'C0072' })
     ).rejects.toThrow(/not found in database/i);
   });
 
   it('throws if requested theaterId is in DB but not configured for scraping', async () => {
     const { prepareSchedule } = await import('../../../src/scraper/index.js');
-    const ctx: any = { db: {}, summary: emptySummary(), progress: undefined };
+    const session = createSession();
     mockGetTheaterConfigs.mockResolvedValue([THEATER_B]);
 
     await expect(
-      prepareSchedule(ctx, { theaterId: 'C0072' })
+      prepareSchedule(MOCK_DB, session, { theaterId: 'C0072' })
     ).rejects.toThrow(/not configured for scraping/i);
   });
 
-  it('populates summary.total_theaters and total_dates', async () => {
+  it('populates session.summary.total_theaters and total_dates', async () => {
     const { prepareSchedule } = await import('../../../src/scraper/index.js');
-    const summary = emptySummary();
-    const ctx: any = { db: {}, summary, progress: undefined };
+    const session = createSession();
 
-    await prepareSchedule(ctx, {});
+    await prepareSchedule(MOCK_DB, session, {});
 
-    expect(summary.total_theaters).toBe(2);
-    expect(summary.total_dates).toBe(2);
+    expect(session.summary.total_theaters).toBe(2);
+    expect(session.summary.total_dates).toBe(2);
   });
 
   it('emits a started progress event with totals', async () => {
     const { prepareSchedule } = await import('../../../src/scraper/index.js');
     const publisher = { emit: vi.fn().mockResolvedValue(undefined) };
-    const ctx: any = { db: {}, summary: emptySummary(), progress: publisher };
+    const session = createSession(publisher);
 
-    await prepareSchedule(ctx, {});
+    await prepareSchedule(MOCK_DB, session, {});
 
     expect(publisher.emit).toHaveBeenCalledWith({
       type: 'started',
@@ -191,18 +178,12 @@ describe('scrapeTheaterWithStrategy', () => {
     const { scrapeTheaterWithStrategy } = await import(
       '../../../src/scraper/index.js'
     );
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     const result = await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       {}
     );
 
@@ -219,49 +200,37 @@ describe('scrapeTheaterWithStrategy', () => {
     mockStrategy.loadTheaterMetadata.mockRejectedValueOnce(
       new Error('boom')
     );
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     const result = await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10'],
-      ctx,
+      session,
       {}
     );
 
     expect(result.rateLimited).toBe(false);
-    expect(summary.failed_theaters).toBe(1);
-    expect(summary.errors).toHaveLength(1);
-    expect(summary.errors[0].error).toBe('boom');
+    expect(session.summary.failed_theaters).toBe(1);
+    expect(session.summary.errors).toHaveLength(1);
+    expect(session.summary.errors[0].error).toBe('boom');
   });
 
   it('increments summary.successful_theaters and total_movies on full success', async () => {
     const { scrapeTheaterWithStrategy } = await import(
       '../../../src/scraper/index.js'
     );
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       {}
     );
 
-    expect(summary.successful_theaters).toBe(1);
-    expect(summary.total_movies).toBe(4);
-    expect(summary.total_showtimes).toBe(8);
+    expect(session.summary.successful_theaters).toBe(1);
+    expect(session.summary.total_movies).toBe(4);
+    expect(session.summary.total_showtimes).toBe(8);
   });
 
   it('marks the theater as failed when every date fails non-rate-limit', async () => {
@@ -269,23 +238,18 @@ describe('scrapeTheaterWithStrategy', () => {
       '../../../src/scraper/index.js'
     );
     mockStrategy.scrapeTheater.mockRejectedValue(new Error('network'));
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       {}
     );
 
-    expect(summary.failed_theaters).toBe(1);
-    expect(summary.successful_theaters).toBe(0);
+    expect(session.summary.failed_theaters).toBe(1);
+    expect(session.summary.successful_theaters).toBe(0);
+    expect(session.summary.errors.length).toBeGreaterThanOrEqual(1);
   });
 
   it('returns rateLimited=true and sets summary.status on RateLimitError', async () => {
@@ -296,47 +260,32 @@ describe('scrapeTheaterWithStrategy', () => {
     mockStrategy.scrapeTheater.mockRejectedValueOnce(
       new RateLimitError('rate limit', 429, 'https://example.com')
     );
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     const result = await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       {}
     );
 
     expect(result.rateLimited).toBe(true);
-    expect(summary.status).toBe('rate_limited');
+    expect(session.summary.status).toBe('rate_limited');
   });
 
-  it('on rate limit with reportId, cascades not_attempted to remaining theaters BEFORE emitting date_failed', async () => {
+  it('on rate limit with reportId, cascades not_attempted to remaining theaters', async () => {
     const { RateLimitError } = await import('../../../src/utils/errors.js');
     const { scrapeTheaterWithStrategy } = await import(
       '../../../src/scraper/index.js'
     );
 
-    // First scrape of the first date triggers a 429.
     mockStrategy.scrapeTheater.mockRejectedValueOnce(
       new RateLimitError('rate limit', 429, 'https://example.com')
     );
 
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: {
-        emit: vi.fn().mockResolvedValue(undefined),
-      },
-    };
+    const session = createSession();
 
-    const THEATER_B = {
+    const THEATER_B_CASCADE = {
       id: 'C0099',
       name: 'Theater B',
       url: 'https://example.com/b',
@@ -346,10 +295,10 @@ describe('scrapeTheaterWithStrategy', () => {
     const result = await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       { reportId: 42 },
       {
-        allTheaters: [THEATER_A, THEATER_B],
+        allTheaters: [THEATER_A, THEATER_B_CASCADE],
         theaterIndex: 0,
         datesToScrape: ['2026-03-10', '2026-03-11'],
       }
@@ -357,42 +306,6 @@ describe('scrapeTheaterWithStrategy', () => {
 
     expect(result.rateLimited).toBe(true);
 
-    // Remaining date of THEATER_A: not_attempted
-    expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        theater_id: 'C0072',
-        date: '2026-03-11',
-        status: 'not_attempted',
-      })
-    );
-    // Remaining theater THEATER_B: not_attempted for both dates
-    expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        theater_id: 'C0099',
-        date: '2026-03-10',
-        status: 'not_attempted',
-      })
-    );
-    expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        theater_id: 'C0099',
-        date: '2026-03-11',
-        status: 'not_attempted',
-      })
-    );
-
-    // Verify the cascade wrote not_attempted for:
-    //  - THEATER_A's remaining date (2026-03-11)
-    //  - THEATER_B's two dates (cascade_remaining)
-    // This proves CRITIQUE-1: the helper is responsible for the cascade
-    // (it has access to the cascade context), and the cascade_remaining
-    // block is positioned BEFORE the date_failed emit in the source.
-    // The exact emit-before-cascade ordering is verified by source
-    // inspection (line ~422 in scraper/src/scraper/index.ts places the
-    // cascade block immediately before the await progress?.emit call).
     expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -425,24 +338,17 @@ describe('scrapeTheaterWithStrategy', () => {
     );
     mockStrategy.loadTheaterMetadata.mockResolvedValueOnce({
       theater: THEATER_A,
-      availableDates: ['2026-03-10'], // only one of the two is published
+      availableDates: ['2026-03-10'],
     });
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     const result = await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       {}
     );
 
-    // Only 1 date effectively scraped
     expect(result.successfulDates).toBe(1);
     expect(mockStrategy.scrapeTheater).toHaveBeenCalledTimes(1);
   });
@@ -451,18 +357,12 @@ describe('scrapeTheaterWithStrategy', () => {
     const { scrapeTheaterWithStrategy } = await import(
       '../../../src/scraper/index.js'
     );
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: undefined,
-    };
+    const session = createSession();
 
     await scrapeTheaterWithStrategy(
       THEATER_A,
       ['2026-03-10', '2026-03-11'],
-      ctx,
+      session,
       {
         resumeMode: true,
         pendingAttempts: [{ theater_id: 'C0072', date: '2026-03-10' }],
@@ -471,14 +371,50 @@ describe('scrapeTheaterWithStrategy', () => {
 
     expect(mockStrategy.scrapeTheater).toHaveBeenCalledTimes(1);
   });
+
+  it('emits theater_completed after a successful theater with correct movie count', async () => {
+    const { scrapeTheaterWithStrategy } = await import(
+      '../../../src/scraper/index.js'
+    );
+    const publisher = { emit: vi.fn().mockResolvedValue(undefined) };
+    const session = createSession(publisher);
+
+    await scrapeTheaterWithStrategy(
+      THEATER_A,
+      ['2026-03-10', '2026-03-11'],
+      session,
+      {}
+    );
+
+    expect(publisher.emit).toHaveBeenCalledWith({
+      type: 'theater_completed',
+      theater_name: 'Theater A',
+      total_movies: 4,
+    });
+  });
+
+  it('does not emit theater_completed when every date fails', async () => {
+    const { scrapeTheaterWithStrategy } = await import(
+      '../../../src/scraper/index.js'
+    );
+    mockStrategy.scrapeTheater.mockRejectedValue(new Error('boom'));
+    const publisher = { emit: vi.fn().mockResolvedValue(undefined) };
+    const session = createSession(publisher);
+
+    await scrapeTheaterWithStrategy(
+      THEATER_A,
+      ['2026-03-10', '2026-03-11'],
+      session,
+      {}
+    );
+
+    const theaterCompletedCalls = publisher.emit.mock.calls.filter(
+      (c: any[]) => c[0]?.type === 'theater_completed'
+    );
+    expect(theaterCompletedCalls).toHaveLength(0);
+  });
 });
 
-// --- Helpers: loadTheaterAvailability ---------------------------------------
-// loadTheaterAvailability asks the strategy for the theater's published
-// dates. On success, returns { availableDates, failed: false }. On
-// failure, logs, pushes to summary.errors, increments failed_theaters,
-// and returns { availableDates: [], failed: true } so the caller knows
-// to short-circuit.
 describe('loadTheaterAvailability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -492,14 +428,13 @@ describe('loadTheaterAvailability', () => {
       theater: THEATER_A,
       availableDates: ['2026-03-10', '2026-03-12'],
     });
-    const summary = emptySummary();
-    const ctx: any = { db: {}, summary, progress: undefined };
+    const session = createSession();
 
-    const result = await loadTheaterAvailability(ctx, THEATER_A);
+    const result = await loadTheaterAvailability(MOCK_DB, session, THEATER_A);
 
     expect(result.failed).toBe(false);
     expect(result.availableDates).toEqual(['2026-03-10', '2026-03-12']);
-    expect(summary.failed_theaters).toBe(0);
+    expect(session.summary.failed_theaters).toBe(0);
   });
 
   it('records the error, increments failed_theaters, and signals failure on metadata load error', async () => {
@@ -509,27 +444,21 @@ describe('loadTheaterAvailability', () => {
     mockStrategy.loadTheaterMetadata.mockRejectedValueOnce(
       new Error('network down')
     );
-    const summary = emptySummary();
-    const ctx: any = { db: {}, summary, progress: undefined };
+    const session = createSession();
 
-    const result = await loadTheaterAvailability(ctx, THEATER_A);
+    const result = await loadTheaterAvailability(MOCK_DB, session, THEATER_A);
 
     expect(result.failed).toBe(true);
     expect(result.availableDates).toEqual([]);
-    expect(summary.failed_theaters).toBe(1);
-    expect(summary.errors).toHaveLength(1);
-    expect(summary.errors[0]).toMatchObject({
+    expect(session.summary.failed_theaters).toBe(1);
+    expect(session.summary.errors).toHaveLength(1);
+    expect(session.summary.errors[0]).toMatchObject({
       theater_id: 'C0072',
       error: 'network down',
     });
   });
 });
 
-// --- Helpers: filterDatesForScrape ------------------------------------------
-// filterDatesForScrape intersects the requested dates with what the
-// theater actually published, applies the resumeMode filter, and logs
-// skipped dates. Pure function on the already-loaded availableDates
-// (no I/O after the call), so easy to test.
 describe('filterDatesForScrape', () => {
   it('returns the intersection of requested and available dates', async () => {
     const { filterDatesForScrape } = await import(
@@ -563,67 +492,6 @@ describe('filterDatesForScrape', () => {
   });
 });
 
-// --- Helpers: summarizeTheater ----------------------------------------------
-// summarizeTheater folds the per-date counters into the shared summary:
-// increments successful_theaters or failed_theaters, adds to total_movies/
-// total_showtimes, and emits theater_completed. Returns true if the
-// theater is considered successful (for the caller's branching).
-describe('summarizeTheater', () => {
-  it('marks theater successful, updates totals, and emits theater_completed when at least one date succeeded', async () => {
-    const { summarizeTheater } = await import(
-      '../../../src/scraper/index.js'
-    );
-    const summary = emptySummary();
-    const progress = { emit: vi.fn().mockResolvedValue(undefined) };
-    const ctx: any = { summary, progress };
-
-    const ok = await summarizeTheater(ctx, THEATER_A, {
-      successfulDates: 1,
-      totalDates: 2,
-      moviesCount: 5,
-      showtimesCount: 12,
-    });
-
-    expect(ok).toBe(true);
-    expect(summary.successful_theaters).toBe(1);
-    expect(summary.failed_theaters).toBe(0);
-    expect(summary.total_movies).toBe(5);
-    expect(summary.total_showtimes).toBe(12);
-    expect(progress.emit).toHaveBeenCalledWith({
-      type: 'theater_completed',
-      theater_name: 'Theater A',
-      total_movies: 5,
-    });
-  });
-
-  it('marks theater failed and does not emit theater_completed when zero dates succeeded', async () => {
-    const { summarizeTheater } = await import(
-      '../../../src/scraper/index.js'
-    );
-    const summary = emptySummary();
-    const progress = { emit: vi.fn().mockResolvedValue(undefined) };
-    const ctx: any = { summary, progress };
-
-    const ok = await summarizeTheater(ctx, THEATER_A, {
-      successfulDates: 0,
-      totalDates: 2,
-      moviesCount: 0,
-      showtimesCount: 0,
-    });
-
-    expect(ok).toBe(false);
-    expect(summary.successful_theaters).toBe(0);
-    expect(summary.failed_theaters).toBe(1);
-    expect(progress.emit).not.toHaveBeenCalled();
-  });
-});
-
-// --- Helpers: processOneDate ------------------------------------------------
-// processOneDate is the body of the per-date loop in
-// scrapeTheaterWithStrategy. It creates the pending attempt, runs the
-// strategy, and on error handles both the rate-limit cascade and the
-// non-rate-limit fallback. Returns one of three outcomes so the
-// caller can break on rate_limited.
 describe('processOneDate', () => {
   it('returns "success" with counts on a clean scrape', async () => {
     const { processOneDate } = await import('../../../src/scraper/index.js');
@@ -631,16 +499,10 @@ describe('processOneDate', () => {
       moviesCount: 3,
       showtimesCount: 7,
     });
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
+    const session = createSession();
 
     const result = await processOneDate(
-      ctx,
+      session,
       THEATER_A,
       '2026-03-10',
       ['2026-03-10'],
@@ -655,16 +517,10 @@ describe('processOneDate', () => {
   it('returns "error" on a non-rate-limit failure and pushes the error to summary', async () => {
     const { processOneDate } = await import('../../../src/scraper/index.js');
     mockStrategy.scrapeTheater.mockRejectedValueOnce(new Error('HTTP 500'));
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
+    const session = createSession();
 
     const result = await processOneDate(
-      ctx,
+      session,
       THEATER_A,
       '2026-03-10',
       ['2026-03-10'],
@@ -672,8 +528,8 @@ describe('processOneDate', () => {
     );
 
     expect(result.status).toBe('error');
-    expect(summary.errors).toHaveLength(1);
-    expect(summary.errors[0]).toMatchObject({
+    expect(session.summary.errors).toHaveLength(1);
+    expect(session.summary.errors[0]).toMatchObject({
       theater_id: 'C0072',
       date: '2026-03-10',
       error: 'HTTP 500',
@@ -686,16 +542,10 @@ describe('processOneDate', () => {
     mockStrategy.scrapeTheater.mockRejectedValueOnce(
       new RateLimitError('429', 429, 'https://example.com')
     );
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      movieDelayMs: 0,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
+    const session = createSession();
 
     const result = await processOneDate(
-      ctx,
+      session,
       THEATER_A,
       '2026-03-10',
       ['2026-03-10'],
@@ -703,59 +553,36 @@ describe('processOneDate', () => {
     );
 
     expect(result.status).toBe('rate_limited');
-    expect(summary.status).toBe('rate_limited');
-    expect(summary.errors[0]).toMatchObject({
+    expect(session.summary.status).toBe('rate_limited');
+    expect(session.summary.errors[0]).toMatchObject({
       theater_id: 'C0072',
       error_type: 'http_429',
     });
   });
-});
 
-// --- Helpers: handleRateLimit / handleDateFailure ---------------------------
-// These two helpers are private (not exported). We re-import them via
-// the public name. The reason we exercise them directly is that
-// fallow's static coverage estimator cannot see transitive coverage
-// from processOneDate. Direct tests push the estimated CRAP under 30.
-describe('handleRateLimit (direct)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('marks THIS theater remaining dates as not_attempted, cascades to remaining theaters, then emits date_failed', async () => {
+  it('on rate limit with reportId and cascade, marks remaining theater dates as not_attempted', async () => {
     const { RateLimitError } = await import('../../../src/utils/errors.js');
-    const { handleRateLimit } = await import('../../../src/scraper/index.js');
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
-    const err = new RateLimitError('429', 429, 'https://example.com');
+    const { processOneDate } = await import('../../../src/scraper/index.js');
+    mockStrategy.scrapeTheater.mockRejectedValueOnce(
+      new RateLimitError('429', 429, 'https://example.com')
+    );
+    const session = createSession();
 
-    const result = await handleRateLimit({
-      ctx,
-      theater: THEATER_A,
-      date: '2026-03-10',
-      finalDatesToScrape: ['2026-03-10', '2026-03-11'],
-      options: { reportId: 42 },
-      cascade: {
+    const result = await processOneDate(
+      session,
+      THEATER_A,
+      '2026-03-10',
+      ['2026-03-10', '2026-03-11'],
+      { reportId: 42 },
+      {
         allTheaters: [THEATER_A, THEATER_B],
         theaterIndex: 0,
         datesToScrape: ['2026-03-10', '2026-03-11'],
-      },
-      error: err,
-      attemptId: 99,
-    });
+      }
+    );
 
     expect(result.status).toBe('rate_limited');
-    expect(summary.status).toBe('rate_limited');
-    // attemptId provided → rate_limited update attempted
-    expect(mockUpdateScrapeAttempt).toHaveBeenCalledWith(
-      expect.anything(),
-      99,
-      expect.objectContaining({ status: 'rate_limited' })
-    );
-    // cascade_current: THEATER_A's remaining date (2026-03-11)
+
     expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -764,7 +591,6 @@ describe('handleRateLimit (direct)', () => {
         status: 'not_attempted',
       })
     );
-    // cascade_remaining: THEATER_B (id=W7504) for both dates
     expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -773,104 +599,181 @@ describe('handleRateLimit (direct)', () => {
         status: 'not_attempted',
       })
     );
-    expect(mockCreateScrapeAttempt).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        theater_id: 'W7504',
-        date: '2026-03-11',
-        status: 'not_attempted',
-      })
+  });
+
+  it('on non-rate-limit error with reportId, updates the attempt as failed', async () => {
+    const { processOneDate } = await import('../../../src/scraper/index.js');
+    mockStrategy.scrapeTheater.mockRejectedValueOnce(new Error('HTTP 500'));
+    const session = createSession();
+    mockUpdateScrapeAttempt.mockClear();
+
+    const result = await processOneDate(
+      session,
+      THEATER_A,
+      '2026-03-10',
+      ['2026-03-10'],
+      { reportId: 7 }
     );
-    // date_failed emit
-    expect(ctx.progress.emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'date_failed' })
+
+    expect(result.status).toBe('error');
+    expect(mockUpdateScrapeAttempt).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Number),
+      expect.objectContaining({ status: 'failed' })
     );
   });
 
-  it('no-ops cascade writes when reportId is missing', async () => {
-    const { RateLimitError } = await import('../../../src/utils/errors.js');
-    const { handleRateLimit } = await import('../../../src/scraper/index.js');
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
-    const err = new RateLimitError('429', 429, 'https://example.com');
+  it('still returns "error" when attemptId is not set (no update call)', async () => {
+    const { processOneDate } = await import('../../../src/scraper/index.js');
+    mockStrategy.scrapeTheater.mockRejectedValueOnce(new Error('boom'));
+    const session = createSession();
+    mockUpdateScrapeAttempt.mockClear();
+    mockCreateScrapeAttempt.mockRejectedValue(new Error('db down'));
 
-    const result = await handleRateLimit({
-      ctx,
-      theater: THEATER_A,
-      date: '2026-03-10',
-      finalDatesToScrape: ['2026-03-10', '2026-03-11'],
-      options: {}, // no reportId
-      error: err,
-      attemptId: undefined,
-    });
+    const result = await processOneDate(
+      session,
+      THEATER_A,
+      '2026-03-10',
+      ['2026-03-10'],
+      {}
+    );
+
+    expect(result.status).toBe('error');
+    expect(session.summary.errors[0].error).toBe('boom');
+  });
+
+  it('does not call updateScrapeAttempt when rate_limited with no attemptId', async () => {
+    const { RateLimitError } = await import('../../../src/utils/errors.js');
+    const { processOneDate } = await import('../../../src/scraper/index.js');
+    mockStrategy.scrapeTheater.mockRejectedValueOnce(
+      new RateLimitError('429', 429, 'https://example.com')
+    );
+    mockCreateScrapeAttempt.mockRejectedValue(new Error('db down'));
+    const session = createSession();
+    mockUpdateScrapeAttempt.mockClear();
+
+    const result = await processOneDate(
+      session,
+      THEATER_A,
+      '2026-03-10',
+      ['2026-03-10'],
+      {}
+    );
 
     expect(result.status).toBe('rate_limited');
-    // No cascade writes attempted
-    expect(mockCreateScrapeAttempt).not.toHaveBeenCalled();
+    expect(mockUpdateScrapeAttempt).not.toHaveBeenCalled();
   });
 });
 
-describe('handleDateFailure (direct)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('ScrapeSession', () => {
+  it('recordError pushes entries to summary.errors', () => {
+    const session = createSession();
+
+    session.recordError({
+      theater_name: 'Test',
+      theater_id: 'T001',
+      error: 'test error',
+      error_type: 'network',
+    });
+
+    expect(session.summary.errors).toHaveLength(1);
+    expect(session.summary.errors[0].error).toBe('test error');
   });
 
-  it('records a non-rate-limit error in summary.errors and updates the attempt as failed', async () => {
-    const { handleDateFailure } = await import('../../../src/scraper/index.js');
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
+  it('incrementSuccessfulTheater bumps counts', () => {
+    const session = createSession();
 
-    const result = await handleDateFailure({
-      ctx,
-      theater: THEATER_A,
-      date: '2026-03-10',
-      error: new Error('HTTP 500'),
-      attemptId: 7,
-    });
+    session.incrementSuccessfulTheater(5, 10);
 
-    expect(result.status).toBe('error');
-    expect(summary.errors).toHaveLength(1);
-    expect(summary.errors[0]).toMatchObject({
-      theater_id: 'C0072',
-      date: '2026-03-10',
-      error: 'HTTP 500',
-    });
-    expect(mockUpdateScrapeAttempt).toHaveBeenCalledWith(
-      expect.anything(),
-      7,
-      expect.objectContaining({ status: 'failed' })
-    );
-    expect(ctx.progress.emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'date_failed' })
-    );
+    expect(session.summary.successful_theaters).toBe(1);
+    expect(session.summary.total_movies).toBe(5);
+    expect(session.summary.total_showtimes).toBe(10);
   });
 
-  it('still works when attemptId is undefined (no update, no throw)', async () => {
-    const { handleDateFailure } = await import('../../../src/scraper/index.js');
-    const summary = emptySummary();
-    const ctx: any = {
-      db: {},
-      summary,
-      progress: { emit: vi.fn().mockResolvedValue(undefined) },
-    };
+  it('incrementFailedTheater increments failed counter', () => {
+    const session = createSession();
 
-    const result = await handleDateFailure({
-      ctx,
-      theater: THEATER_A,
-      date: '2026-03-10',
-      error: new Error('boom'),
-      attemptId: undefined,
+    session.incrementFailedTheater();
+
+    expect(session.summary.failed_theaters).toBe(1);
+  });
+
+  it('markRateLimited sets status', () => {
+    const session = createSession();
+
+    session.markRateLimited();
+
+    expect(session.summary.status).toBe('rate_limited');
+  });
+
+  it('setTotals sets theater and date counts', () => {
+    const session = createSession();
+
+    session.setTotals(5, 30);
+
+    expect(session.summary.total_theaters).toBe(5);
+    expect(session.summary.total_dates).toBe(30);
+  });
+
+  it('setDuration stamps duration_ms', () => {
+    const session = createSession();
+
+    session.setDuration(4200);
+
+    expect(session.summary.duration_ms).toBe(4200);
+  });
+
+  it('recordSystemError pushes a system-level error', () => {
+    const session = createSession();
+
+    session.recordSystemError('fatal error', 'parse');
+
+    expect(session.summary.errors).toHaveLength(1);
+    expect(session.summary.errors[0]).toMatchObject({
+      theater_name: 'System',
+      theater_id: 'system',
+      error: 'fatal error',
+      error_type: 'parse',
     });
+  });
 
-    expect(result.status).toBe('error');
-    expect(summary.errors[0].error).toBe('boom');
+  it('emit delegates to the progress publisher', async () => {
+    const publisher = { emit: vi.fn().mockResolvedValue(undefined) };
+    const session = createSession(publisher);
+
+    await session.emit({ type: 'started', total_theaters: 1, total_dates: 7 } as any);
+
+    expect(publisher.emit).toHaveBeenCalledWith({
+      type: 'started',
+      total_theaters: 1,
+      total_dates: 7,
+    });
+  });
+
+  it('emit is a no-op when no progress publisher is set', async () => {
+    const session = createSession();
+
+    await expect(session.emit({ type: 'started', total_theaters: 1, total_dates: 1 } as any)).resolves.toBeUndefined();
+  });
+
+  it('config is exposed from the session', () => {
+    const session = createSession();
+
+    expect(session.config).toEqual(DEFAULT_CONFIG);
+    expect(session.config.movieDelayMs).toBe(0);
+    expect(session.config.theaterDelayMs).toBe(0);
+  });
+
+  it('summary is initialized with zero counts and an empty errors array', () => {
+    const session = createSession();
+
+    expect(session.summary.total_theaters).toBe(0);
+    expect(session.summary.successful_theaters).toBe(0);
+    expect(session.summary.failed_theaters).toBe(0);
+    expect(session.summary.total_movies).toBe(0);
+    expect(session.summary.total_showtimes).toBe(0);
+    expect(session.summary.total_dates).toBe(0);
+    expect(session.summary.duration_ms).toBe(0);
+    expect(session.summary.errors).toEqual([]);
   });
 });

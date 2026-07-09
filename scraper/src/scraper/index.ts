@@ -15,29 +15,11 @@ import {
   updateScrapeAttempt,
 } from '../db/scrape-attempt-queries.js';
 
-/**
- * Mutable context shared across the runScraper orchestration steps.
- * Bundles the dependencies the per-step helpers need so the call sites
- * stay short and the helpers stay individually testable.
- *
- * Intentionally NOT exported: this is an internal contract between the
- * helpers in this file. External callers should use runScraper.
- */
-interface ScrapeContext {
-  db: DB;
-  summary: ScrapeSummary;
-  progress?: ProgressPublisher;
-  movieDelayMs: number;
-  theaterDelayMs: number;
-}
+import { ScrapeSession, type ProgressPublisher } from './scrape-session.js';
+import { createScrapeConfig, type ScrapeConfig } from './scrape-config.js';
 
-/**
- * Result of prepareSchedule: which theaters to scrape, on which dates.
- *
- * Named PrepareScheduleResult (not ScrapeSchedule) to avoid collision
- * with the ScrapeSchedule DB row type exported by
- * ../db/schedule-queries.ts. They mean very different things.
- */
+export type { ProgressPublisher } from './scrape-session.js';
+
 export interface PrepareScheduleResult {
   theaters: TheaterConfig[];
   dates: string[];
@@ -45,31 +27,17 @@ export interface PrepareScheduleResult {
   scrapeDays: number;
 }
 
-/** Per-theater outcome reported back to runScraper. */
 interface ScrapeTheaterResult {
-  /** True if a 429 was hit: the caller should stop processing further theaters. */
   rateLimited: boolean;
-  /** The dates effectively attempted for this theater (filtered by availableDates). */
   datesToScrape: string[];
   successfulDates: number;
   moviesCount: number;
   showtimesCount: number;
 }
 
-// Progress publisher interface – allows injecting Redis publisher or a no-op
-export interface ProgressPublisher {
-  emit(event: ProgressEvent): Promise<void>;
-}
+export { ScrapeSession, createScrapeConfig };
+export type { ScrapeConfig };
 
-// No-op publisher for standalone use
-class NoopProgressPublisher implements ProgressPublisher {
-  async emit(_event: ProgressEvent): Promise<void> {}
-}
-
-/**
- * Backward compatibility wrapper for loadTheaterMetadata.
- * Delegates to the appropriate strategy based on the theater URL.
- */
 export async function loadTheaterMetadata(
   db: DB,
   theater: TheaterConfig
@@ -78,9 +46,6 @@ export async function loadTheaterMetadata(
   return strategy.loadTheaterMetadata(db, theater);
 }
 
-/**
- * Scraper un theater pour une date donnée (backward compatibility wrapper).
- */
 async function scrapeTheater(
   db: DB,
   theater: TheaterConfig,
@@ -92,11 +57,6 @@ async function scrapeTheater(
   return strategy.scrapeTheater(db, theater, date, movieDelayMs, progress);
 }
 
-/**
- * Add a new theater by URL and scrape all available showtimes for it.
- * Resolves the appropriate strategy from the URL, extracts metadata,
- * then scrapes every available date.
- */
 export async function addTheaterAndScrape(
   db: DB,
   url: string,
@@ -117,15 +77,15 @@ export async function addTheaterAndScrape(
     source: strategy.sourceName 
   };
 
+  const config = createScrapeConfig();
   logger.info(`Adding new theater from ${url} using ${strategy.sourceName} strategy...`);
   const { availableDates, theater } = await strategy.loadTheaterMetadata(db, tempConfig);
 
-  const movieDelayMs = parseInt(process.env.SCRAPE_MOVIE_DELAY_MS || '500', 10);
   logger.info(`Scraping ${availableDates.length} available date(s)...`, { theater: theater.name });
 
   for (const date of availableDates) {
     try {
-      await strategy.scrapeTheater(db, tempConfig, date, movieDelayMs, progress);
+      await strategy.scrapeTheater(db, tempConfig, date, config.movieDelayMs, progress);
     } catch (error) {
       logger.error('Failed to scrape date', { date, theater: theater.name, error });
     }
@@ -142,36 +102,20 @@ export interface ScrapeOptions {
   days?: number;
   theaterId?: string;
   movieId?: number;
-  reportId?: number;  // For tracking attempts in database
-  resumeMode?: boolean;  // Skip already-successful attempts
-  pendingAttempts?: Array<{ theater_id: string; date: string }>;  // For resume mode
+  reportId?: number;
+  resumeMode?: boolean;
+  pendingAttempts?: Array<{ theater_id: string; date: string }>;
 }
 
-/**
- * Load the list of theaters and the list of dates the current run will scrape.
- *
- * Responsibilities:
- *  - Read configured theaters from the database.
- *  - If `options.theaterId` is provided, narrow the list to that single
- *    theater after verifying it exists in the database AND is configured
- *    for scraping (two distinct error messages to ease diagnosis).
- *  - Resolve the scrape mode / day count from options or environment.
- *  - Materialize the concrete list of dates via getScrapeDates.
- *  - Emit the `started` progress event and update summary totals.
- *
- * The function performs no network I/O beyond the two DB reads. All HTTP
- * work happens later, inside scrapeTheaterWithStrategy.
- */
 export async function prepareSchedule(
-  ctx: ScrapeContext,
+  db: DB,
+  session: ScrapeSession,
   options?: ScrapeOptions
 ): Promise<PrepareScheduleResult> {
-  let theaters = await getTheaterConfigs(ctx.db);
+  let theaters = await getTheaterConfigs(db);
 
-  // Filter to a single theater if requested
   if (options?.theaterId) {
-    // The database is the source of truth for "does this theater exist?"
-    const allTheatersFromDb = await getTheaters(ctx.db);
+    const allTheatersFromDb = await getTheaters(db);
     const theaterExistsInDb = allTheatersFromDb.some(
       (c: Theater) => c.id === options.theaterId
     );
@@ -180,7 +124,6 @@ export async function prepareSchedule(
       throw new Error(`Theater not found in database: ${options.theaterId}`);
     }
 
-    // Then check that it is actually configured for scraping
     const foundTheater = theaters.find(c => c.id === options.theaterId);
     if (!foundTheater) {
       throw new Error(`Theater not configured for scraping: ${options.theaterId}`);
@@ -193,20 +136,19 @@ export async function prepareSchedule(
   logger.info('Theaters loaded', { count: theaters.length });
 
   const scrapeMode =
-    options?.mode ?? (process.env.SCRAPE_MODE as ScrapeMode) ?? 'from_today_limited';
-  const scrapeDays = options?.days || parseInt(process.env.SCRAPE_DAYS || '7', 10);
+    options?.mode ?? session.config.scrapeMode;
+  const scrapeDays = options?.days || session.config.scrapeDays;
   const dates = getScrapeDates(scrapeMode, scrapeDays);
 
   logger.info('Scrape config', { mode: scrapeMode, dates: dates.length, scrapeDays });
   logger.info('Delay config', {
-    theaterDelayMs: ctx.theaterDelayMs,
-    movieDelayMs: ctx.movieDelayMs,
+    theaterDelayMs: session.config.theaterDelayMs,
+    movieDelayMs: session.config.movieDelayMs,
   });
 
-  ctx.summary.total_theaters = theaters.length;
-  ctx.summary.total_dates = dates.length;
+  session.setTotals(theaters.length, dates.length);
 
-  await ctx.progress?.emit({
+  await session.emit({
     type: 'started',
     total_theaters: theaters.length,
     total_dates: dates.length,
@@ -215,18 +157,14 @@ export async function prepareSchedule(
   return { theaters, dates, scrapeMode, scrapeDays };
 }
 
-/**
- * Mark a theater/date attempt as 'not_attempted'. Errors are logged and
- * swallowed because failure here must not abort the rest of the run.
- */
 async function markNotAttempted(
-  ctx: ScrapeContext,
+  db: DB,
   reportId: number,
   theaterId: string,
   date: string
 ): Promise<void> {
   try {
-    await createScrapeAttempt(ctx.db, {
+    await createScrapeAttempt(db, {
       report_id: reportId,
       theater_id: theaterId,
       date,
@@ -237,56 +175,25 @@ async function markNotAttempted(
   }
 }
 
-/**
- * Orchestrate the scraping of a single theater.
- *
- * Responsibilities (kept tightly scoped to one theater):
- *  - Resolve the right strategy from the theater source.
- *  - Emit `theater_started`.
- *  - Load metadata (errors here count the theater as failed and short-circuit).
- *  - Filter the global `dates` list down to the dates the theater has
- *    actually published, with optional resume-mode narrowing.
- *  - For each date, create a 'pending' scrape attempt (if reportId given),
- *    call strategy.scrapeTheater, and update the attempt to success/failed.
- *  - On RateLimitError, mark THIS theater's remaining dates as not_attempted
- *    and signal back to the caller via `rateLimited: true` so the outer
- *    loop can stop processing further theaters.
- *  - On any other date error, log + record + continue with the next date.
- *  - At the end, fold the per-theater counts into the shared summary
- *    (successful_theaters vs failed_theaters) and emit `theater_completed`.
- *
- * Returns a ScrapeTheaterResult that lets runScraper coordinate
- * inter-theater concerns (theater-to-theater delay, cascading
- * not_attempted for remaining theaters, the outer `rateLimited` break).
- */
 export async function scrapeTheaterWithStrategy(
   theater: TheaterConfig,
   dates: string[],
-  ctx: ScrapeContext,
+  session: ScrapeSession,
   options?: ScrapeOptions,
-  // Optional context for cascading not_attempted writes to the remaining
-  // theaters when this theater hits a rate limit. When omitted, only the
-  // current theater's remaining dates are marked not_attempted (legacy
-  // behaviour preserved for callers that don't need the cascade).
   cascade?: {
     allTheaters: TheaterConfig[];
     theaterIndex: number;
-    /** Dates that were intersected with availableDates (i.e. "what we would have scraped"). */
     datesToScrape: string[];
   }
 ): Promise<ScrapeTheaterResult> {
   const strategy = getStrategyBySource(theater.source || 'allocine');
-  const summary = ctx.summary;
-  const movieDelayMs = ctx.movieDelayMs;
-  const progress = ctx.progress;
 
   let theaterMoviesCount = 0;
   let theaterShowtimesCount = 0;
   let successfulDates = 0;
   let rateLimited = false;
 
-  // Load the list of dates this theater has actually published.
-  const { availableDates, failed } = await loadTheaterAvailability(ctx, theater);
+  const { availableDates, failed } = await loadTheaterAvailability(session.db, session, theater);
   if (failed) {
     return {
       rateLimited: false,
@@ -307,7 +214,7 @@ export async function scrapeTheaterWithStrategy(
   for (const date of finalDatesToScrape) {
     logger.info('Attempting date', { theater: theater.name, date });
     const outcome = await processOneDate(
-      ctx,
+      session,
       theater,
       date,
       finalDatesToScrape,
@@ -322,10 +229,9 @@ export async function scrapeTheaterWithStrategy(
       rateLimited = true;
       break;
     }
-    // 'error' outcome: the helper already logged + recorded, just continue.
   }
 
-  await summarizeTheater(ctx, theater, {
+  await summarizeTheater(session, theater, {
     successfulDates,
     totalDates: finalDatesToScrape.length,
     moviesCount: theaterMoviesCount,
@@ -341,24 +247,8 @@ export async function scrapeTheaterWithStrategy(
   };
 }
 
-/**
- * Process a single date in the per-theater loop. Owns:
- *  - creating the pending scrape_attempt row
- *  - running strategy.scrapeTheater
- *  - recording success / rate-limit cascade / non-rate-limit failure
- *
- * Returns one of three outcomes so the caller can break on rate_limited:
- *  - { status: 'success', moviesCount, showtimesCount }
- *  - { status: 'rate_limited' }
- *  - { status: 'error' }
- *
- * The rate-limit path keeps the original ordering invariant:
- * cascade_current → cascade_remaining → date_failed emit, so any
- * consumer that reads the DB in reaction to the SSE event sees the
- * final state.
- */
 export async function processOneDate(
-  ctx: ScrapeContext,
+  session: ScrapeSession,
   theater: TheaterConfig,
   date: string,
   finalDatesToScrape: string[],
@@ -374,13 +264,12 @@ export async function processOneDate(
   | { status: 'error' }
 > {
   const strategy = getStrategyBySource(theater.source || 'allocine');
-  const summary = ctx.summary;
-  const progress = ctx.progress;
+  const db = session.db;
 
   let attemptId: number | undefined;
   if (options?.reportId) {
     try {
-      attemptId = await createScrapeAttempt(ctx.db, {
+      attemptId = await createScrapeAttempt(db, {
         report_id: options.reportId,
         theater_id: theater.id,
         date,
@@ -393,16 +282,16 @@ export async function processOneDate(
 
   try {
     const { moviesCount, showtimesCount } = await strategy.scrapeTheater(
-      ctx.db,
+      db,
       theater,
       date,
-      ctx.movieDelayMs,
-      progress
+      session.config.movieDelayMs,
+      { emit: (event: ProgressEvent) => session.emit(event) }
     );
     logger.info('Date scraped successfully', { date, movies: moviesCount, showtimes: showtimesCount });
     if (attemptId) {
       try {
-        await updateScrapeAttempt(ctx.db, attemptId, {
+        await updateScrapeAttempt(db, attemptId, {
           status: 'success',
           movies_scraped: moviesCount,
           showtimes_scraped: showtimesCount,
@@ -415,7 +304,7 @@ export async function processOneDate(
   } catch (error) {
     if (error instanceof RateLimitError) {
       return await handleRateLimit({
-        ctx,
+        session,
         theater,
         date,
         finalDatesToScrape,
@@ -426,7 +315,7 @@ export async function processOneDate(
       });
     }
     return await handleDateFailure({
-      ctx,
+      session,
       theater,
       date,
       error,
@@ -435,12 +324,8 @@ export async function processOneDate(
   }
 }
 
-/**
- * Public, for testing only. The argument shape of handleRateLimit;
- * the helper itself is consumed exclusively by processOneDate.
- */
-export interface HandleRateLimitArgs {
-  ctx: ScrapeContext;
+async function handleRateLimit(args: {
+  session: ScrapeSession;
   theater: TheaterConfig;
   date: string;
   finalDatesToScrape: string[];
@@ -452,17 +337,8 @@ export interface HandleRateLimitArgs {
   };
   error: RateLimitError;
   attemptId: number | undefined;
-}
-
-/**
- * Public, for testing only. Handles the rate-limit path of a single
- * date: cascade_current → cascade_remaining → date_failed emit,
- * preserving the pre-refactor ordering invariant.
- */
-export async function handleRateLimit(args: HandleRateLimitArgs): Promise<{ status: 'rate_limited' }> {
-  const { ctx, theater, date, finalDatesToScrape, options, cascade, error, attemptId } = args;
-  const summary = ctx.summary;
-  const progress = ctx.progress;
+}): Promise<{ status: 'rate_limited' }> {
+  const { session, theater, date, finalDatesToScrape, options, cascade, error, attemptId } = args;
 
   logger.error('Rate limit detected - stopping all scraping', {
     theater: theater.name,
@@ -471,7 +347,7 @@ export async function handleRateLimit(args: HandleRateLimitArgs): Promise<{ stat
   });
 
   const errorType = classifyError(error);
-  summary.errors.push({
+  session.recordError({
     theater_name: theater.name,
     theater_id: theater.id,
     date,
@@ -482,7 +358,7 @@ export async function handleRateLimit(args: HandleRateLimitArgs): Promise<{ stat
 
   if (attemptId) {
     try {
-      await updateScrapeAttempt(ctx.db, attemptId, {
+      await updateScrapeAttempt(session.db, attemptId, {
         status: 'rate_limited',
         error_type: errorType,
         error_message: error.message,
@@ -493,25 +369,19 @@ export async function handleRateLimit(args: HandleRateLimitArgs): Promise<{ stat
     }
   }
 
-  // Mark THIS theater's remaining dates as not_attempted.
   if (options?.reportId) {
     const remainingDates = finalDatesToScrape.slice(finalDatesToScrape.indexOf(date) + 1);
     for (const remainingDate of remainingDates) {
-      await markNotAttempted(ctx, options.reportId, theater.id, remainingDate);
+      await markNotAttempted(session.db, options.reportId, theater.id, remainingDate);
     }
   }
 
-  // Cascade not_attempted writes to the remaining theaters BEFORE
-  // emitting date_failed, so any consumer that reads the DB in
-  // reaction to the SSE event sees the final state — matches the
-  // pre-refactor ordering (cascade_current → cascade_remaining →
-  // date_failed emit).
   if (options?.reportId && cascade) {
     const remainingTheaters = cascade.allTheaters.slice(cascade.theaterIndex + 1);
     for (const remainingTheater of remainingTheaters) {
       for (const futureDate of cascade.datesToScrape) {
         await markNotAttempted(
-          ctx,
+          session.db,
           options.reportId,
           remainingTheater.id,
           futureDate
@@ -520,43 +390,31 @@ export async function handleRateLimit(args: HandleRateLimitArgs): Promise<{ stat
     }
   }
 
-  await progress?.emit({
+  await session.emit({
     type: 'date_failed',
     theater_name: theater.name,
     date,
     error: error.message,
   });
 
-  summary.status = 'rate_limited';
+  session.markRateLimited();
   return { status: 'rate_limited' };
 }
 
-/**
- * Public, for testing only. The argument shape of handleDateFailure.
- */
-export interface HandleDateFailureArgs {
-  ctx: ScrapeContext;
+async function handleDateFailure(args: {
+  session: ScrapeSession;
   theater: TheaterConfig;
   date: string;
   error: unknown;
   attemptId: number | undefined;
-}
-
-/**
- * Public, for testing only. Handles the non-rate-limit failure path
- * of a single date: log + record + emit, then continue with the
- * next date.
- */
-export async function handleDateFailure(args: HandleDateFailureArgs): Promise<{ status: 'error' }> {
-  const { ctx, theater, date, error, attemptId } = args;
-  const summary = ctx.summary;
-  const progress = ctx.progress;
+}): Promise<{ status: 'error' }> {
+  const { session, theater, date, error, attemptId } = args;
 
   const errorMessage = error instanceof Error ? error.message : String(error);
   const errorType = classifyError(error);
   logger.error('Date scrape failed', { theater: theater.name, date, error: errorMessage });
 
-  summary.errors.push({
+  session.recordError({
     theater_name: theater.name,
     theater_id: theater.id,
     date,
@@ -567,7 +425,7 @@ export async function handleDateFailure(args: HandleDateFailureArgs): Promise<{ 
 
   if (attemptId) {
     try {
-      await updateScrapeAttempt(ctx.db, attemptId, {
+      await updateScrapeAttempt(session.db, attemptId, {
         status: 'failed',
         error_type: errorType,
         error_message: errorMessage,
@@ -578,7 +436,7 @@ export async function handleDateFailure(args: HandleDateFailureArgs): Promise<{ 
     }
   }
 
-  await progress?.emit({
+  await session.emit({
     type: 'date_failed',
     theater_name: theater.name,
     date,
@@ -588,21 +446,14 @@ export async function handleDateFailure(args: HandleDateFailureArgs): Promise<{ 
   return { status: 'error' };
 }
 
-/**
- * Load the dates that the theater has actually published, via the
- * strategy. On success returns { availableDates, failed: false }. On
- * failure logs, records the error in summary.errors, increments
- * summary.failed_theaters, and returns { availableDates: [], failed: true }
- * so the caller can short-circuit the rest of the theater processing.
- */
 export async function loadTheaterAvailability(
-  ctx: ScrapeContext,
+  db: DB,
+  session: ScrapeSession,
   theater: TheaterConfig
 ): Promise<{ availableDates: string[]; failed: boolean }> {
   const strategy = getStrategyBySource(theater.source || 'allocine');
-  const summary = ctx.summary;
   try {
-    const meta = await strategy.loadTheaterMetadata(ctx.db, theater);
+    const meta = await strategy.loadTheaterMetadata(db, theater);
     return { availableDates: meta.availableDates, failed: false };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -611,24 +462,18 @@ export async function loadTheaterAvailability(
       theater: theater.name,
       error: errorMessage,
     });
-    summary.errors.push({
+    session.recordError({
       theater_name: theater.name,
       theater_id: theater.id,
       error: errorMessage,
       error_type: errorType,
       http_status_code: (error as any).statusCode,
     });
-    summary.failed_theaters++;
+    session.incrementFailedTheater();
     return { availableDates: [], failed: true };
   }
 }
 
-/**
- * Intersect the requested `dates` with what the theater has actually
- * published (`availableDates`). When `options.resumeMode` is set, further
- * filter to only the dates listed in `options.pendingAttempts` for this
- * theater. Logs the skipped dates.
- */
 export function filterDatesForScrape(
   theater: TheaterConfig,
   dates: string[],
@@ -660,15 +505,8 @@ export function filterDatesForScrape(
   return { datesToScrape, finalDatesToScrape, skippedDates };
 }
 
-/**
- * Fold the per-theater counters into the shared summary and emit
- * `theater_completed` if the theater succeeded (at least one date
- * scraped). Returns `true` for a successful theater, `false` for a
- * fully-failed one. The actual failed_theaters++ / total_movies += etc.
- * mutations happen here so the caller stays declarative.
- */
-export async function summarizeTheater(
-  ctx: ScrapeContext,
+async function summarizeTheater(
+  session: ScrapeSession,
   theater: TheaterConfig,
   counts: {
     successfulDates: number;
@@ -677,7 +515,6 @@ export async function summarizeTheater(
     showtimesCount: number;
   }
 ): Promise<boolean> {
-  const { summary, progress } = ctx;
   const theaterFailed = counts.successfulDates === 0 && counts.totalDates > 0;
   logger.info('Theater summary', {
     theater: theater.name,
@@ -688,10 +525,8 @@ export async function summarizeTheater(
   });
 
   if (!theaterFailed) {
-    summary.successful_theaters++;
-    summary.total_movies += counts.moviesCount;
-    summary.total_showtimes += counts.showtimesCount;
-    await progress?.emit({
+    session.incrementSuccessfulTheater(counts.moviesCount, counts.showtimesCount);
+    await session.emit({
       type: 'theater_completed',
       theater_name: theater.name,
       total_movies: counts.moviesCount,
@@ -699,49 +534,22 @@ export async function summarizeTheater(
     return true;
   }
 
-  summary.failed_theaters++;
+  session.incrementFailedTheater();
   logger.error('Theater failed completely', { theater: theater.name, dates: counts.totalDates });
   return false;
 }
 
-/**
- * Build the ScrapeContext used by the helpers, reading delay config
- * from the environment. Centralized so the runScraper body stays small.
- */
-function createScrapeContext(
-  summary: ScrapeSummary,
-  progress?: ProgressPublisher
-): ScrapeContext {
-  const theaterDelayMs = parseInt(process.env.SCRAPE_THEATER_DELAY_MS || '3000', 10);
-  const movieDelayMs = parseInt(process.env.SCRAPE_MOVIE_DELAY_MS || '500', 10);
-  return {
-    db,
-    summary,
-    progress,
-    movieDelayMs,
-    theaterDelayMs,
-  };
-}
-
-/**
- * Run one iteration of the theater loop: emit `theater_started`, run the
- * strategy, and on rate limit log the stop and signal the caller to break.
- *
- * The cascade of not_attempted writes to the remaining theaters happens
- * INSIDE scrapeTheaterWithStrategy (just before the date_failed emit) so
- * the SSE consumers see a consistent DB state at emit time.
- */
 async function processTheater(
   theater: TheaterConfig,
   index: number,
   theaters: TheaterConfig[],
   dates: string[],
-  ctx: ScrapeContext,
+  session: ScrapeSession,
   options?: ScrapeOptions
 ): Promise<{ rateLimited: boolean }> {
   const strategy = getStrategyBySource(theater.source || 'allocine');
 
-  await ctx.progress?.emit({
+  await session.emit({
     type: 'theater_started',
     theater_name: theater.name,
     theater_id: theater.id,
@@ -753,14 +561,7 @@ async function processTheater(
     id: theater.id,
   });
 
-  // Build the cascade context now (before the await) so we can pass it
-  // to scrapeTheaterWithStrategy. datesToScrape is the global dates list
-  // intersected with what the theater publishes happens inside the helper;
-  // the original code used `datesToScrape` (the un-resume-filtered set),
-  // which is equivalent to `dates` here when resumeMode is off and a
-  // safe upper bound when it's on (extra not_attempted rows for dates
-  // the theater wouldn't have published anyway are a no-op in practice).
-  const result = await scrapeTheaterWithStrategy(theater, dates, ctx, options, {
+  const result = await scrapeTheaterWithStrategy(theater, dates, session, options, {
     allTheaters: theaters,
     theaterIndex: index,
     datesToScrape: dates,
@@ -778,27 +579,18 @@ async function processTheater(
   return { rateLimited: true };
 }
 
-/**
- * Successful end-of-run bookkeeping: stamp duration, log, close browser,
- * emit `completed`. Always run from the happy path of runScraper.
- */
 async function finalizeScrape(
-  ctx: ScrapeContext,
+  session: ScrapeSession,
   startTime: number
 ): Promise<void> {
-  ctx.summary.duration_ms = Date.now() - startTime;
-  logger.info('Scraping completed', { summary: ctx.summary });
+  session.setDuration(Date.now() - startTime);
+  logger.info('Scraping completed', { summary: session.summary });
   await closeBrowser();
-  await ctx.progress?.emit({ type: 'completed', summary: ctx.summary });
+  await session.emit({ type: 'completed', summary: session.summary });
 }
 
-/**
- * Fatal-error path: log, record a 'System' error, close browser, emit
- * `failed`, and rethrow so the caller still sees the exception. Always
- * run from the catch block of runScraper.
- */
 async function handleFatalError(
-  ctx: ScrapeContext,
+  session: ScrapeSession,
   startTime: number,
   error: unknown
 ): Promise<never> {
@@ -806,15 +598,9 @@ async function handleFatalError(
   const errorType = classifyError(error);
   logger.error('Fatal error in scraper', { error });
   await closeBrowser();
-  ctx.summary.errors.push({
-    theater_name: 'System',
-    theater_id: 'system',
-    error: errorMessage,
-    error_type: errorType,
-    http_status_code: (error as any).statusCode,
-  });
-  ctx.summary.duration_ms = Date.now() - startTime;
-  await ctx.progress?.emit({ type: 'failed', error: errorMessage });
+  session.recordSystemError(errorMessage, errorType);
+  session.setDuration(Date.now() - startTime);
+  await session.emit({ type: 'failed', error: errorMessage });
   throw error;
 }
 
@@ -824,39 +610,28 @@ export async function runScraper(
 ): Promise<ScrapeSummary> {
   logger.info('Starting scraper');
 
-  const summary: ScrapeSummary = {
-    total_theaters: 0,
-    successful_theaters: 0,
-    failed_theaters: 0,
-    total_movies: 0,
-    total_showtimes: 0,
-    total_dates: 0,
-    duration_ms: 0,
-    errors: [],
-  };
-
-  const ctx = createScrapeContext(summary, progress);
+  const config = createScrapeConfig();
+  const session = new ScrapeSession(db, config, progress);
   const startTime = Date.now();
 
   try {
-    const { theaters, dates } = await prepareSchedule(ctx, options);
+    const { theaters, dates } = await prepareSchedule(db, session, options);
 
     for (let i = 0; i < theaters.length; i++) {
       const { rateLimited } = await processTheater(
-        theaters[i], i, theaters, dates, ctx, options
+        theaters[i], i, theaters, dates, session, options
       );
       if (rateLimited) break;
       if (i < theaters.length - 1) {
-        logger.info('Waiting before next theater', { delayMs: ctx.theaterDelayMs });
-        await delay(ctx.theaterDelayMs);
+        logger.info('Waiting before next theater', { delayMs: config.theaterDelayMs });
+        await delay(config.theaterDelayMs);
       }
     }
 
-    await finalizeScrape(ctx, startTime);
-    return summary;
+    await finalizeScrape(session, startTime);
+    return session.summary;
   } catch (error) {
-    await handleFatalError(ctx, startTime, error);
-    // Unreachable: handleFatalError always rethrows.
+    await handleFatalError(session, startTime, error);
     throw error;
   }
 }
