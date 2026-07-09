@@ -85,6 +85,15 @@ Terminal states: `success`, `failed`, `rate_limited`, `not_attempted`. There is 
 
 The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The server-side copy at `server/src/services/progress-tracker.ts:19` and the scraper-side copy at `scraper/src/types/scraper.ts:113` are now re-exports from the protocol package; the duplicate declarations are gone.
 
+### ScrapeRun
+
+The scraper-internal runtime object that drives one end-to-end scrape run. A `ScrapeRun` owns the mutable run state — the `ScrapeSummary` it builds up, the `ScrapeConfig` read once at construction, and the optional progress publisher — and exposes the run as a deep module: coherent operations (`prepare`, `runTheater`, `runDate`, `loadAvailability`, `filterDates`, `finalize`) plus controlled mutators (`recordError`, `incrementSuccessfulTheater`, …). It lives at `scraper/src/scraper/scrape-run.ts`. The thin `runScraper` entry in `scraper/src/scraper/index.ts` constructs a `ScrapeRun` and drives it; it is not consumed outside the scraper microservice.
+
+**What a ScrapeRun is *not*:**
+- Not a **Session**. "Session" is reserved for user-auth (cookie sessions, SSE subscriber sessions) — see Showtime above. A ScrapeRun is a single scrape execution, not a user/auth session.
+- Not a **ScrapeReport**. A ScrapeReport is the persisted, server-side run-level record in the database. A ScrapeRun is the transient scraper-process object whose final `ScrapeSummary` feeds the `'completed'` ProgressEvent; it is not written to a row.
+- Not a **ScrapeSummary**. The ScrapeSummary is the structured result (counts + status) attached to the final event. A ScrapeRun *produces* a ScrapeSummary; it is not itself the summary.
+
 ### Resume
 
 Re-issuing a stopped or incomplete scrape scoped to only the (theater, date) pairs that did not reach `success`. The UI exposes it as the "Reprendre le scraping" button (`client/src/pages/ReportsPage/ReportRateLimitedNotice.tsx:38`) wired through the `resume` function (`client/src/pages/ReportsPage.tsx:90`); the API path is `POST /api/scraper/resume/:reportId` (`server/src/routes/scraper.ts:85`); the scraper-runtime flag is `options.resumeMode: true` and the payload list is `options.pendingAttempts: Array<{ theater_id; date }>` (`scraper/src/scraper/index.ts:146-147`).
