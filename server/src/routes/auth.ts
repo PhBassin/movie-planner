@@ -1,141 +1,18 @@
 import express, { Request, Response, NextFunction } from 'express';
-import type { DB } from '../db/index.js';
 import type { ApiResponse } from '../types/api.js';
 import { authLimiter, registerLimiter } from '../middleware/rate-limit.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permission.js';
-import { AuthService } from '../services/auth-service.js';
-import {
-  generateRefreshToken,
-  validateRefreshToken,
-  revokeRefreshToken,
-  rotateRefreshToken,
-  revokeAllUserTokens,
-} from '../repositories/refresh-token-repository.js';
-import type { PermissionName } from '../types/role.js';
-import { logger } from '../utils/logger.js';
-import { getUserWithRoleById } from '../db/user-queries.js';
-import { getPermissionNamesByRoleId } from '../db/role-queries.js';
-import crypto from 'crypto';
+import { SessionService } from '../services/session-service.js';
 
 const router = express.Router();
-
-const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
-
-interface AuthResponse {
-    token: string;
-    user: {
-        id: number;
-        username: string;
-        role_id: number;
-        role_name: string;
-        is_system_role: boolean;
-        permissions: PermissionName[];
-    };
-}
-
-const isSecureCookie = process.env.COOKIE_SECURE !== 'false';
-
-/**
- * Set refresh token as httpOnly cookie (7 days).
- */
-function setRefreshTokenCookie(res: Response, token: string): void {
-    res.cookie('refresh_token', token, {
-        httpOnly: true,
-        secure: isSecureCookie,
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        path: '/api/auth',
-    });
-}
-
-/**
- * Clear refresh token cookie.
- */
-function clearRefreshTokenCookie(res: Response): void {
-    res.clearCookie('refresh_token', {
-        httpOnly: true,
-        secure: isSecureCookie,
-        sameSite: 'strict',
-        path: '/api/auth',
-    });
-}
-
-/**
- * Set access token as httpOnly cookie (15 min expiration).
- */
-function setAccessTokenCookie(res: Response, token: string): void {
-    res.cookie('access_token', token, {
-        httpOnly: true,
-        secure: isSecureCookie,
-        sameSite: 'lax',
-        maxAge: ACCESS_TOKEN_MAX_AGE_MS, // 15 minutes
-        path: '/',
-    });
-}
-
-/**
- * Clear access token cookie.
- */
-function clearAccessTokenCookie(res: Response): void {
-    res.clearCookie('access_token', {
-        httpOnly: true,
-        secure: isSecureCookie,
-        sameSite: 'lax',
-        path: '/',
-    });
-}
-
-/**
- * Set CSRF token cookie (readable by JS for double-submit pattern).
- */
-function setCsrfCookie(res: Response): string {
-    const token = crypto.randomBytes(32).toString('hex');
-    res.cookie('csrf_token', token, {
-        httpOnly: false,
-        secure: isSecureCookie,
-        sameSite: 'strict',
-        path: '/',
-    });
-    return token;
-}
-
-/**
- * Clear CSRF token cookie.
- */
-function clearCsrfCookie(res: Response): void {
-    res.clearCookie('csrf_token', {
-        httpOnly: false,
-        secure: isSecureCookie,
-        sameSite: 'strict',
-        path: '/',
-    });
-}
 
 // POST /api/auth/login - Login user
 router.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const db: DB = req.app.get('db');
-        const authService = new AuthService(db);
-        const { username, password } = req.body;
-
-        const authData = await authService.login(username, password);
-
-        // Generate and set refresh token cookie
-        const refreshToken = await generateRefreshToken(db, authData.user.id);
-        setRefreshTokenCookie(res, refreshToken);
-
-        // Set access token as httpOnly cookie for protection against XSS
-        setAccessTokenCookie(res, authData.token);
-
-        // Set CSRF token for double-submit protection
-        setCsrfCookie(res);
-
-        const response: ApiResponse<AuthResponse> = {
-            success: true,
-            data: authData
-        };
-
+        const session = new SessionService(req.app.get('db'), res);
+        const authData = await session.login(req.body.username, req.body.password);
+        const response: ApiResponse = { success: true, data: authData };
         res.json(response);
     } catch (error) {
         next(error);
@@ -145,20 +22,12 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
 // POST /api/auth/register - Register a new user (requires users:create permission)
 router.post('/register', registerLimiter, requireAuth, requirePermission('users:create'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const db: DB = req.app.get('db');
-        const authService = new AuthService(db);
-        const { username, password } = req.body;
-
-        const user = await authService.register(username, password);
-
+        const session = new SessionService(req.app.get('db'), res);
+        const user = await session.register(req.body.username, req.body.password);
         const response: ApiResponse = {
             success: true,
-            data: {
-                message: 'User registered successfully',
-                user
-            }
+            data: { message: 'User registered successfully', user },
         };
-
         res.status(201).json(response);
     } catch (error) {
         next(error);
@@ -168,26 +37,17 @@ router.post('/register', registerLimiter, requireAuth, requirePermission('users:
 // POST /api/auth/change-password - Change user password (protected)
 router.post('/change-password', authLimiter, requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const db: DB = req.app.get('db');
-        const authService = new AuthService(db);
-        const { currentPassword, newPassword } = req.body;
-
-        await authService.changePassword(req.user!.username, currentPassword, newPassword);
-
-        // Revoke all refresh tokens for this user — forces re-login on all devices
-        await revokeAllUserTokens(db, req.user!.id);
-
-        // Clear auth cookies to force a fresh login
-        clearRefreshTokenCookie(res);
-        clearAccessTokenCookie(res);
-
+        const session = new SessionService(req.app.get('db'), res);
+        await session.changePassword(
+            req.user!.id,
+            req.user!.username,
+            req.body.currentPassword,
+            req.body.newPassword,
+        );
         const response: ApiResponse = {
             success: true,
-            data: {
-                message: 'Password changed successfully',
-            },
+            data: { message: 'Password changed successfully' },
         };
-
         res.json(response);
     } catch (error) {
         next(error);
@@ -197,97 +57,17 @@ router.post('/change-password', authLimiter, requireAuth, async (req: AuthReques
 // POST /api/auth/refresh - Refresh access token using refresh token cookie
 router.post('/refresh', authLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const db: DB = req.app.get('db');
-        const authService = new AuthService(db);
-
-        const refreshToken = req.cookies?.refresh_token;
-        if (!refreshToken) {
-            clearRefreshTokenCookie(res);
-            clearAccessTokenCookie(res);
-            res.status(401).json({
-                success: false,
-                error: 'No refresh token provided.',
-            });
-            return;
-        }
-
-        const userId = await validateRefreshToken(db, refreshToken);
-        if (userId === null) {
-            clearRefreshTokenCookie(res);
-            clearAccessTokenCookie(res);
-            res.status(401).json({
-                success: false,
-                error: 'Invalid or expired refresh token.',
-            });
-            return;
-        }
-
-        // Get user info for new access token
-        const user = await getUserWithRoleById(db, userId);
-
-        if (!user) {
-            clearRefreshTokenCookie(res);
-            clearAccessTokenCookie(res);
-            res.status(401).json({
-                success: false,
-                error: 'User not found.',
-            });
-            return;
-        }
-
-        // Atomically rotate: generate new token AND revoke old one in one transaction
-        const newRefreshToken = await rotateRefreshToken(db, userId, refreshToken);
-
-        // Mint a fresh access token via the canonical AuthService seam — same
-        // payload shape as the login flow, no duplicate signing code.
-        const accessToken = await authService.mintAccessToken(user, db);
-
-        // Set new refresh token cookie
-        setRefreshTokenCookie(res, newRefreshToken);
-
-        // Set access token as httpOnly cookie for protection against XSS
-        setAccessTokenCookie(res, accessToken);
-
-        // Rotate CSRF token
-        setCsrfCookie(res);
-
-        res.json({
-            success: true,
-            data: {
-                token: accessToken,
-                user: {
-                    id: user.id,
-                    username: user.username,
-                    role_id: user.role_id,
-                    role_name: user.role_name,
-                    is_system_role: user.is_system_role,
-                    permissions: await getPermissionNamesByRoleId(db, user.role_id),
-                },
-            },
-        });
-    } catch (error: any) {
+        const session = new SessionService(req.app.get('db'), res);
+        await session.refresh(req.cookies?.refresh_token);
+    } catch (error) {
         next(error);
     }
 });
 
 // POST /api/auth/logout - Logout and revoke refresh token
 router.post('/logout', async (req: Request, res: Response) => {
-    const db: DB = req.app.get('db');
-
-    const refreshToken = req.cookies?.refresh_token;
-    if (refreshToken) {
-        try {
-            await revokeRefreshToken(db, refreshToken);
-        } catch (err) {
-            logger.warn('Failed to revoke refresh token during logout:', err);
-        }
-    }
-
-    clearRefreshTokenCookie(res);
-    clearAccessTokenCookie(res);
-    clearCsrfCookie(res);
-
-    res.json({ success: true, data: { message: 'Logged out successfully' } });
+    const session = new SessionService(req.app.get('db'), res);
+    await session.logout(req.cookies?.refresh_token);
 });
 
 // GET /api/auth/me - Validate current session (cookie-based)
