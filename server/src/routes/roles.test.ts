@@ -22,9 +22,6 @@ vi.mock('../db/role-queries.js', () => ({
   deleteRoleById: vi.fn(),
   setRolePermissions: vi.fn(),
   getAllPermissions: vi.fn(),
-}));
-
-vi.mock('../repositories/role-repository.js', () => ({
   getRoleInUseCount: vi.fn(),
 }));
 
@@ -287,8 +284,7 @@ describe('Routes - Roles', () => {
   // DELETE /api/roles/:id
   describe('DELETE /api/roles/:id', () => {
     it('should delete a non-system role and return 204', async () => {
-      const { getRoleById, deleteRoleById } = await import('../db/role-queries.js');
-      const { getRoleInUseCount } = await import('../repositories/role-repository.js');
+      const { getRoleById, deleteRoleById, getRoleInUseCount } = await import('../db/role-queries.js');
       (getRoleById as any).mockResolvedValue(mockCustomRole); // is_system: false
       (getRoleInUseCount as any).mockResolvedValue(0); // no users
       (deleteRoleById as any).mockResolvedValue(true);
@@ -324,8 +320,7 @@ describe('Routes - Roles', () => {
     });
 
     it('should return 409 when role is assigned to users', async () => {
-      const { getRoleById } = await import('../db/role-queries.js');
-      const { getRoleInUseCount } = await import('../repositories/role-repository.js');
+      const { getRoleById, getRoleInUseCount } = await import('../db/role-queries.js');
       (getRoleById as any).mockResolvedValue(mockCustomRole); // is_system: false
       (getRoleInUseCount as any).mockResolvedValue(3); // 3 users assigned
 
@@ -360,8 +355,7 @@ describe('Routes - Roles', () => {
     });
 
     it('should return 404 when deleteRoleById reports the role no longer exists', async () => {
-      const { getRoleById, deleteRoleById } = await import('../db/role-queries.js');
-      const { getRoleInUseCount } = await import('../repositories/role-repository.js');
+      const { getRoleById, deleteRoleById, getRoleInUseCount } = await import('../db/role-queries.js');
       (getRoleById as any).mockResolvedValue(mockCustomRole);
       (getRoleInUseCount as any).mockResolvedValue(0);
       (deleteRoleById as any).mockResolvedValue(false); // race: deleted between checks
@@ -380,8 +374,7 @@ describe('Routes - Roles', () => {
     });
 
     it('should route the delete through deleteRoleById and getRoleInUseCount', async () => {
-      const { getRoleById, deleteRoleById } = await import('../db/role-queries.js');
-      const { getRoleInUseCount } = await import('../repositories/role-repository.js');
+      const { getRoleById, deleteRoleById, getRoleInUseCount } = await import('../db/role-queries.js');
       (getRoleById as any).mockResolvedValue(mockCustomRole);
       (getRoleInUseCount as any).mockResolvedValue(0);
       (deleteRoleById as any).mockResolvedValue(true);
@@ -399,8 +392,7 @@ describe('Routes - Roles', () => {
     });
 
     it('should fetch the role exactly once (issue #1200: no redundant inner SELECT)', async () => {
-      const { getRoleById, deleteRoleById } = await import('../db/role-queries.js');
-      const { getRoleInUseCount } = await import('../repositories/role-repository.js');
+      const { getRoleById, deleteRoleById, getRoleInUseCount } = await import('../db/role-queries.js');
       (getRoleById as any).mockResolvedValue(mockCustomRole);
       (getRoleInUseCount as any).mockResolvedValue(0);
       (deleteRoleById as any).mockResolvedValue(true);
