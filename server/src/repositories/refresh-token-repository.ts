@@ -1,14 +1,25 @@
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
 import type { DB } from '../db/index.js';
-import {
-  insertRefreshToken,
-  findByTokenHash,
-  revokeByTokenHash,
-  revokeByUserId,
-  cleanupExpired,
-  rotateRefreshTokenTx,
-} from '../db/refresh-token-queries.js';
+
+/**
+ * Refresh-token data-access module.
+ *
+ * One deep module behind which the entire credential lifecycle lives:
+ * raw-token generation, SHA-256 hashing, expiry parsing, storage, validation,
+ * rotation, revocation, and cleanup. The public surface deals exclusively in
+ * raw tokens — hashing is an internal implementation detail and never crosses
+ * this seam.
+ */
+
+interface RefreshTokenRow {
+  id: number;
+  user_id: number;
+  token_hash: string;
+  expires_at: Date;
+  created_at: Date;
+  revoked_at: Date | null;
+}
 
 const DEFAULT_EXPIRY_MS = parseRefreshTokenExpiry();
 
@@ -40,6 +51,104 @@ export function parseRefreshTokenExpiry(): number {
 function hashToken(rawToken: string): string {
   return crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
 }
+
+// ---------------------------------------------------------------------------
+// Internal SQL primitives — not exported. All hashing happens in the public
+// functions below, so no SQL primitive ever receives a pre-hashed token from
+// outside this module.
+// ---------------------------------------------------------------------------
+
+async function insertRefreshToken(
+  db: DB,
+  userId: number,
+  tokenHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await db.query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+     VALUES ($1, $2, $3)`,
+    [userId, tokenHash, expiresAt]
+  );
+}
+
+async function findByTokenHash(
+  db: DB,
+  tokenHash: string
+): Promise<RefreshTokenRow | undefined> {
+  const result = await db.query<RefreshTokenRow>(
+    `SELECT id, user_id, token_hash, expires_at, created_at, revoked_at
+     FROM refresh_tokens
+     WHERE token_hash = $1`,
+    [tokenHash]
+  );
+  return result.rows[0];
+}
+
+async function revokeByTokenHash(db: DB, tokenHash: string): Promise<void> {
+  await db.query(
+    `UPDATE refresh_tokens SET revoked_at = NOW()
+     WHERE token_hash = $1 AND revoked_at IS NULL`,
+    [tokenHash]
+  );
+}
+
+async function revokeByUserId(db: DB, userId: number): Promise<void> {
+  await db.query(
+    `UPDATE refresh_tokens SET revoked_at = NOW()
+     WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId]
+  );
+}
+
+async function cleanupExpired(db: DB, retentionDays: number): Promise<number> {
+  const result = await db.query<{ count: string }>(
+    `WITH deleted AS (
+       DELETE FROM refresh_tokens
+       WHERE expires_at < NOW() - INTERVAL '1 day' * $1
+          OR revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '1 day' * $1
+       RETURNING id
+     )
+     SELECT COUNT(*)::text AS count FROM deleted`,
+    [retentionDays]
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
+/**
+ * Internal: atomically revoke an old token and insert a new one inside a
+ * transaction. Both hashes are computed within this module — callers never
+ * supply pre-hashed values. Throws if the old token is not found / already
+ * revoked (rowCount = 0).
+ */
+async function rotateRefreshTokenTx(
+  db: DB,
+  userId: number,
+  oldTokenHash: string,
+  newTokenHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await db.transaction(async (client) => {
+    const updateResult = await client.query(
+      `UPDATE refresh_tokens SET revoked_at = NOW()
+       WHERE token_hash = $1 AND user_id = $2 AND revoked_at IS NULL`,
+      [oldTokenHash, userId]
+    );
+
+    if ((updateResult.rowCount ?? 0) === 0) {
+      throw new Error('Refresh token already consumed or invalid');
+    }
+
+    await client.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, newTokenHash, expiresAt]
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Public surface
+// ---------------------------------------------------------------------------
 
 /**
  * Generate a new refresh token for a user.
