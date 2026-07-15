@@ -16,11 +16,15 @@ const authMock = vi.hoisted(() => ({
   mintAccessToken: vi.fn(),
 }));
 
-vi.mock('./auth-service.js', () => ({
-  AuthService: vi.fn(function () {
-    return authMock;
-  }),
-}));
+vi.mock('./auth-service.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./auth-service.js')>();
+  return {
+    ...actual,
+    AuthService: vi.fn(function () {
+      return authMock;
+    }),
+  };
+});
 
 vi.mock('../repositories/refresh-token-repository.js', () => ({
   generateRefreshToken: vi.fn(),
@@ -88,11 +92,11 @@ describe('SessionService', () => {
       const res = buildRes();
       const session = new SessionService(db, res);
 
-      const result = await session.login('alice', 'pw');
+      await session.login('alice', 'pw');
 
-      expect(result).toBe(authData);
       expect(authMock.login).toHaveBeenCalledWith('alice', 'pw');
       expect(refreshTokenRepo.generateRefreshToken).toHaveBeenCalledWith(db, 7);
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: authData });
 
       expect(res.cookie).toHaveBeenCalledWith('refresh_token', 'refresh-raw', {
         httpOnly: true,
@@ -302,6 +306,10 @@ describe('SessionService', () => {
       expect(res.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
       // CSRF is not part of the change-password cookie clear
       expect(res.clearCookie).not.toHaveBeenCalledWith('csrf_token', expect.any(Object));
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: { message: 'Password changed successfully' },
+      });
     });
 
     it('does not revoke tokens or clear cookies when the password change fails', async () => {
@@ -316,6 +324,7 @@ describe('SessionService', () => {
 
       expect(refreshTokenRepo.revokeAllUserTokens).not.toHaveBeenCalled();
       expect(res.clearCookie).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 });

@@ -11,9 +11,7 @@ const router = express.Router();
 router.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const session = new SessionService(req.app.get('db'), res);
-        const authData = await session.login(req.body.username, req.body.password);
-        const response: ApiResponse = { success: true, data: authData };
-        res.json(response);
+        await session.login(req.body.username, req.body.password);
     } catch (error) {
         next(error);
     }
@@ -44,11 +42,6 @@ router.post('/change-password', authLimiter, requireAuth, async (req: AuthReques
             req.body.currentPassword,
             req.body.newPassword,
         );
-        const response: ApiResponse = {
-            success: true,
-            data: { message: 'Password changed successfully' },
-        };
-        res.json(response);
     } catch (error) {
         next(error);
     }

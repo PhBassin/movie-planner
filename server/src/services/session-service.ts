@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import type { Response } from 'express';
 import type { DB } from '../db/index.js';
-import { AuthService } from './auth-service.js';
+import { AuthService, toSessionUser } from './auth-service.js';
 import {
   generateRefreshToken,
   validateRefreshToken,
@@ -34,20 +34,6 @@ const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
 /** Single source of truth for the refresh-token lifetime (token + cookie). */
 const REFRESH_TOKEN_MAX_AGE_MS = parseRefreshTokenExpiry();
 const isSecureCookies = process.env.COOKIE_SECURE !== 'false';
-
-export interface SessionUser {
-  id: number;
-  username: string;
-  role_id: number;
-  role_name: string;
-  is_system_role: boolean;
-  permissions: PermissionName[];
-}
-
-export interface AuthResponse {
-  token: string;
-  user: SessionUser;
-}
 
 export class SessionService {
   private readonly auth: AuthService;
@@ -123,15 +109,32 @@ export class SessionService {
   }
 
   // -------------------------------------------------------------------------
+  // Response envelope (private). Every lifecycle method that touches the
+  // cookie surface owns its full HTTP response through these two helpers, so
+  // the routes are uniform void shims; `register` (no cookie surface) is the
+  // sole exception and returns the created user.
+  // -------------------------------------------------------------------------
+
+  private sendSuccess(data: unknown, status: number = 200): void {
+    this.res.status(status).json({ success: true, data });
+  }
+
+  private rejectUnauthorized(message: string): void {
+    this.clearRefreshTokenCookie();
+    this.clearAccessTokenCookie();
+    this.res.status(401).json({ success: false, error: message });
+  }
+
+  // -------------------------------------------------------------------------
   // Lifecycle (public)
   // -------------------------------------------------------------------------
 
   /**
-   * Authenticate, issue access + refresh tokens, and plant the cookie
-   * surface (refresh + access + CSRF). Returns the access token and the
-   * public user view for the response body.
+   * Authenticate, issue access + refresh tokens, plant the cookie surface
+   * (refresh + access + CSRF), and write the success response. Returns
+   * nothing — the route is a void shim.
    */
-  async login(username: string, password: string): Promise<AuthResponse> {
+  async login(username: string, password: string): Promise<void> {
     const authData = await this.auth.login(username, password);
 
     const refreshToken = await generateRefreshToken(this.db, authData.user.id);
@@ -141,7 +144,7 @@ export class SessionService {
 
     this.setCsrfCookie();
 
-    return authData;
+    this.sendSuccess(authData);
   }
 
   /**
@@ -162,27 +165,19 @@ export class SessionService {
    */
   async refresh(refreshToken?: string): Promise<void> {
     if (!refreshToken) {
-      this.clearRefreshTokenCookie();
-      this.clearAccessTokenCookie();
-      this.res.status(401).json({ success: false, error: 'No refresh token provided.' });
+      this.rejectUnauthorized('No refresh token provided.');
       return;
     }
 
     const userId = await validateRefreshToken(this.db, refreshToken);
     if (userId === null) {
-      this.clearRefreshTokenCookie();
-      this.clearAccessTokenCookie();
-      this.res
-        .status(401)
-        .json({ success: false, error: 'Invalid or expired refresh token.' });
+      this.rejectUnauthorized('Invalid or expired refresh token.');
       return;
     }
 
     const user = await getUserWithRoleById(this.db, userId);
     if (!user) {
-      this.clearRefreshTokenCookie();
-      this.clearAccessTokenCookie();
-      this.res.status(401).json({ success: false, error: 'User not found.' });
+      this.rejectUnauthorized('User not found.');
       return;
     }
 
@@ -190,30 +185,16 @@ export class SessionService {
     // the canonical AuthService seam (same payload shape as login).
     const newRefreshToken = await rotateRefreshToken(this.db, userId, refreshToken);
     const accessToken = await this.auth.mintAccessToken(user, this.db);
-
-    this.setRefreshTokenCookie(newRefreshToken);
-    this.setAccessTokenCookie(accessToken);
-    this.setCsrfCookie();
-
     const permissions = (await getPermissionNamesByRoleId(
       this.db,
       user.role_id,
     )) as PermissionName[];
 
-    this.res.json({
-      success: true,
-      data: {
-        token: accessToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          role_id: user.role_id,
-          role_name: user.role_name,
-          is_system_role: user.is_system_role,
-          permissions,
-        },
-      },
-    });
+    this.setRefreshTokenCookie(newRefreshToken);
+    this.setAccessTokenCookie(accessToken);
+    this.setCsrfCookie();
+
+    this.sendSuccess({ token: accessToken, user: toSessionUser(user, permissions) });
   }
 
   /**
@@ -234,14 +215,15 @@ export class SessionService {
     this.clearAccessTokenCookie();
     this.clearCsrfCookie();
 
-    this.res.json({ success: true, data: { message: 'Logged out successfully' } });
+    this.sendSuccess({ message: 'Logged out successfully' });
   }
 
   /**
    * Change the user's password, revoke every refresh token (forces re-login
-   * on all devices), and clear the local cookie surface. Throws on
-   * auth/db failure so the route forwards to the error handler — the
-   * revocation and cookie clear only run on a successful password change.
+   * on all devices), clear the local cookie surface, and write the success
+   * response. Throws on auth/db failure so the route forwards to the error
+   * handler — the revocation, cookie clear, and response only run on a
+   * successful password change.
    */
   async changePassword(
     userId: number,
@@ -255,5 +237,7 @@ export class SessionService {
 
     this.clearRefreshTokenCookie();
     this.clearAccessTokenCookie();
+
+    this.sendSuccess({ message: 'Password changed successfully' });
   }
 }
