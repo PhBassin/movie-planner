@@ -529,4 +529,82 @@ describe('Rate Limiting Middleware', () => {
       }
     });
   });
+
+  describe('each limiter reflects its own configured max after refresh', () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.resetModules();
+    });
+
+    function makeDb(row: Record<string, unknown>): DB {
+      return {
+        query: vi.fn().mockResolvedValue({ rows: [row] }),
+      } as unknown as DB;
+    }
+
+    const baseRow = {
+      window_ms: 60000,
+      general_max: 100,
+      auth_max: 100,
+      register_max: 100,
+      register_window_ms: 3600000,
+      protected_max: 100,
+      scraper_max: 100,
+      public_max: 100,
+      health_max: 100,
+      health_window_ms: 60000,
+      updated_at: '2026-04-01T00:00:00.000Z',
+      updated_by: null,
+      environment: 'test',
+    };
+
+    // Drive only the target limiter's max to 1 (siblings stay 100).
+    // Correct wiring => 2nd request is 429. A mis-wiring reads a sibling's
+    // key (100) => 2nd request is 200 => test fails.
+    // auth uses skipSuccessfulRequests, so its handler must fail (>=400) to count.
+    // health skips internal IPs, so it needs an external X-Forwarded-For.
+    const cases = [
+      { exportName: 'generalLimiter', maxKey: 'general_max', method: 'get' as const, handlerStatus: 200 },
+      { exportName: 'authLimiter', maxKey: 'auth_max', method: 'post' as const, handlerStatus: 401 },
+      { exportName: 'registerLimiter', maxKey: 'register_max', method: 'post' as const, handlerStatus: 201 },
+      { exportName: 'protectedLimiter', maxKey: 'protected_max', method: 'get' as const, handlerStatus: 200 },
+      { exportName: 'scraperLimiter', maxKey: 'scraper_max', method: 'post' as const, handlerStatus: 200 },
+      { exportName: 'publicLimiter', maxKey: 'public_max', method: 'get' as const, handlerStatus: 200 },
+      { exportName: 'healthCheckLimiter', maxKey: 'health_max', method: 'get' as const, handlerStatus: 200, externalIp: '203.0.113.42' },
+    ];
+
+    it.each(cases)(
+      '$exportName enforces max=1 from its own $maxKey after refresh (2nd request is 429)',
+      async ({ exportName, maxKey, method, handlerStatus, externalIp }) => {
+        const source = await import('../services/rate-limit-source.js');
+        const middleware = await import('./rate-limit.js');
+
+        await source.loadFromDb(makeDb({ ...baseRow, [maxKey]: 1 }));
+
+        const handler = (middleware as Record<string, RequestHandler>)[exportName];
+        const limiterApp = express();
+        limiterApp.set('trust proxy', 1);
+        limiterApp.use(express.json());
+        if (method === 'get') {
+          limiterApp.get('/x', handler, (_req, res) => res.status(handlerStatus).json({ ok: true }));
+        } else {
+          limiterApp.post('/x', handler, (_req, res) => res.status(handlerStatus).json({ ok: true }));
+        }
+
+        const send = () => {
+          const r = method === 'get' ? request(limiterApp).get('/x') : request(limiterApp).post('/x').send({});
+          return externalIp ? r.set('X-Forwarded-For', externalIp) : r;
+        };
+
+        const first = await send();
+        expect(first.status).toBe(handlerStatus);
+
+        const second = await send();
+        expect(second.status).toBe(429);
+      },
+    );
+  });
 });
