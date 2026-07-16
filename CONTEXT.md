@@ -31,7 +31,7 @@ One specific scheduled showing of a Movie at a Theater. A Showtime has a date, a
 
 **What a Showtime is *not*:**
 - Not a **Screening**. The codebase has no entity called Screening. The word appears in docs only as an adjective ("screening schedules"). The canonical term is **Showtime**.
-- Not a **Session**. "Session" is reserved for user-auth (cookie sessions, SSE subscriber sessions). Using "session" for a movie showing will collide.
+- Not a **Session**. "Session" is reserved for user-auth (cookie sessions, SSE subscriber sessions) — see the *Session* entry under Authentication. Using "session" for a movie showing will collide.
 - Not a **Séance**. The table was historically named `seances` (French) and was deliberately renamed to `showtimes` (English) — see `docs/project/white-label-plan.md:580, 596`. The team chose the English word. French comments still say "séance" but that's a comment-language choice, not a domain concept.
 
 ### WeeklyProgram
@@ -90,7 +90,7 @@ The structured result of one scrape run, attached to the final `'completed'` (or
 The scraper-internal runtime object that drives one end-to-end scrape run. A `ScrapeRun` owns the mutable run state — the `ScrapeSummary` it builds up, the `ScrapeConfig` read once at construction, and the optional progress publisher — and exposes the run as a deep module: coherent operations (`prepare`, `runTheater`, `runDate`, `loadAvailability`, `filterDates`, `finalize`) plus controlled mutators (`recordError`, `incrementSuccessfulTheater`, …). It lives at `scraper/src/scraper/scrape-run.ts`. The thin `runScraper` entry in `scraper/src/scraper/index.ts` constructs a `ScrapeRun` and drives it; it is not consumed outside the scraper microservice.
 
 **What a ScrapeRun is *not*:**
-- Not a **Session**. "Session" is reserved for user-auth (cookie sessions, SSE subscriber sessions) — see Showtime above. A ScrapeRun is a single scrape execution, not a user/auth session.
+- Not a **Session**. "Session" is reserved for user-auth (cookie sessions, SSE subscriber sessions) — see the *Session* entry under Authentication. A ScrapeRun is a single scrape execution, not a user/auth session.
 - Not a **ScrapeReport**. A ScrapeReport is the persisted, server-side run-level record in the database. A ScrapeRun is the transient scraper-process object whose final `ScrapeSummary` feeds the `'completed'` ProgressEvent; it is not written to a row.
 - Not a **ScrapeSummary**. The ScrapeSummary is the structured result (counts + status) attached to the final event. A ScrapeRun *produces* a ScrapeSummary; it is not itself the summary.
 
@@ -134,3 +134,16 @@ The **admin-facing shape** `RateLimitAuditInfo` (same file) wraps the flat confi
 - Not a per-request decision. The limiter decides per-request allow/deny; the config sets the thresholds.
 - Not the source-side rate limiter that protects AlloCiné (`RateLimitError`). Those are separate concerns: `RateLimitConfig` protects this service's HTTP surface; `RateLimitError` reports when the upstream source has throttled us.
 - Not the same across services. Only the server has an HTTP surface to rate-limit; the scraper has no equivalent shape.
+
+## Authentication
+
+### Session
+
+A user-auth **Session** is the server-side credential-issuance lifecycle for one logged-in user: the short-lived access token (HS256 JWT), the rotating refresh token (an httpOnly cookie backed by the `refresh_tokens` table), the double-submit CSRF token cookie, and the permission resolution that feeds the access token's claims. One user holds many Sessions at once — one per device — and changing the password revokes all of them.
+
+The concept is implemented as a single deep module: `server/src/services/session-service.ts` (`SessionService`). Route handlers under `routes/auth.ts` (`/login`, `/refresh`, `/logout`, `/change-password`, `/me`) are thin shims over it; the cookie, refresh-token, and CSRF surface never appears inline in a route. `SessionService` composes `AuthService` (the access-token minter + password-validation primitive) and the refresh-token repository. The refresh-token lifetime is declared in **exactly one place** — `parseRefreshTokenExpiry` in `repositories/refresh-token-repository.ts`, driven by `REFRESH_TOKEN_EXPIRY` — and both the persisted token expiry and the refresh cookie's `maxAge` read from it.
+
+**What a Session is *not*:**
+- Not the **access token** itself. The access token is one credential *inside* a Session; `AuthService.mintAccessToken` is the canonical minter, and `SessionService` is its sole caller in the request cycle.
+- Not an **SSE subscriber session**. The word "session" is reused loosely for a live SSE subscriber connection (see `ScraperService.subscribeToProgress`); that is a transport-lifetime concept, unrelated to user-auth Sessions. The two share only the word.
+- Not a **ScrapeRun** (one scrape execution) or a **Showtime** (a movie showing) — see those entries.

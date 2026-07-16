@@ -64,6 +64,8 @@ vi.mock('../repositories/refresh-token-repository.js', () => {
         revokeRefreshToken: mockRevoke,
         rotateRefreshToken: mockRotate,
         revokeAllUserTokens: mockRevokeAll,
+        // SessionService reads the refresh-token lifetime at module load.
+        parseRefreshTokenExpiry: vi.fn(() => 7 * 24 * 60 * 60 * 1000),
         __mockGenerate: mockGenerate,
         __mockValidate: mockValidate,
         __mockRevoke: mockRevoke,
