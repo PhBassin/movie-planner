@@ -3,10 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { TheaterNotFoundError } from '../utils/errors.js';
+import { progressTracker } from '../services/progress-tracker.js';
 
 const mockTriggerScrape = vi.fn();
 const mockGetStatus = vi.fn();
-const mockSubscribeToProgress = vi.fn();
+const mockAttachProgressStream = vi.fn();
 const mockPublishScheduleChange = vi.fn();
 
 let currentMockUser = { role_name: 'admin', is_system_role: true, permissions: [], id: 1, username: 'admin' };
@@ -18,11 +19,14 @@ vi.mock('../services/scraper-service.js', () => {
       return {
         triggerScrape: mockTriggerScrape,
         getStatus: mockGetStatus,
-        subscribeToProgress: mockSubscribeToProgress,
       };
     }),
   };
 });
+
+vi.mock('../services/sse-bridge.js', () => ({
+  attachProgressStream: mockAttachProgressStream,
+}));
 
 vi.mock('../db/internal/client.js', () => ({
   db: { query: vi.fn() }
@@ -191,6 +195,25 @@ describe('Routes - Scraper', () => {
       } finally {
         shouldRejectAuth = false;
       }
+    });
+  });
+
+  describe('GET /api/scraper/progress', () => {
+    it('wires the response to the SSE bridge with the progress tracker', async () => {
+      // The real bridge keeps the stream open; end res so supertest completes.
+      mockAttachProgressStream.mockImplementation((res: any) => {
+        res.end();
+        return vi.fn();
+      });
+
+      const app = await setupApp();
+      await request(app).get('/api/scraper/progress');
+
+      expect(mockAttachProgressStream).toHaveBeenCalledTimes(1);
+      const [resArg, sinkArg, onCloseArg] = mockAttachProgressStream.mock.calls[0];
+      expect(resArg).toBeDefined();
+      expect(sinkArg).toBe(progressTracker);
+      expect(typeof onCloseArg).toBe('function');
     });
   });
 
