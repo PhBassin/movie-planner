@@ -2,7 +2,7 @@
 process.env.JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import type { DB } from '../db/index.js';
@@ -535,10 +535,6 @@ describe('Rate Limiting Middleware', () => {
       vi.resetModules();
     });
 
-    afterEach(() => {
-      vi.resetModules();
-    });
-
     function makeDb(row: Record<string, unknown>): DB {
       return {
         query: vi.fn().mockResolvedValue({ rows: [row] }),
@@ -588,10 +584,11 @@ describe('Rate Limiting Middleware', () => {
         const limiterApp = express();
         limiterApp.set('trust proxy', 1);
         limiterApp.use(express.json());
+        const respond = (_req: Request, res: Response) => res.status(handlerStatus).json({ ok: true });
         if (method === 'get') {
-          limiterApp.get('/x', handler, (_req, res) => res.status(handlerStatus).json({ ok: true }));
+          limiterApp.get('/x', handler, respond);
         } else {
-          limiterApp.post('/x', handler, (_req, res) => res.status(handlerStatus).json({ ok: true }));
+          limiterApp.post('/x', handler, respond);
         }
 
         const send = () => {

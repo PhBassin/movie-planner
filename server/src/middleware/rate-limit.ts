@@ -81,7 +81,8 @@ interface LimiterSpec {
 
 // One declarative table drives every limiter. The factory below walks it once,
 // collecting each refresh hook and wiring a single config-refresh subscription.
-// Adding a limiter = add one entry here + one name in the destructure export.
+// The public export surface is the `namedLimiters` manifest below, whose
+// `satisfies` ties it to these keys so a missing or stale entry won't compile.
 const limiterSpecs = {
   generalLimiter: { windowKey: 'windowMs', maxKey: 'generalMax', options: { skip: skipTest, standardHeaders: true } },
   authLimiter: { windowKey: 'windowMs', maxKey: 'authMax', options: { skip: skipTest, skipSuccessfulRequests: true } },
@@ -121,6 +122,20 @@ for (const name of Object.keys(limiterSpecs) as LimiterName[]) {
   refreshers.push(refresh);
 }
 
+// ESM requires named exports to be declared statically, so the public surface is
+// written out here once. `satisfies Record<LimiterName, RequestHandler>` ties it
+// to the spec table above: a `limiterSpecs` row without an entry below is a
+// compile error (missing export), and so is a stale or mistyped name.
+const namedLimiters = {
+  generalLimiter: handlers.generalLimiter,
+  authLimiter: handlers.authLimiter,
+  registerLimiter: handlers.registerLimiter,
+  protectedLimiter: handlers.protectedLimiter,
+  scraperLimiter: handlers.scraperLimiter,
+  publicLimiter: handlers.publicLimiter,
+  healthCheckLimiter: handlers.healthCheckLimiter,
+} satisfies Record<LimiterName, RequestHandler>;
+
 export const {
   generalLimiter,
   authLimiter,
@@ -129,7 +144,7 @@ export const {
   scraperLimiter,
   publicLimiter,
   healthCheckLimiter,
-} = handlers;
+} = namedLimiters;
 
 subscribe(() => {
   for (const refresh of refreshers) {
