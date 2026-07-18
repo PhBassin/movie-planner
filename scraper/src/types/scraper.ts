@@ -10,7 +10,6 @@ export interface Theater {
   address?: string;
   postal_code?: string;
   city?: string;
-  screen_count?: number;
   image_url?: string;
   url?: string; // Source website page URL for scraping
   source?: string; // Scraper source (e.g., "allocine")
