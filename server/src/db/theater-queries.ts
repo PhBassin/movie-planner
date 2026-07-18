@@ -8,7 +8,6 @@ interface TheaterRow {
   address: string | null;
   postal_code: string | null;
   city: string | null;
-  screen_count: number | null;
   image_url: string | null;
   url: string | null;
 }
@@ -23,7 +22,6 @@ export async function getTheaters(db: DB): Promise<Theater[]> {
     address: row.address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
-    screen_count: row.screen_count ?? undefined,
     image_url: row.image_url ?? undefined,
     url: row.url ?? undefined,
   }));
@@ -33,16 +31,15 @@ export async function getTheaters(db: DB): Promise<Theater[]> {
 export async function upsertTheater(db: DB, theater: Theater): Promise<void> {
   await db.query(
     `
-      INSERT INTO theaters (id, name, address, postal_code, city, screen_count, image_url, url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO theaters (id, name, address, postal_code, city, image_url, url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT(id) DO UPDATE SET
         name = $2,
         address = $3,
         postal_code = $4,
         city = $5,
-        screen_count = $6,
-        image_url = $7,
-        url = COALESCE($8, theaters.url)
+        image_url = $6,
+        url = COALESCE($7, theaters.url)
     `,
     [
       theater.id,
@@ -50,7 +47,6 @@ export async function upsertTheater(db: DB, theater: Theater): Promise<void> {
       theater.address ?? null,
       theater.postal_code ?? null,
       theater.city ?? null,
-      theater.screen_count ?? null,
       theater.image_url ?? null,
       theater.url ?? null,
     ]
@@ -87,7 +83,6 @@ export async function updateTheaterConfig(
     address?: string;
     postal_code?: string;
     city?: string;
-    screen_count?: number;
   }
 ): Promise<Theater | undefined> {
   const fields: string[] = [];
@@ -114,10 +109,6 @@ export async function updateTheaterConfig(
     fields.push(`city = $${paramIndex++}`);
     values.push(updates.city);
   }
-  if (updates.screen_count !== undefined) {
-    fields.push(`screen_count = $${paramIndex++}`);
-    values.push(updates.screen_count);
-  }
 
   values.push(id);
   const result = await db.query<TheaterRow>(
@@ -134,7 +125,6 @@ export async function updateTheaterConfig(
     address: row.address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
-    screen_count: row.screen_count ?? undefined,
     image_url: row.image_url ?? undefined,
     url: row.url ?? undefined,
   };
