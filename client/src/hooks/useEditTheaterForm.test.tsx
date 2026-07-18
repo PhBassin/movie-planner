@@ -11,7 +11,6 @@ const baseTheater: Theater = {
   address: '1 rue de la Paix',
   postal_code: '75001',
   city: 'Paris',
-  screen_count: 5,
 };
 
 type SaveFn = (id: string, updates: TheaterUpdate) => Promise<void>;
@@ -43,7 +42,6 @@ describe('useEditTheaterForm', () => {
     );
     expect(result.current.name).toBe('Cinéma A');
     expect(result.current.url).toBe('https://www.allocine.fr/salle/W7504');
-    expect(result.current.screenCount).toBe('5');
     expect(result.current.hasChanges).toBe(false);
   });
 
@@ -72,12 +70,6 @@ describe('useEditTheaterForm', () => {
     const result = await submitWith((c) => c.setUrl('https://example.com/foo'));
     expect(onSave).not.toHaveBeenCalled();
     expect(result.current.urlError).toMatch(/Allocine/);
-  });
-
-  it('rejects screen count out of range', async () => {
-    const result = await submitWith((c) => c.setScreenCount('99'));
-    expect(onSave).not.toHaveBeenCalled();
-    expect(result.current.screenCountError).toMatch(/between 1 and 50/);
   });
 
   it('blocks submit when validation fails', async () => {

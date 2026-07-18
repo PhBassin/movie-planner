@@ -20,7 +20,6 @@ export interface TheaterUpdate {
   address?: string;
   postal_code?: string;
   city?: string;
-  screen_count?: number;
 }
 
 // ============================================================================
