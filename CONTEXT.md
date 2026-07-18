@@ -14,7 +14,7 @@ A Theater has:
 - an **image** and a **booking URL**
 - exactly one **Source** it is scraped from (today, `'allocine'` for nearly all rows — see the Source concept below)
 
-The number of screens in a venue is **not a domain attribute** of a Theater here. It was historically collected and displayed, but is being removed — see ADR 0002.
+The number of screens in a venue is **not a domain attribute** of a Theater here. It was historically collected and displayed, but has been removed — see ADR 0002.
 
 **What a Theater is *not*:**
 - A Theater is not a brand. "UGC" is a name prefix; "UGC Bercy" is one Theater. There is no `Brand` entity in this model.

@@ -471,11 +471,11 @@ When reusing a modal component for different items (e.g. editing different theat
 Avoid `||` for optional numeric fields — it treats `0` as falsy and substitutes the default:
 
 ```typescript
-// WRONG — shows dash for 0 screens
-const count = theater.screen_count || '—';
+// WRONG — hides a real 0 rating
+const rating = movie.press_rating || undefined;
 
 // CORRECT
-const count = theater.screen_count != null ? theater.screen_count : '—';
+const rating = movie.press_rating != null ? movie.press_rating : undefined;
 ```
 
 ### Name Validation — Always `.trim()`

@@ -176,7 +176,6 @@ The scraper uses **three different parsers** depending on the data source:
     postal_code: string;
     latitude: number | null;
     longitude: number | null;
-    screen_count: number | null;
   }
 }
 ```
