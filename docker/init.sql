@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS theaters (
   address TEXT,
   postal_code TEXT,
   city TEXT,
-  screen_count INTEGER,
   image_url TEXT,
   url TEXT,
   source TEXT DEFAULT 'allocine'

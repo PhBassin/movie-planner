@@ -126,7 +126,7 @@ describe('Routes - Theaters - Validation', () => {
     }));
   });
 
-  // --- Tests for new location and screen count fields ---
+  // --- Tests for new location fields ---
 
   it('should reject PUT with address too long (> 200 chars)', async () => {
     mockReq = {
@@ -201,82 +201,6 @@ describe('Routes - Theaters - Validation', () => {
     expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
       error: expect.stringContaining('City must be at most 100 characters')
-    }));
-  });
-
-  it('should reject PUT with negative screen_count', async () => {
-    mockReq = {
-      params: { id: 'C001' },
-      body: {
-        screen_count: -1
-      },
-      app: mockApp
-    };
-
-    const handler = getRouteHandler(router, '/:id', 'put');
-    await handler(mockReq, mockRes, mockNext);
-
-    expect(mockRes.status).toHaveBeenCalledWith(400);
-    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      success: false,
-      error: expect.stringContaining('Screen count must be between 1 and 50')
-    }));
-  });
-
-  it('should reject PUT with zero screen_count', async () => {
-    mockReq = {
-      params: { id: 'C001' },
-      body: {
-        screen_count: 0
-      },
-      app: mockApp
-    };
-
-    const handler = getRouteHandler(router, '/:id', 'put');
-    await handler(mockReq, mockRes, mockNext);
-
-    expect(mockRes.status).toHaveBeenCalledWith(400);
-    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      success: false,
-      error: expect.stringContaining('Screen count must be between 1 and 50')
-    }));
-  });
-
-  it('should reject PUT with screen_count > 50', async () => {
-    mockReq = {
-      params: { id: 'C001' },
-      body: {
-        screen_count: 51
-      },
-      app: mockApp
-    };
-
-    const handler = getRouteHandler(router, '/:id', 'put');
-    await handler(mockReq, mockRes, mockNext);
-
-    expect(mockRes.status).toHaveBeenCalledWith(400);
-    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      success: false,
-      error: expect.stringContaining('Screen count must be between 1 and 50')
-    }));
-  });
-
-  it('should reject PUT with non-integer screen_count', async () => {
-    mockReq = {
-      params: { id: 'C001' },
-      body: {
-        screen_count: 5.5
-      },
-      app: mockApp
-    };
-
-    const handler = getRouteHandler(router, '/:id', 'put');
-    await handler(mockReq, mockRes, mockNext);
-
-    expect(mockRes.status).toHaveBeenCalledWith(400);
-    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      success: false,
-      error: expect.stringContaining('Screen count must be an integer')
     }));
   });
 
@@ -358,33 +282,7 @@ describe('Routes - Theaters - Validation', () => {
     }));
   });
 
-  it('should accept PUT with valid screen_count only', async () => {
-    vi.mocked(theaterQueries.updateTheaterConfig).mockResolvedValue({
-      id: 'C001',
-      name: 'Test Theater',
-      url: 'https://www.allocine.fr/test'
-    });
-
-    mockReq = {
-      params: { id: 'C001' },
-      body: {
-        screen_count: 10
-      },
-      app: mockApp
-    };
-
-    const handler = getRouteHandler(router, '/:id', 'put');
-    await handler(mockReq, mockRes, mockNext);
-
-    expect(theaterQueries.updateTheaterConfig).toHaveBeenCalledWith(db, 'C001', {
-      screen_count: 10
-    });
-    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      success: true
-    }));
-  });
-
-  it('should accept PUT with all location and screen fields together', async () => {
+  it('should accept PUT with all location fields together', async () => {
     vi.mocked(theaterQueries.updateTheaterConfig).mockResolvedValue({
       id: 'C001',
       name: 'Test Theater',
@@ -396,8 +294,7 @@ describe('Routes - Theaters - Validation', () => {
       body: {
         address: '123 Main Street',
         postal_code: '75001',
-        city: 'Paris',
-        screen_count: 10
+        city: 'Paris'
       },
       app: mockApp
     };
@@ -408,8 +305,7 @@ describe('Routes - Theaters - Validation', () => {
     expect(theaterQueries.updateTheaterConfig).toHaveBeenCalledWith(db, 'C001', {
       address: '123 Main Street',
       postal_code: '75001',
-      city: 'Paris',
-      screen_count: 10
+      city: 'Paris'
     });
     expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true

@@ -32,7 +32,6 @@ interface WeeklyMovieRow extends MovieRow {
   theater_address: string | null;
   postal_code: string | null;
   city: string | null;
-  screen_count: number | null;
   theater_image_url: string | null;
 }
 
@@ -124,7 +123,6 @@ function theaterFromWeeklyRow(row: WeeklyMovieRow): Theater {
     address: row.theater_address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
-    screen_count: row.screen_count ?? undefined,
     image_url: row.theater_image_url ?? undefined,
   };
 }
@@ -249,7 +247,6 @@ export async function getMoviesByDate(
         c.address as theater_address,
         c.postal_code,
         c.city,
-        c.screen_count,
         c.image_url as theater_image_url
       FROM showtimes s
       JOIN movies f ON s.movie_id = f.id
@@ -280,7 +277,6 @@ export async function getWeeklyMovies(
         c.address as theater_address,
         c.postal_code,
         c.city,
-        c.screen_count,
         c.image_url as theater_image_url
       FROM weekly_programs wp
       JOIN movies f ON wp.movie_id = f.id

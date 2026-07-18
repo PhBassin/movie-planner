@@ -42,12 +42,6 @@ describe('parseTheaterPage - Theater C0089 (Max Linder Panorama)', () => {
     expect(typeof result.theater.city).toBe('string');
   });
 
-  it('should handle screen count', () => {
-    // Screen count defaults to 0 if not in data-theater
-    expect(typeof result.theater.screen_count).toBe('number');
-    expect(result.theater.screen_count).toBeGreaterThanOrEqual(0);
-  });
-
   it('should extract image URL if present', () => {
     if (result.theater.image_url) {
       expect(result.theater.image_url).toMatch(/^https?:\/\//);
@@ -210,7 +204,7 @@ describe('parseTheaterPage - Edge Cases', () => {
     const noMoviesHtml = `
       <html><body>
         <div id="theaterpage-showtimes-index-ui"
-             data-theater='{"name":"Test Theater","location":{"address":"1 rue Test","postalCode":"75001","city":"Paris"},"screenCount":1}'>
+             data-theater='{"name":"Test Theater","location":{"address":"1 rue Test","postalCode":"75001","city":"Paris"}}'>
         </div>
       </body></html>
     `;
@@ -235,7 +229,6 @@ describe('parseTheaterPage - Edge Cases', () => {
     expect(result.theater).toHaveProperty('address');
     expect(result.theater).toHaveProperty('postal_code');
     expect(result.theater).toHaveProperty('city');
-    expect(result.theater).toHaveProperty('screen_count');
   });
 });
 

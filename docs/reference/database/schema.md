@@ -35,7 +35,6 @@ Stores theater/theater information scraped from external sources.
 | `address` | `TEXT` | | Street address |
 | `postal_code` | `TEXT` | | Postal/ZIP code |
 | `city` | `TEXT` | | City name |
-| `screen_count` | `INTEGER` | | Number of screens |
 | `image_url` | `TEXT` | | Theater image URL |
 | `url` | `TEXT` | | Source URL for scraping |
 

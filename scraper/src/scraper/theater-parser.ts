@@ -25,7 +25,6 @@ function parseTheaterSection(theaterDataStr: string | undefined, theaterId: stri
     address: '',
     postal_code: '',
     city: '',
-    screen_count: 0,
   };
 
   if (!theaterDataStr) return fallback;
@@ -38,7 +37,6 @@ function parseTheaterSection(theaterDataStr: string | undefined, theaterId: stri
       address: data.location?.address || '',
       postal_code: data.location?.postalCode || '',
       city: data.location?.city || '',
-      screen_count: data.screenCount || 0,
       image_url: data.image,
     };
   } catch (e) {

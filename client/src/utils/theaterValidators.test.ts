@@ -6,7 +6,6 @@ import {
   validateAddress,
   validatePostalCode,
   validateCity,
-  validateScreenCount,
 } from './theaterValidators.js';
 
 describe('isAllocineUrl', () => {
@@ -89,28 +88,5 @@ describe('validateCity', () => {
 
   it('rejects too long', () => {
     expect(validateCity('a'.repeat(101))).toBe('City must be at most 100 characters');
-  });
-});
-
-describe('validateScreenCount', () => {
-  it('allows empty', () => {
-    expect(validateScreenCount('')).toBeUndefined();
-  });
-
-  it('rejects non-number', () => {
-    expect(validateScreenCount('abc')).toBe('Screen count must be a number');
-  });
-
-  it('rejects non-integer', () => {
-    expect(validateScreenCount('1.5')).toBe('Screen count must be an integer');
-  });
-
-  it('rejects out of range', () => {
-    expect(validateScreenCount('0')).toBe('Screen count must be between 1 and 50');
-    expect(validateScreenCount('51')).toBe('Screen count must be between 1 and 50');
-  });
-
-  it('accepts valid', () => {
-    expect(validateScreenCount('5')).toBeUndefined();
   });
 });

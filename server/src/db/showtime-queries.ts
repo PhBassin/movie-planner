@@ -43,7 +43,6 @@ interface ShowtimeWithTheaterRow extends ShowtimeRow {
   theater_address: string | null;
   postal_code: string | null;
   city: string | null;
-  screen_count: number | null;
   theater_image_url: string | null;
 }
 
@@ -94,7 +93,6 @@ function mapRowToTheater(row: ShowtimeWithTheaterRow): Theater {
     address: row.theater_address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
-    screen_count: row.screen_count ?? undefined,
     image_url: row.theater_image_url ?? undefined,
   };
 }
@@ -253,7 +251,6 @@ export async function getShowtimesByDate(
         c.address as theater_address,
         c.postal_code,
         c.city,
-        c.screen_count,
         c.image_url as theater_image_url
       FROM showtimes s
       JOIN theaters c ON s.theater_id = c.id
@@ -284,7 +281,6 @@ export async function getShowtimesByMovieAndWeek(
         c.address as theater_address,
         c.postal_code,
         c.city,
-        c.screen_count,
         c.image_url as theater_image_url
       FROM showtimes s
       JOIN theaters c ON s.theater_id = c.id
@@ -314,7 +310,6 @@ export async function getWeeklyShowtimes(
         c.address as theater_address,
         c.postal_code,
         c.city,
-        c.screen_count,
         c.image_url as theater_image_url
       FROM showtimes s
       JOIN theaters c ON s.theater_id = c.id

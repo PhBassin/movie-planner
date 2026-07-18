@@ -24,7 +24,6 @@ describe('Showtime Queries', () => {
               theater_address: 'Address 1',
               postal_code: '75001',
               city: 'Paris',
-              screen_count: 5,
               image_url: 'img1.jpg'
             }
           ]
