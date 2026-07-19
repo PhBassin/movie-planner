@@ -8,11 +8,13 @@ import type { Movie } from '../types';
 interface MovieSearchBarProps {
   className?: string;
   placeholder?: string;
+  onFilter?: (movies: Movie[]) => void;
 }
 
 export default function MovieSearchBar({ 
   className = '', 
-  placeholder = 'Rechercher un film...' 
+  placeholder = 'Rechercher un film...',
+  onFilter,
 }: MovieSearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Movie[]>([]);
@@ -28,6 +30,7 @@ export default function MovieSearchBar({
       if (!debouncedQuery || debouncedQuery.trim().length < 2) {
         setResults([]);
         setIsOpen(false);
+        onFilter?.([]);
         return;
       }
 
@@ -37,9 +40,11 @@ export default function MovieSearchBar({
         setResults(movies);
         setIsOpen(true);
         setSelectedIndex(-1);
+        onFilter?.(movies);
       } catch (error) {
         console.error('Search error:', error);
         setResults([]);
+        onFilter?.([]);
       } finally {
         setIsLoading(false);
       }
