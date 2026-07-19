@@ -5,6 +5,124 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-07-19
+
+### Added
+
+- feat: VPS production deployment overlay (Traefik + Watchtower) (#1244) [@PhBassin](https://github.com/PhBassin) (1b8d5f4)
+- feat: add VPS production deployment overlay (traefik + watchtower) [@phbassin](https://github.com/phbassin) (3face4b)
+- feat(db): drop screen_count column from theaters (#1234) [@phbassin](https://github.com/phbassin) (700ae00)
+- feat(server): add rate-limit-source module (TDD green) [@phbassin](https://github.com/phbassin) (49c1182)
+- feat(protocol): add allo-scrapper-scraper-protocol workspace [@phbassin](https://github.com/phbassin) (ae7f38e)
+- feat(server): centralize JWT minting in AuthService.mintAccessToken (TDD green) [@phbassin](https://github.com/phbassin) (0f5e5a9)
+- feat(server/db): add deleteRoleById repository function [@phbassin](https://github.com/phbassin) (74fc7ea)
+- feat(1192): extend db/*-queries seam + add repositories/ layer + AppError middleware (#1199) [@PhBassin](https://github.com/PhBassin) (709950e)
+- feat(1198): [PRD #1192 / 6] AppError + error middleware + routes-throw cleanup (#1209) [@PhBassin](https://github.com/PhBassin) (bb56df0)
+- feat(1198): add TheaterNotFoundError, collapse route catch blocks to throw typed errors [@phbassin](https://github.com/phbassin) (5a26734)
+- feat(server): system-info service uses named query functions (#1196) (#1207) [@PhBassin](https://github.com/PhBassin) (d792230)
+- feat(server): system-info service uses named query functions (#1196) [@phbassin](https://github.com/phbassin) (8d1f739)
+- feat(server): refresh route uses getUserWithRoleById (#1195) (#1206) [@PhBassin](https://github.com/PhBassin) (b6a709f)
+- feat(server): refresh route uses getUserWithRoleById (#1195) [@phbassin](https://github.com/phbassin) (e6e8032)
+- feat(server): role-deletion route uses repositories/ layer (#1194) (#1204) [@PhBassin](https://github.com/PhBassin) (4682da6)
+- feat(repos): add role-repository.getRoleInUseCount [@phbassin](https://github.com/phbassin) (d3ba2bc)
+- feat(db): typed barrel + migrate routes/users.ts (#1193) [@phbassin](https://github.com/phbassin) (d30e62f)
+
+### Fixed
+
+- fix(deploy): pin DOCKER_API_VERSION on Watchtower too [@phbassin](https://github.com/phbassin) (796842d)
+- fix(deploy): bump Traefik v3.2 → v3.7 for Docker Engine 29 compat [@phbassin](https://github.com/phbassin) (e965fda)
+- fix(deploy): pin DOCKER_API_VERSION for Traefik to satisfy Engine 25+ [@phbassin](https://github.com/phbassin) (4b065f0)
+- fix(server): restore per-name limiter exports so CodeQL traces rate limiting [@phbassin](https://github.com/phbassin) (9e1c5cb)
+- fix(scraper): reject non-allocine URLs in fetchTheaterPage (closes #1214) (#1226) [@PhBassin](https://github.com/PhBassin) (c4967e0)
+- fix(scraper): reject non-allocine URLs in fetchTheaterPage (closes #1214) [@phbassin](https://github.com/phbassin) (e738892)
+- fix(server): dedupe rate-limit defaults table (closes last AC gap of #1213) (#1224) [@PhBassin](https://github.com/PhBassin) (454de6f)
+- fix(server): preserve rate-limit source provenance when username lookup fails [@phbassin](https://github.com/phbassin) (95b9dc8)
+- fix(server): throw on malformed count from getRoleInUseCount (#1201) (#1219) [@PhBassin](https://github.com/PhBassin) (9976dd6)
+- fix(server): throw on malformed count from getRoleInUseCount [@phbassin](https://github.com/phbassin) (bd7bb05)
+- fix(server): skip redundant SELECT in DELETE /api/roles/:id (#1200) (#1218) [@PhBassin](https://github.com/PhBassin) (2bd7292)
+- fix(server): close rotateRefreshToken dual-export seam leak (#1192) [@phbassin](https://github.com/phbassin) (fddab91)
+- fix(repos): replace parseStrictInt with parseInt for COUNT aggregate [@phbassin](https://github.com/phbassin) (0538c43)
+- fix(server): stop leaking password_hash from POST /api/users and trim PUT role roundtrips [@phbassin](https://github.com/phbassin) (3caf921)
+
+### Changed
+
+- refactor: land architecture review epic — Session module, refresh-token seam, rate-limit table, SSE transport, theater-validator (#1232) (#1243) [@PhBassin](https://github.com/PhBassin) (c776955)
+- refactor: fold theater-validator into Theater module and land ADR 0002 (#1234) (#1242) [@PhBassin](https://github.com/PhBassin) (a203108)
+- refactor(client): remove screen_count from theater UI (#1234) [@phbassin](https://github.com/phbassin) (0f06501)
+- refactor(scraper): stop parsing screenCount from source HTML (#1234) [@phbassin](https://github.com/phbassin) (c7f762c)
+- refactor(server): fold theater-validator into Theater module (#1234) [@phbassin](https://github.com/phbassin) (7c61ec7)
+- refactor(server): extract SSE transport into standalone bridge (#1236) (#1241) [@PhBassin](https://github.com/PhBassin) (0242b27)
+- refactor(server): extract SSE transport into standalone bridge (#1236) [@phbassin](https://github.com/phbassin) (f3f6411)
+- refactor(server): drive rate-limit middlewares from one declarative table (#1233) (#1240) [@PhBassin](https://github.com/PhBassin) (2341dbd)
+- refactor(server): compile-check rate-limit export surface against limiterSpecs [@phbassin](https://github.com/phbassin) (c61b8cb)
+- refactor(server): drive rate-limit middlewares from one declarative table (#1233) [@phbassin](https://github.com/phbassin) (b756f83)
+- refactor(server): introduce SessionService, own credential lifecycle (#1237) (#1239) [@PhBassin](https://github.com/PhBassin) (9891461)
+- refactor(server): unify SessionService response ownership [@phbassin](https://github.com/phbassin) (8a688c3)
+- refactor(server): extract toSessionUser builder into AuthService [@phbassin](https://github.com/phbassin) (cef57b1)
+- refactor(server): introduce SessionService, own credential lifecycle [@phbassin](https://github.com/phbassin) (e25beff)
+- refactor(server): fold role-repository into role-queries [@phbassin](https://github.com/phbassin) (dfcfa85)
+- refactor(server): collapse refresh-token data-access seam [@phbassin](https://github.com/phbassin) (6b0c994)
+- refactor(scraper): introduce ScrapeRun deep module to encapsulate mutable run state (closes #1216) (#1231) [@PhBassin](https://github.com/PhBassin) (4b6e77e)
+- refactor(scraper): deepen into ScrapeRun deep module (#1231) [@phbassin](https://github.com/phbassin) (5deaf8b)
+- refactor(scraper): introduce ScrapeSession to encapsulate mutable ScrapeContext [@phbassin](https://github.com/phbassin) (5d8f435)
+- refactor(server): extract UserService from routes/users.ts (closes #1215) (#1230) [@PhBassin](https://github.com/PhBassin) (5b79e17)
+- refactor(server): route users.ts through UserService [@phbassin](https://github.com/phbassin) (9f3308e)
+- refactor(server): add UserService for admin user CRUD [@phbassin](https://github.com/phbassin) (733a51d)
+- refactor(scraper): extract Transport adapter interface (closes #1225) (#1228) [@PhBassin](https://github.com/PhBassin) (4397635)
+- refactor(scraper): make AllocineScraperStrategy depend on Transport (cycle 2d of #1225, closes #1225) [@phbassin](https://github.com/phbassin) (0c8150f)
+- refactor(scraper): route http-client.ts through the Transport adapters (cycle 2c of #1225) [@phbassin](https://github.com/phbassin) (30a561b)
+- refactor(scraper): add FetchTransport (cycle 2b of #1225) [@phbassin](https://github.com/phbassin) (77b9cff)
+- refactor(scraper): add Transport interface and PuppeteerTransport (cycle 2a of #1225) [@phbassin](https://github.com/phbassin) (dea6307)
+- refactor(scraper): extract validateExternalUrl SSRF utility (cycle 1 of #1225) (#1227) [@PhBassin](https://github.com/PhBassin) (6fdf4f5)
+- refactor(scraper): extract validateExternalUrl SSRF utility (cycle 1 of #1225) [@phbassin](https://github.com/phbassin) (54a81b4)
+- test(scraper): add SSRF-rejection tests for fetchTheaterPage [@phbassin](https://github.com/phbassin) (c7c9d63)
+- test(server): pin single-source-of-truth contract for rate-limit defaults [@phbassin](https://github.com/phbassin) (c3dbd62)
+- refactor(server): resetRateLimits consumes rate-limit-source.DEFAULT_CONFIG [@phbassin](https://github.com/phbassin) (26a998c)
+- refactor(server): export DEFAULT_CONFIG from rate-limit-source [@phbassin](https://github.com/phbassin) (1c7c812)
+- refactor(server): converge rate-limit config to single RateLimitSource module (#1223) [@PhBassin](https://github.com/PhBassin) (bbc9da0)
+- style(server): correct misleading refresher test name and trailing newlines [@phbassin](https://github.com/phbassin) (434e9e8)
+- refactor(server): drop dead rate-limit exports and dedupe row type [@phbassin](https://github.com/phbassin) (6c1271d)
+- refactor(server): remove config/rate-limits; source is sole owner [@phbassin](https://github.com/phbassin) (d05cfc3)
+- refactor(server): admin route reads audit info from source [@phbassin](https://github.com/phbassin) (9f21561)
+- refactor(server): rate-limit-refresher delegates to source.loadFromDb [@phbassin](https://github.com/phbassin) (f99d1f7)
+- refactor(server): middleware subscribes to rate-limit-source [@phbassin](https://github.com/phbassin) (6b1fbaf)
+- test(server): add rate-limit-source tests (TDD red) [@phbassin](https://github.com/phbassin) (4bd37b6)
+- refactor(protocol): extract packages/scraper-protocol — single wire contract for Redis jobs (#1212) (#1222) [@PhBassin](https://github.com/PhBassin) (51a043b)
+- refactor(scraper): re-export wire types from allo-scrapper-scraper-protocol [@phbassin](https://github.com/phbassin) (eb0862f)
+- refactor(server): re-export wire types from allo-scrapper-scraper-protocol [@phbassin](https://github.com/phbassin) (28181ab)
+- refactor(server): centralize JWT minting in AuthService.mintAccessToken (closes #1211) (#1221) [@PhBassin](https://github.com/PhBassin) (8a6d2b0)
+- test(server): consolidate JWT shape assertions in auth-service.mint.test.ts [@phbassin](https://github.com/phbassin) (b107936)
+- test(server): add canonical shape test for AuthService.mintAccessToken (TDD red) [@phbassin](https://github.com/phbassin) (95c0ddc)
+- test(server): cover malformed count case in getRoleInUseCount [@phbassin](https://github.com/phbassin) (db74a4a)
+- 🛡️ Sentinel: [HIGH] Fix system role immutability bypass (#1178) [@PhBassin](https://github.com/PhBassin) (5b84b4d)
+- refactor(server): move refresh-token from services/ to db/repositories/ seam (#1197) (#1208) [@PhBassin](https://github.com/PhBassin) (f5a8937)
+- refactor(server): move refresh-token from services/ to db/repositories/ seam (#1197) [@phbassin](https://github.com/phbassin) (fd53166)
+- refactor(server/routes): DELETE /api/roles/:id uses repositories/ + deleteRole [@phbassin](https://github.com/phbassin) (7d48f68)
+
+### Performance
+
+- perf(server/routes): use deleteRoleById to skip redundant SELECT [@phbassin](https://github.com/phbassin) (2f66bbf)
+
+### Documentation
+
+- docs: mark ADR 0002 implemented and scrub reference docs (#1234) [@phbassin](https://github.com/phbassin) (bcec4ab)
+- docs(context): record Session domain entry [@phbassin](https://github.com/phbassin) (ee60e0c)
+- docs(server): document UserService in architecture [@phbassin](https://github.com/phbassin) (751b377)
+- docs(scraper): show two transports in http-client.ts (refs #1214) [@phbassin](https://github.com/phbassin) (ca8fe78)
+- docs: reconcile rate-limit architecture and CONTEXT.md [@phbassin](https://github.com/phbassin) (21ee38a)
+- docs: document scraper-protocol as canonical wire contract [@phbassin](https://github.com/phbassin) (67afad4)
+- docs: introduce CONTEXT.md as project domain glossary (#1220) [@PhBassin](https://github.com/PhBassin) (af89b6e)
+- docs: introduce CONTEXT.md as project domain glossary (#1210) [@phbassin](https://github.com/phbassin) (7f65a67)
+- docs: scaffold engineering-skills config and seed domain model [@phbassin](https://github.com/phbassin) (72569d9)
+
+### Maintenance
+
+- chore(release): 4.7.4 → 4.8.0 — architecture epic + VPS deployment overlay (#1245) [@PhBassin](https://github.com/PhBassin) (4ff49f1)
+- chore(deps): align @vitest/coverage-v8 version range for npm workspace hoisting [@phbassin](https://github.com/phbassin) (5649f55)
+- chore(docker): include scraper-protocol workspace in container builds [@phbassin](https://github.com/phbassin) (4543f34)
+- chore(server/db): remove now-unused deleteRole function [@phbassin](https://github.com/phbassin) (ce71d69)
+
+
 ## [4.7.4] - 2026-06-19
 
 ### Added
@@ -1024,6 +1142,7 @@ This is a DevOps-only release with no code changes, database migrations, or API 
 - REST API
 - React frontend
 
+[4.8.0]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.4...v4.8.0
 [4.7.4]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.3...v4.7.4
 [4.7.3]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.2...v4.7.3
 [4.7.2]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.1...v4.7.2
