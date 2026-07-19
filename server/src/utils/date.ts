@@ -14,7 +14,10 @@ import { logger } from '../utils/logger.js';
 
 export function getCurrentWeekStart(): string {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0 = Sunday, 3 = Wednesday
+  // Use UTC to avoid local-timezone edge cases (e.g., midnight CEST
+  // where the local date is ahead of UTC, causing toISOString() to
+  // return the previous day after setDate adjustments).
+  const dayOfWeek = today.getUTCDay(); // 0 = Sunday, 3 = Wednesday
   
   // Calculate offset to previous or current Wednesday
   let offset = dayOfWeek - 3;
@@ -22,8 +25,11 @@ export function getCurrentWeekStart(): string {
     offset += 7;
   }
   
-  const wednesday = new Date(today);
-  wednesday.setDate(today.getDate() - offset);
+  const wednesday = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() - offset
+  ));
   return wednesday.toISOString().split('T')[0];
 }
 
