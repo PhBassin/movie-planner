@@ -12,15 +12,18 @@
 
 function getCurrentWeekStart(): string {
   const today = new Date();
-  const dayOfWeek = today.getDay();
+  const dayOfWeek = today.getUTCDay();
 
   let offset = dayOfWeek - 3;
   if (offset < 0) {
     offset += 7;
   }
 
-  const wednesday = new Date(today);
-  wednesday.setDate(today.getDate() - offset);
+  const wednesday = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() - offset
+  ));
   return wednesday.toISOString().split('T')[0];
 }
 
