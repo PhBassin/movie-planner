@@ -12,9 +12,6 @@ vi.mock('./redis-client.js');
 vi.mock('./progress-tracker.js', () => ({
   progressTracker: {
     reset: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    getListenerCount: vi.fn().mockReturnValue(1),
   },
 }));
 
@@ -111,23 +108,6 @@ describe('ScraperService', () => {
           pendingAttempts: [],
         },
       }));
-    });
-  });
-
-  describe('subscribeToProgress', () => {
-    it('should add listener and return cleanup function', () => {
-      const mockRes = { setHeader: vi.fn() };
-      const mockOnClose = vi.fn();
-      
-      const cleanup = scraperService.subscribeToProgress(mockRes, mockOnClose);
-      
-      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
-      expect(progressTracker.addListener).toHaveBeenCalledWith(mockRes);
-      
-      cleanup();
-      
-      expect(progressTracker.removeListener).toHaveBeenCalledWith(mockRes);
-      expect(mockOnClose).toHaveBeenCalled();
     });
   });
 });

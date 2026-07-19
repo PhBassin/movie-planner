@@ -25,6 +25,39 @@ export interface AccessTokenSubject {
   is_system_role: boolean;
 }
 
+/**
+ * The public user view returned in login/refresh responses: the access-token
+ * subject plus its resolved permissions. Built in one place (`toSessionUser`)
+ * so every response that shows a user agrees on the shape.
+ */
+export interface SessionUser extends AccessTokenSubject {
+  permissions: PermissionName[];
+}
+
+/**
+ * The login/refresh response payload: a fresh access token and the public
+ * user view. Emitted by `AuthService.login` and `SessionService.refresh`.
+ */
+export interface AuthResponse {
+  token: string;
+  user: SessionUser;
+}
+
+/** Build the canonical public user view from an access-token subject. */
+export function toSessionUser(
+  subject: AccessTokenSubject,
+  permissions: PermissionName[],
+): SessionUser {
+  return {
+    id: subject.id,
+    username: subject.username,
+    role_id: subject.role_id,
+    role_name: subject.role_name,
+    is_system_role: subject.is_system_role,
+    permissions,
+  };
+}
+
 export class AuthService {
   constructor(private db: DB) {}
 
@@ -59,7 +92,7 @@ export class AuthService {
     );
   }
 
-  async login(username?: string, password?: string) {
+  async login(username?: string, password?: string): Promise<AuthResponse> {
     if (!username || !password) {
       throw new ValidationError('Username and password are required');
     }
@@ -73,18 +106,12 @@ export class AuthService {
     }
 
     const token = await this.mintAccessToken(user, this.db);
+    const permissions = (await getPermissionNamesByRoleId(
+      this.db,
+      user.role_id,
+    )) as PermissionName[];
 
-    return {
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        role_id: user.role_id,
-        role_name: user.role_name,
-        is_system_role: user.is_system_role,
-        permissions: await getPermissionNamesByRoleId(this.db, user.role_id) as PermissionName[],
-      },
-    };
+    return { token, user: toSessionUser(user, permissions) };
   }
 
   async register(username?: string, password?: string) {

@@ -73,82 +73,103 @@ export const authenticatedKeyGenerator = (req: Request): string => {
   return ipKeyGenerator(req.ip ?? 'unknown');
 };
 
-function limiterWindowMs(config: RateLimitConfig, key: keyof RateLimitConfig): number {
-  return config[key] as number;
+interface LimiterSpec {
+  windowKey: keyof RateLimitConfig;
+  maxKey: keyof RateLimitConfig;
+  options: LimiterOptions;
 }
 
-function limiterMax(config: RateLimitConfig, key: keyof RateLimitConfig): number {
-  return config[key] as number;
-}
-
-const generalLimiterMiddleware = createRefreshableLimiter(
-  () => getCurrentConfig().windowMs,
-  () => limiterMax(getCurrentConfig(), 'generalMax'),
-  { skip: skipTest, standardHeaders: true }
-);
-export const generalLimiter = generalLimiterMiddleware.handler;
-
-const authLimiterMiddleware = createRefreshableLimiter(
-  () => getCurrentConfig().windowMs,
-  () => limiterMax(getCurrentConfig(), 'authMax'),
-  { skip: skipTest, skipSuccessfulRequests: true }
-);
-export const authLimiter = authLimiterMiddleware.handler;
-
-const registerLimiterMiddleware = createRefreshableLimiter(
-  () => limiterWindowMs(getCurrentConfig(), 'registerWindowMs'),
-  () => limiterMax(getCurrentConfig(), 'registerMax'),
-  { skip: skipTest }
-);
-export const registerLimiter = registerLimiterMiddleware.handler;
-
-const protectedLimiterMiddleware = createRefreshableLimiter(
-  () => getCurrentConfig().windowMs,
-  () => limiterMax(getCurrentConfig(), 'protectedMax'),
-  { skip: skipTest, keyGenerator: authenticatedKeyGenerator, standardHeaders: true }
-);
-export const protectedLimiter = protectedLimiterMiddleware.handler;
-
-const scraperLimiterMiddleware = createRefreshableLimiter(
-  () => getCurrentConfig().windowMs,
-  () => limiterMax(getCurrentConfig(), 'scraperMax'),
-  { skip: skipTest, keyGenerator: authenticatedKeyGenerator }
-);
-export const scraperLimiter = scraperLimiterMiddleware.handler;
-
-const publicLimiterMiddleware = createRefreshableLimiter(
-  () => getCurrentConfig().windowMs,
-  () => limiterMax(getCurrentConfig(), 'publicMax'),
-  { skip: skipTest }
-);
-export const publicLimiter = publicLimiterMiddleware.handler;
-
-const healthCheckLimiterMiddleware = createRefreshableLimiter(
-  () => limiterWindowMs(getCurrentConfig(), 'healthWindowMs'),
-  () => limiterMax(getCurrentConfig(), 'healthMax'),
-  {
-    skip: skipInternal,
-    standardHeaders: true,
-    message: {
-      success: false,
-      error: 'Too many health check requests',
+// One declarative table drives every limiter's window, max, and options.
+// Each spec row is consumed by a dedicated `createRefreshableLimiter(...)` call
+// below; the `allMiddleware` record wires the single config-refresh subscription
+// and gives a compile-time completeness check (a missing or stale row is a TS error).
+const limiterSpecs = {
+  generalLimiter: { windowKey: 'windowMs', maxKey: 'generalMax', options: { skip: skipTest, standardHeaders: true } },
+  authLimiter: { windowKey: 'windowMs', maxKey: 'authMax', options: { skip: skipTest, skipSuccessfulRequests: true } },
+  registerLimiter: { windowKey: 'registerWindowMs', maxKey: 'registerMax', options: { skip: skipTest } },
+  protectedLimiter: { windowKey: 'windowMs', maxKey: 'protectedMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator, standardHeaders: true } },
+  scraperLimiter: { windowKey: 'windowMs', maxKey: 'scraperMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator } },
+  publicLimiter: { windowKey: 'windowMs', maxKey: 'publicMax', options: { skip: skipTest } },
+  healthCheckLimiter: {
+    windowKey: 'healthWindowMs',
+    maxKey: 'healthMax',
+    options: {
+      skip: skipInternal,
+      standardHeaders: true,
+      message: {
+        success: false,
+        error: 'Too many health check requests',
+      },
     },
-  }
+  },
+} satisfies Record<string, LimiterSpec>;
+
+type LimiterName = keyof typeof limiterSpecs;
+
+// Each limiter is constructed directly from its spec row and exported via a
+// static `.handler` access. This shape is required for CodeQL's
+// `js/missing-rate-limiting` query to trace an exported handler back to the
+// `rateLimit(...)` call inside `createRefreshableLimiter` — a loop-based
+// factory plus record indirection plus re-export destructuring breaks that
+// data flow and surfaces false-positive alerts on routes that *are* limited.
+// `allMiddleware` restores the compile-time completeness check: every spec
+// row must have a matching middleware entry here, or TS errors.
+const generalLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.generalLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.generalLimiter.maxKey],
+  limiterSpecs.generalLimiter.options,
 );
+const authLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.authLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.authLimiter.maxKey],
+  limiterSpecs.authLimiter.options,
+);
+const registerLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.registerLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.registerLimiter.maxKey],
+  limiterSpecs.registerLimiter.options,
+);
+const protectedLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.protectedLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.protectedLimiter.maxKey],
+  limiterSpecs.protectedLimiter.options,
+);
+const scraperLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.scraperLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.scraperLimiter.maxKey],
+  limiterSpecs.scraperLimiter.options,
+);
+const publicLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.publicLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.publicLimiter.maxKey],
+  limiterSpecs.publicLimiter.options,
+);
+const healthCheckLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.healthCheckLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.healthCheckLimiter.maxKey],
+  limiterSpecs.healthCheckLimiter.options,
+);
+
+const allMiddleware: Record<LimiterName, { handler: RequestHandler; refresh: () => void }> = {
+  generalLimiter: generalLimiterMiddleware,
+  authLimiter: authLimiterMiddleware,
+  registerLimiter: registerLimiterMiddleware,
+  protectedLimiter: protectedLimiterMiddleware,
+  scraperLimiter: scraperLimiterMiddleware,
+  publicLimiter: publicLimiterMiddleware,
+  healthCheckLimiter: healthCheckLimiterMiddleware,
+};
+
+export const generalLimiter = generalLimiterMiddleware.handler;
+export const authLimiter = authLimiterMiddleware.handler;
+export const registerLimiter = registerLimiterMiddleware.handler;
+export const protectedLimiter = protectedLimiterMiddleware.handler;
+export const scraperLimiter = scraperLimiterMiddleware.handler;
+export const publicLimiter = publicLimiterMiddleware.handler;
 export const healthCheckLimiter = healthCheckLimiterMiddleware.handler;
 
-const allMiddleware = [
-  generalLimiterMiddleware,
-  authLimiterMiddleware,
-  registerLimiterMiddleware,
-  protectedLimiterMiddleware,
-  scraperLimiterMiddleware,
-  publicLimiterMiddleware,
-  healthCheckLimiterMiddleware,
-];
-
 subscribe(() => {
-  for (const m of allMiddleware) {
-    m.refresh();
+  for (const middleware of Object.values(allMiddleware)) {
+    middleware.refresh();
   }
 });

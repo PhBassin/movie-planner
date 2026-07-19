@@ -5,6 +5,8 @@ import type { DB } from '../db/index.js';
 import { requireAuth, isAdminUser, type AuthRequest } from '../middleware/auth.js';
 import { scraperLimiter } from '../middleware/rate-limit.js';
 import { ScraperService } from '../services/scraper-service.js';
+import { attachProgressStream } from '../services/sse-bridge.js';
+import { progressTracker } from '../services/progress-tracker.js';
 import { AuthError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { getScrapeReport } from '../db/report-queries.js';
 import { getPendingScrapeAttempts } from '../db/scrape-attempt-queries.js';
@@ -156,9 +158,7 @@ router.get('/status', scraperLimiter, requireAuth, async (req, res, next) => {
 // GET /api/scraper/progress - SSE endpoint for real-time progress
 router.get('/progress', scraperLimiter, (req, res, next) => {
   try {
-    const scraperService = scraperServiceFromRequest(req as AuthRequest);
-
-    const cleanup = scraperService.subscribeToProgress(res, () => {
+    const cleanup = attachProgressStream(res, progressTracker, () => {
       // Optional additional cleanup on route level if needed
     });
 

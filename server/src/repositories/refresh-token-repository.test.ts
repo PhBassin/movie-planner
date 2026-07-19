@@ -9,10 +9,16 @@ import {
   cleanupExpiredTokens,
 } from './refresh-token-repository.js';
 import type { DB } from '../db/index.js';
-import * as dbQueries from '../db/refresh-token-queries.js';
 
-vi.mock('../db/refresh-token-queries.js');
-
+/**
+ * Refresh-token repository tests.
+ *
+ * After the data-access seam was collapsed (see issue #1235), the SQL
+ * primitives are private internals of this module. These tests therefore mock
+ * the DB (`query` / `transaction`) directly and assert behavior end-to-end
+ * across the public surface — covering both the policy layer (hashing, expiry)
+ * and the underlying SQL it drives.
+ */
 describe('refresh-token-repository', () => {
   let mockDb: DB;
 
@@ -87,58 +93,56 @@ describe('refresh-token-repository', () => {
   });
 
   describe('generateRefreshToken', () => {
-    it('should generate a raw token and store its hash via insertRefreshToken', async () => {
-      vi.mocked(dbQueries.insertRefreshToken).mockResolvedValue(undefined);
+    it('should generate a raw token and store its hash via INSERT', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [] } as any);
 
       const token = await generateRefreshToken(mockDb, 1);
 
       expect(token).toBeDefined();
       expect(token.length).toBeGreaterThan(32);
-      expect(dbQueries.insertRefreshToken).toHaveBeenCalledWith(
-        mockDb,
-        1,
-        expect.any(String),
-        expect.any(Date),
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO refresh_tokens'),
+        [1, expect.any(String), expect.any(Date)],
       );
     });
 
     it('should accept custom expiry', async () => {
-      vi.mocked(dbQueries.insertRefreshToken).mockResolvedValue(undefined);
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [] } as any);
 
       const token = await generateRefreshToken(mockDb, 1, 3600_000);
 
       expect(token).toBeDefined();
-      expect(dbQueries.insertRefreshToken).toHaveBeenCalledWith(
-        mockDb,
-        1,
-        expect.any(String),
-        expect.any(Date),
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO refresh_tokens'),
+        [1, expect.any(String), expect.any(Date)],
       );
     });
   });
 
   describe('validateRefreshToken', () => {
     it('should return userId for valid non-expired non-revoked token', async () => {
-      vi.mocked(dbQueries.findByTokenHash).mockResolvedValue({
-        id: 1,
-        user_id: 42,
-        token_hash: 'hashed',
-        expires_at: new Date('2026-06-22T12:00:00Z'), // 1 day later
-        created_at: now,
-        revoked_at: null,
-      });
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          user_id: 42,
+          token_hash: 'hashed',
+          expires_at: new Date('2026-06-22T12:00:00Z'), // 1 day later
+          created_at: now,
+          revoked_at: null,
+        }],
+      } as any);
 
       const result = await validateRefreshToken(mockDb, 'valid-raw-token');
 
       expect(result).toBe(42);
-      expect(dbQueries.findByTokenHash).toHaveBeenCalledWith(
-        mockDb,
-        expect.any(String),
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT'),
+        [expect.any(String)],
       );
     });
 
     it('should return null for unknown token', async () => {
-      vi.mocked(dbQueries.findByTokenHash).mockResolvedValue(undefined);
+      vi.mocked(mockDb.query).mockResolvedValueOnce({ rows: [] } as any);
 
       const result = await validateRefreshToken(mockDb, 'unknown-token');
 
@@ -146,14 +150,16 @@ describe('refresh-token-repository', () => {
     });
 
     it('should return null for revoked token', async () => {
-      vi.mocked(dbQueries.findByTokenHash).mockResolvedValue({
-        id: 1,
-        user_id: 42,
-        token_hash: 'hashed',
-        expires_at: new Date('2026-06-22T12:00:00Z'),
-        created_at: now,
-        revoked_at: new Date('2026-06-20T12:00:00Z'),
-      });
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          user_id: 42,
+          token_hash: 'hashed',
+          expires_at: new Date('2026-06-22T12:00:00Z'),
+          created_at: now,
+          revoked_at: new Date('2026-06-20T12:00:00Z'),
+        }],
+      } as any);
 
       const result = await validateRefreshToken(mockDb, 'revoked-token');
 
@@ -161,14 +167,16 @@ describe('refresh-token-repository', () => {
     });
 
     it('should return null for expired token', async () => {
-      vi.mocked(dbQueries.findByTokenHash).mockResolvedValue({
-        id: 1,
-        user_id: 42,
-        token_hash: 'hashed',
-        expires_at: new Date('2026-06-20T12:00:00Z'), // 1 day ago
-        created_at: now,
-        revoked_at: null,
-      });
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          user_id: 42,
+          token_hash: 'hashed',
+          expires_at: new Date('2026-06-20T12:00:00Z'), // 1 day ago
+          created_at: now,
+          revoked_at: null,
+        }],
+      } as any);
 
       const result = await validateRefreshToken(mockDb, 'expired-token');
 
@@ -177,64 +185,72 @@ describe('refresh-token-repository', () => {
   });
 
   describe('revokeRefreshToken', () => {
-    it('should hash token and call revokeByTokenHash', async () => {
-      vi.mocked(dbQueries.revokeByTokenHash).mockResolvedValue(undefined);
+    it('should issue an UPDATE revoking the matching active token by hash', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [] } as any);
 
       await revokeRefreshToken(mockDb, 'token-to-revoke');
 
-      expect(dbQueries.revokeByTokenHash).toHaveBeenCalledWith(
-        mockDb,
-        expect.any(String),
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE refresh_tokens SET revoked_at'),
+        [expect.any(String)],
       );
     });
   });
 
   describe('revokeAllUserTokens', () => {
-    it('should call revokeByUserId', async () => {
-      vi.mocked(dbQueries.revokeByUserId).mockResolvedValue(undefined);
+    it('should issue an UPDATE revoking all active tokens for the user', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [] } as any);
 
       await revokeAllUserTokens(mockDb, 42);
 
-      expect(dbQueries.revokeByUserId).toHaveBeenCalledWith(mockDb, 42);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE refresh_tokens SET revoked_at'),
+        [42],
+      );
     });
   });
 
   describe('rotateRefreshToken', () => {
-    it('should atomically revoke old and generate new token', async () => {
-      vi.mocked(dbQueries.rotateRefreshTokenTx).mockResolvedValue(undefined);
+    it('should atomically revoke old and generate new token in a transaction', async () => {
+      let committed = false;
+
+      vi.mocked(mockDb.transaction).mockImplementation(async (fn: any) => {
+        const clientQuery = vi.fn()
+          .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // UPDATE
+          .mockResolvedValueOnce({ rows: [] });             // INSERT
+        const client = { query: clientQuery };
+        const result = await fn(client);
+        committed = true;
+        return result;
+      });
 
       const newToken = await rotateRefreshToken(mockDb, 1, 'old-token');
 
       expect(newToken).toBeDefined();
       expect(newToken.length).toBeGreaterThan(32);
-      expect(dbQueries.rotateRefreshTokenTx).toHaveBeenCalledWith(
-        mockDb,
-        1,
-        expect.any(String), // old hash
-        expect.any(String), // new hash
-        expect.any(Date),   // new expiry
-      );
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(committed).toBe(true);
     });
 
     it('should accept custom expiry', async () => {
-      vi.mocked(dbQueries.rotateRefreshTokenTx).mockResolvedValue(undefined);
+      vi.mocked(mockDb.transaction).mockImplementation(async (fn: any) => {
+        const clientQuery = vi.fn()
+          .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+          .mockResolvedValueOnce({ rows: [] });
+        return fn({ query: clientQuery });
+      });
 
       const newToken = await rotateRefreshToken(mockDb, 1, 'old-token', 3600_000);
 
       expect(newToken).toBeDefined();
-      expect(dbQueries.rotateRefreshTokenTx).toHaveBeenCalledWith(
-        mockDb,
-        1,
-        expect.any(String),
-        expect.any(String),
-        expect.any(Date),
-      );
     });
 
-    it('should propagate errors from db layer', async () => {
-      vi.mocked(dbQueries.rotateRefreshTokenTx).mockRejectedValue(
-        new Error('Refresh token already consumed or invalid'),
-      );
+    it('should propagate the consumed/invalid error when the old token is gone', async () => {
+      vi.mocked(mockDb.transaction).mockImplementation(async (fn: any) => {
+        const clientQuery = vi.fn()
+          .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // UPDATE matched nothing
+        return fn({ query: clientQuery });
+      });
 
       await expect(
         rotateRefreshToken(mockDb, 1, 'bad-token'),
@@ -243,22 +259,34 @@ describe('refresh-token-repository', () => {
   });
 
   describe('cleanupExpiredTokens', () => {
-    it('should call cleanupExpired with default 30 days', async () => {
-      vi.mocked(dbQueries.cleanupExpired).mockResolvedValue(3);
+    it('should delete expired and old revoked tokens with default 30 days', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: '3' }],
+        rowCount: 1,
+      } as any);
 
       const count = await cleanupExpiredTokens(mockDb);
 
       expect(count).toBe(3);
-      expect(dbQueries.cleanupExpired).toHaveBeenCalledWith(mockDb, 30);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM refresh_tokens'),
+        [30],
+      );
     });
 
     it('should accept custom retention days', async () => {
-      vi.mocked(dbQueries.cleanupExpired).mockResolvedValue(0);
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: '0' }],
+        rowCount: 1,
+      } as any);
 
       const count = await cleanupExpiredTokens(mockDb, 7);
 
       expect(count).toBe(0);
-      expect(dbQueries.cleanupExpired).toHaveBeenCalledWith(mockDb, 7);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM refresh_tokens'),
+        [7],
+      );
     });
   });
 });

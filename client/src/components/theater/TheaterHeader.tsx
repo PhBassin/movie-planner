@@ -13,11 +13,6 @@ export function TheaterHeader({ theater }: TheaterHeaderProps) {
           📍 {theater.address}, {theater.postal_code} {theater.city}
         </p>
       )}
-      {theater.screen_count != null && theater.screen_count > 0 && (
-        <p className="text-gray-600">
-          🎬 {theater.screen_count} salle{theater.screen_count > 1 ? 's' : ''}
-        </p>
-      )}
     </div>
   );
 }

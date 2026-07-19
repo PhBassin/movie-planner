@@ -1,7 +1,8 @@
 # 0002. Drop `screen_count` — it's not a domain attribute
 
-- **Status:** Accepted
+- **Status:** Implemented
 - **Date:** 2026-06-23
+- **Implemented by:** #1234 (migration `025_drop_screen_count.sql`)
 
 ## Context
 

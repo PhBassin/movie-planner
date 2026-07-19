@@ -34,13 +34,3 @@ export function validateCity(value: string): string | undefined {
   if (value.trim() && value.length > 100) return 'City must be at most 100 characters';
   return undefined;
 }
-
-export function validateScreenCount(value: string): string | undefined {
-  if (value.trim()) {
-    const num = Number(value);
-    if (isNaN(num)) return 'Screen count must be a number';
-    if (!Number.isInteger(num)) return 'Screen count must be an integer';
-    if (num < 1 || num > 50) return 'Screen count must be between 1 and 50';
-  }
-  return undefined;
-}

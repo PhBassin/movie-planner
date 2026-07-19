@@ -7,7 +7,6 @@ import {
   validateAddress,
   validatePostalCode,
   validateCity,
-  validateScreenCount,
 } from '../utils/theaterValidators.js';
 
 type Validator = (value: string) => string | undefined;
@@ -25,7 +24,6 @@ interface FormState {
   address: string;
   postalCode: string;
   city: string;
-  screenCount: string;
 }
 
 const trim = (s: string | undefined) => (s ?? '').trim();
@@ -66,14 +64,6 @@ const FORM_FIELDS = [
     isDifferent: (current: string, original: Theater) =>
       current.trim() !== trim(original.city),
   },
-  {
-    key: 'screenCount',
-    validate: validateScreenCount,
-    parseForUpdate: (v: string) => (v ? Number(v) : undefined),
-    isDifferent: (current: string, original: Theater) =>
-      current.trim() !==
-      (original.screen_count != null ? String(original.screen_count) : ''),
-  },
 ] as const satisfies ReadonlyArray<FieldDef<unknown>>;
 
 export function useEditTheaterForm(
@@ -87,8 +77,6 @@ export function useEditTheaterForm(
     address: theater.address ?? '',
     postalCode: theater.postal_code ?? '',
     city: theater.city ?? '',
-    screenCount:
-      theater.screen_count != null ? String(theater.screen_count) : '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -120,8 +108,6 @@ export function useEditTheaterForm(
         const value = field.parseForUpdate(current.trim());
         if (field.key === 'postalCode') {
           updates.postal_code = value as string | undefined;
-        } else if (field.key === 'screenCount') {
-          updates.screen_count = value as number | undefined;
         } else {
           updates[field.key as 'name' | 'url' | 'address' | 'city'] =
             value as string | undefined;
@@ -168,14 +154,11 @@ export function useEditTheaterForm(
     setPostalCode: (v: string) => setField('postalCode', v),
     city: state.city,
     setCity: (v: string) => setField('city', v),
-    screenCount: state.screenCount,
-    setScreenCount: (v: string) => setField('screenCount', v),
     nameError: errors.name,
     urlError: errors.url,
     addressError: errors.address,
     postalCodeError: errors.postalCode,
     cityError: errors.city,
-    screenCountError: errors.screenCount,
     submitError,
     isSaving,
     hasChanges,

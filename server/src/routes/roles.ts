@@ -10,8 +10,8 @@ import {
   getAllPermissions,
   getAllPermissionCategoryLabels,
   setRolePermissions,
+  getRoleInUseCount,
 } from '../db/role-queries.js';
-import { getRoleInUseCount } from '../repositories/role-repository.js';
 import type { ApiResponse } from '../types/api.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permission.js';

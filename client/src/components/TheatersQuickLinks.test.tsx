@@ -4,8 +4,8 @@ import { vi, describe, it, expect } from 'vitest';
 import TheatersQuickLinks from './TheatersQuickLinks';
 
 const mockTheaters = [
-  { id: 'C0001', name: 'UGC Opéra', city: 'Paris', screen_count: 5 },
-  { id: 'C0002', name: 'Pathé Wepler', city: 'Paris', screen_count: 8 },
+  { id: 'C0001', name: 'UGC Opéra', city: 'Paris' },
+  { id: 'C0002', name: 'Pathé Wepler', city: 'Paris' },
 ];
 
 const renderComponent = (props: Partial<React.ComponentProps<typeof TheatersQuickLinks>> = {}) =>

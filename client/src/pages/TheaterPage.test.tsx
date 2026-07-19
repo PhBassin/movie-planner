@@ -48,7 +48,6 @@ describe('TheaterPage - renders theater details', () => {
     city: 'Paris',
     address: '1 rue Test',
     postal_code: '75001',
-    screen_count: 10,
   };
 
   const mockSchedule = { showtimes: [], weekStart: '2026-02-23' };
@@ -169,7 +168,6 @@ describe('TheaterPage — bouton Maintenant', () => {
     city: 'Paris',
     address: '1 rue Test',
     postal_code: '75001',
-    screen_count: 10,
   };
 
   const makeSchedule = () => ({

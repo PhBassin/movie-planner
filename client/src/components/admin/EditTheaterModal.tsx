@@ -37,8 +37,7 @@ const EditTheaterModal: React.FC<EditTheaterModalProps> = ({ isOpen, theater, on
     address, setAddress,
     postalCode, setPostalCode,
     city, setCity,
-    screenCount, setScreenCount,
-    nameError, urlError, addressError, postalCodeError, cityError, screenCountError,
+    nameError, urlError, addressError, postalCodeError, cityError,
     submitError,
     isSaving, hasChanges,
     handleSubmit, handleBackdropClick,
@@ -155,24 +154,6 @@ const EditTheaterModal: React.FC<EditTheaterModalProps> = ({ isOpen, theater, on
               className={inputClass(!!cityError)}
             />
             {cityError && <p className="mt-1 text-sm text-red-600">{cityError}</p>}
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="edit-screen-count" className="block text-sm font-medium text-gray-700 mb-1">
-              Number of Screens <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input
-              id="edit-screen-count"
-              type="number"
-              min="1"
-              max="50"
-              value={screenCount}
-              onChange={(e) => setScreenCount(e.target.value)}
-              disabled={isSaving}
-              placeholder="10"
-              className={inputClass(!!screenCountError)}
-            />
-            {screenCountError && <p className="mt-1 text-sm text-red-600">{screenCountError}</p>}
           </div>
 
           {submitError && (

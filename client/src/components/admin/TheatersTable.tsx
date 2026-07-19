@@ -16,7 +16,6 @@ const COLUMNS: AdminTableColumn[] = [
   { label: 'ID' },
   { label: 'Name' },
   { label: 'City' },
-  { label: 'Screens' },
   { label: 'Actions', align: 'right' },
 ];
 
@@ -76,11 +75,6 @@ function TheaterRow({
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="text-sm text-gray-500">{theater.city ?? '-'}</div>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <div className="text-sm text-gray-500">
-          {theater.screen_count != null ? theater.screen_count : '-'}
-        </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         <div className="flex justify-end gap-2">

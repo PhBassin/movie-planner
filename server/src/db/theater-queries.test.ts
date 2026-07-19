@@ -136,7 +136,6 @@ describe('Theater Queries', () => {
         address: '1 Rue de la Paix',
         postal_code: '75001',
         city: 'Paris',
-        screen_count: 3,
       });
 
       const sql: string = mockDb.query.mock.calls[0][0];
@@ -154,7 +153,6 @@ describe('Theater Queries', () => {
         address: '5 Rue Test',
         postal_code: '75002',
         city: 'Paris',
-        screen_count: 2,
         url: 'https://www.example-theater-site.com/seance/salle_gen_csalle=C0099.html',
       });
 

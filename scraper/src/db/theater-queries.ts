@@ -9,7 +9,6 @@ interface TheaterRow {
   address: string | null;
   postal_code: string | null;
   city: string | null;
-  screen_count: number | null;
   image_url: string | null;
   url: string | null;
   source: string | null;
@@ -19,17 +18,16 @@ interface TheaterRow {
 export async function upsertTheater(db: DB, theater: Theater): Promise<void> {
   await db.query(
     `
-      INSERT INTO theaters (id, name, address, postal_code, city, screen_count, image_url, url, source)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO theaters (id, name, address, postal_code, city, image_url, url, source)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT(id) DO UPDATE SET
         name = $2,
         address = $3,
         postal_code = $4,
         city = $5,
-        screen_count = $6,
-        image_url = $7,
-        url = COALESCE($8, theaters.url),
-        source = COALESCE($9, theaters.source)
+        image_url = $6,
+        url = COALESCE($7, theaters.url),
+        source = COALESCE($8, theaters.source)
     `,
     [
       theater.id,
@@ -37,7 +35,6 @@ export async function upsertTheater(db: DB, theater: Theater): Promise<void> {
       theater.address ?? null,
       theater.postal_code ?? null,
       theater.city ?? null,
-      theater.screen_count ?? null,
       theater.image_url ?? null,
       theater.url ?? null,
       theater.source ?? null,
@@ -57,7 +54,6 @@ export async function getTheaters(db: DB): Promise<Theater[]> {
     address: row.address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
-    screen_count: row.screen_count ?? undefined,
     image_url: row.image_url ?? undefined,
     url: row.url ?? undefined,
     source: row.source ?? undefined,
