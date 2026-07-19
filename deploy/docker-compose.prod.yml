@@ -65,6 +65,12 @@ services:
   traefik:
     image: traefik:v3.2
     restart: unless-stopped
+    environment:
+      # Force Docker API version — Traefik's embedded SDK defaults to 1.24
+      # which Docker Engine 25+ rejects (min 1.40). Auto-negotiation does not
+      # trigger reliably, so we pin to a version both sides accept.
+      # Verify your daemon supports this: docker version --format '{{.Server.APIVersion}}'
+      DOCKER_API_VERSION: "1.44"
     command:
       # Docker provider — only consider containers with traefik.enable=true
       - --providers.docker=true
