@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.1] - 2026-07-19
+
+### Fixed
+
+- fix(server,scraper): use UTC in getCurrentWeekStart to avoid timezone edge case (#1249) [@PhBassin](https://github.com/PhBassin) (8c3dae2)
+- fix(server,scraper): use UTC in getCurrentWeekStart to avoid timezone edge case [@phbassin](https://github.com/phbassin) (453b5c7)
+
 ## [4.8.0] - 2026-07-19
 
 ### Added
@@ -1142,6 +1149,7 @@ This is a DevOps-only release with no code changes, database migrations, or API 
 - REST API
 - React frontend
 
+[4.8.1]: https://github.com/PhBassin/allo-scrapper/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.4...v4.8.0
 [4.7.4]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.3...v4.7.4
 [4.7.3]: https://github.com/PhBassin/allo-scrapper/compare/v4.7.2...v4.7.3
