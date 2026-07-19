@@ -9,6 +9,7 @@ Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) 
 - Each workspace has its OWN `utils/logger.js`. `packages/logger` is not a real workspace — ignore it.
 - Dependency installs use `npm install --legacy-peer-deps` (peer-dep conflicts exist; plain `npm install` may fail). CI deletes `package-lock.json` before installing.
 - **Never add a dependency without explicit user consent.** Prefer existing libraries already in the relevant workspace.
+- **`CONTEXT.md` at the repo root is the project's domain glossary.** Before introducing or naming a domain concept (entity, FSM, wire-format type), read it first and extend it in the same change. New code MUST use the canonical terms it defines; new or overloaded concepts MUST be added there with cross-references to the source files.
 
 ## Commands (run inside the workspace dir or via `--workspace`)
 
@@ -56,3 +57,19 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 
 - `fallow` (dead-code/health) is wired via MCP and `.fallowrc.json` — prefer it for unused-export/dependency checks.
 - Past performance learnings live in `.jules/bolt.md`; deeper architecture docs in `docs/`.
+
+## Agent skills
+
+Engineering skills (e.g. `triage`, `to-issues`, `diagnosing-bugs`, `improve-codebase-architecture`) read the configuration in `docs/agents/`:
+
+### Issue tracker
+
+GitHub Issues (uses the `gh` CLI). External PRs are **not** a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

@@ -43,7 +43,6 @@ export interface Theater {
   address?: string;
   postal_code?: string;
   city?: string;
-  screen_count?: number;
   image_url?: string;
 }
 

@@ -10,17 +10,17 @@ import {
 import {
   upsertTheater,
 } from '../../db/theater-queries.js';
-import { fetchTheaterPage, fetchShowtimesJson, fetchMoviePage, delay } from '../http-client.js';
+import { ALLOCINE_BASE_URL, isValidAllocineUrl, extractTheaterIdFromUrl, cleanTheaterUrl } from '../utils.js';
 import { parseTheaterPage } from '../theater-parser.js';
 import { parseShowtimesJson } from '../theater-json-parser.js';
 import { parseMoviePage } from '../movie-parser.js';
 import { getWeekStartForDate } from '../../utils/date.js';
-import { isValidAllocineUrl, extractTheaterIdFromUrl, cleanTheaterUrl } from '../utils.js';
 import { logger } from '../../utils/logger.js';
 import type { Movie, TheaterConfig, WeeklyProgram, Theater, MovieShowtimeData } from '../../types/scraper.js';
 import { type ProgressPublisher } from '../index.js';
 import { type IScraperStrategy } from './IScraperStrategy.js';
-import { RateLimitError } from '../../utils/errors.js';
+import { RateLimitError, HttpError } from '../../utils/errors.js';
+import { type Transport } from '../transports/transport.js';
 
 export function shouldRefreshMovieDetails(existingMovie?: {
   duration_minutes?: number;
@@ -62,9 +62,10 @@ function applyExistingFallback(target: Movie, existing: Movie): void {
   }
 }
 
-async function fetchAndApplyMovieDetails(movie: Movie): Promise<void> {
+async function fetchAndApplyMovieDetails(movie: Movie, fetchTransport: Transport): Promise<void> {
   try {
-    const movieHtml = await fetchMoviePage(movie.id);
+    const url = new URL(`/film/fichefilm_gen_cfilm=${movie.id}.html`, ALLOCINE_BASE_URL);
+    const { html: movieHtml } = await fetchTransport.fetchPage(url.href);
     applyMovieDetails(movie, parseMoviePage(movieHtml));
   } catch (error) {
     logger.warn('Error fetching movie page', { movieId: movie.id, error });
@@ -74,9 +75,11 @@ async function fetchAndApplyMovieDetails(movie: Movie): Promise<void> {
 async function refreshMovieDetails(
   movie: Movie,
   existingMovie: Movie | undefined,
-  movieDelayMs: number
+  movieDelayMs: number,
+  fetchTransport: Transport,
+  delay: (ms: number) => Promise<void>,
 ): Promise<void> {
-  await fetchAndApplyMovieDetails(movie);
+  await fetchAndApplyMovieDetails(movie, fetchTransport);
   await delay(movieDelayMs);
   if (existingMovie) {
     applyExistingFallback(movie, existingMovie);
@@ -89,6 +92,8 @@ async function processMovieShowtimes(
   theater: TheaterConfig,
   date: string,
   movieDelayMs: number,
+  fetchTransport: Transport,
+  delay: (ms: number) => Promise<void>,
   progress?: ProgressPublisher
 ): Promise<{ weeklyProgram: WeeklyProgram; showtimesCount: number }> {
   const movie = movieData.movie;
@@ -99,7 +104,7 @@ async function processMovieShowtimes(
 
   if (shouldRefreshMovieDetails(existingMovie)) {
     logger.info('Fetching movie details', { title: movie.title, id: movie.id });
-    await refreshMovieDetails(movie, existingMovie, movieDelayMs);
+    await refreshMovieDetails(movie, existingMovie, movieDelayMs, fetchTransport, delay);
   } else if (existingMovie) {
     movie.duration_minutes = existingMovie.duration_minutes;
     movie.director = existingMovie.director;
@@ -133,6 +138,12 @@ async function processMovieShowtimes(
 export class AllocineScraperStrategy implements IScraperStrategy {
   readonly sourceName = 'allocine';
 
+  constructor(
+    private readonly browserTransport: Transport,
+    private readonly fetchTransport: Transport,
+    private readonly delay: (ms: number) => Promise<void>,
+  ) {}
+
   // fallow-ignore-next-line unused-class-member
   canHandleUrl(url: string): boolean {
     return isValidAllocineUrl(url);
@@ -153,18 +164,18 @@ export class AllocineScraperStrategy implements IScraperStrategy {
     db: DB,
     theater: TheaterConfig
   ): Promise<{ availableDates: string[]; theater: Theater }> {
-    const { html, availableDates } = await fetchTheaterPage(theater.url);
+    const { html, availableDates } = await this.browserTransport.fetchPage(theater.url);
 
     const pageData = parseTheaterPage(html, theater.id);
-    const mergedTheater: Theater = { 
-      ...pageData.theater, 
+    const mergedTheater: Theater = {
+      ...pageData.theater,
       url: theater.url,
       source: this.sourceName
     };
     await upsertTheater(db, mergedTheater);
     logger.info('Theater metadata upserted', { theater: mergedTheater.name });
 
-    return { availableDates, theater: mergedTheater };
+    return { availableDates: availableDates ?? [], theater: mergedTheater };
   }
 
   async scrapeTheater(
@@ -181,7 +192,9 @@ export class AllocineScraperStrategy implements IScraperStrategy {
     let showtimesCount = 0;
 
     try {
-      const json = await fetchShowtimesJson(theater.id, date);
+      const url = new URL(`/_/showtimes/theater-${theater.id}/d-${date}/`, ALLOCINE_BASE_URL);
+      const { html } = await this.fetchTransport.fetchPage(url.href);
+      const json = JSON.parse(html) as unknown;
       const movieShowtimesData = parseShowtimesJson(json, theater.id, date);
       logger.info('Movies found for date', { count: movieShowtimesData.length, date });
 
@@ -190,7 +203,7 @@ export class AllocineScraperStrategy implements IScraperStrategy {
       for (const movieData of movieShowtimesData) {
         try {
           const { weeklyProgram, showtimesCount: count } = await processMovieShowtimes(
-            db, movieData, theater, date, movieDelayMs, progress
+            db, movieData, theater, date, movieDelayMs, this.fetchTransport, this.delay, progress
           );
           moviesCount++;
           showtimesCount += count;

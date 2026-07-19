@@ -24,7 +24,6 @@ No authentication required.
       "address": "100 Rue Mouffetard",
       "postal_code": "75005",
       "city": "Paris",
-      "screen_count": 1,
       "image_url": "https://..."
     }
   ]
@@ -112,8 +111,7 @@ Provide only a URL and the server will automatically scrape theater details from
     "url": "https://www.allocine.fr/seance/salle_gen_csalle=C0072.html",
     "address": "7 Place de la Rotonde",
     "postal_code": "75001",
-    "city": "Paris",
-    "screen_count": 27
+    "city": "Paris"
   }
 }
 ```
@@ -183,8 +181,7 @@ PUT /api/theaters/:id
   "url": "https://www.allocine.fr/seance/salle_gen_csalle=W7504.html",
   "address": "New Address",
   "postal_code": "75001",
-  "city": "Paris",
-  "screen_count": 5
+  "city": "Paris"
 }
 ```
 
@@ -198,8 +195,7 @@ PUT /api/theaters/:id
     "url": "https://www.allocine.fr/seance/salle_gen_csalle=W7504.html",
     "address": "New Address",
     "postal_code": "75001",
-    "city": "Paris",
-    "screen_count": 5
+    "city": "Paris"
   }
 }
 ```

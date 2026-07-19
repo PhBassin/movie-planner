@@ -1,14 +1,16 @@
 import { parseStrictInt } from '../utils/number.js';
 import express from 'express';
-import type { DB } from '../db/client.js';
+import type { DB } from '../db/index.js';
 import {
   getAllRoles,
   getRoleById,
   createRole,
   updateRole,
+  deleteRoleById,
   getAllPermissions,
   getAllPermissionCategoryLabels,
   setRolePermissions,
+  getRoleInUseCount,
 } from '../db/role-queries.js';
 import type { ApiResponse } from '../types/api.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -166,15 +168,20 @@ router.put(
         return next(new ValidationError('Invalid role ID'));
       }
 
-      const { name, description } = req.body;
-      const updated = await updateRole(db, roleId, { name, description });
-
-      if (!updated) {
+      const role = await getRoleById(db, roleId);
+      if (!role) {
         return next(new NotFoundError('Role not found'));
       }
 
-      const role = await getRoleById(db, roleId);
-      const response: ApiResponse = { success: true, data: role };
+      if (role.is_system) {
+        return next(new AuthError('Cannot update a system role', 403));
+      }
+
+      const { name, description } = req.body;
+      await updateRole(db, roleId, { name, description });
+
+      const updatedRole = await getRoleById(db, roleId);
+      const response: ApiResponse = { success: true, data: updatedRole };
       res.json(response);
     } catch (error) {
       next(error);
@@ -212,16 +219,15 @@ router.delete(
       }
 
       // Check if any users have this role
-      const userCountResult = await db.query<{ count: string }>(
-        'SELECT COUNT(*) as count FROM users WHERE role_id = $1',
-        [roleId]
-      );
-      const userCount = parseStrictInt(userCountResult.rows[0]?.count ?? '0');
+      const userCount = await getRoleInUseCount(db, roleId);
       if (userCount > 0) {
         return next(new AppError(`Role is assigned to ${userCount} user(s)`, 409));
       }
 
-      await db.query('DELETE FROM roles WHERE id = $1', [roleId]);
+      const deleted = await deleteRoleById(db, roleId);
+      if (!deleted) {
+        return next(new NotFoundError('Role not found'));
+      }
 
       res.status(204).send();
     } catch (error) {
@@ -257,6 +263,10 @@ router.put(
       const role = await getRoleById(db, roleId);
       if (!role) {
         return next(new NotFoundError('Role not found'));
+      }
+
+      if (role.is_system) {
+        return next(new AuthError('Cannot update permissions of a system role', 403));
       }
 
       await setRolePermissions(db, roleId, permission_ids);

@@ -1,48 +1,12 @@
-import type { DB } from './client.js';
+import type { DB } from './index.js';
+import {
+  DEFAULT_CONFIG,
+  type RateLimitAuditInfo,
+  type RateLimitConfig,
+  type RateLimitConfigRow,
+} from '../services/rate-limit-source.js';
 
-export interface RateLimitConfigRow {
-  id: number;
-  window_ms: number;
-  general_max: number;
-  auth_max: number;
-  register_max: number;
-  register_window_ms: number;
-  protected_max: number;
-  scraper_max: number;
-  public_max: number;
-  health_max: number;
-  health_window_ms: number;
-  updated_at: string;
-  updated_by: number | null;
-  environment: string;
-}
-
-// NOTE: This is the DB-backed `RateLimitConfig` shape returned to admin
-// routes. It is structurally different from `config/rate-limits.ts`'s
-// `RateLimitConfig` (which is a flat shape used by the rate-limit
-// middleware). This one wraps the same fields under a `config` key and
-// adds DB metadata (`source`, `updatedAt`, `updatedBy`, `environment`).
-// The duplication is intentional — consumers explicitly import from one
-// module or the other. Keep both.
-// Listed in .fallowrc.json ignoreExports.
-export interface RateLimitConfig {
-  config: {
-    windowMs: number;
-    generalMax: number;
-    authMax: number;
-    registerMax: number;
-    registerWindowMs: number;
-    protectedMax: number;
-    scraperMax: number;
-    publicMax: number;
-    healthMax: number;
-    healthWindowMs: number;
-  };
-  source: 'database' | 'env' | 'default';
-  updatedAt: string | null;
-  updatedBy: { id: number; username: string } | null;
-  environment: string;
-}
+export type { RateLimitConfigRow };
 
 export interface RateLimitAuditLogRow {
   id: number;
@@ -57,7 +21,7 @@ export interface RateLimitAuditLogRow {
   user_agent: string | null;
 }
 
-function rowToConfig(row: RateLimitConfigRow, source: 'database' | 'env' | 'default' = 'database'): RateLimitConfig {
+function rowToConfig(row: RateLimitConfigRow, source: 'database' | 'env' | 'default' = 'database'): RateLimitAuditInfo {
   return {
     config: {
       windowMs: row.window_ms,
@@ -78,38 +42,15 @@ function rowToConfig(row: RateLimitConfigRow, source: 'database' | 'env' | 'defa
   };
 }
 
-export async function getRateLimits(db: DB): Promise<RateLimitConfig> {
-  const result = await db.query<RateLimitConfigRow>('SELECT * FROM rate_limit_configs WHERE id = 1');
-  
-  if (result.rows.length === 0) {
-    throw new Error('Rate limit configuration not found');
-  }
-
-  const config = rowToConfig(result.rows[0]);
-  
-  // Fetch username if updated_by exists
-  if (config.updatedBy) {
-    const userResult = await db.query<{ username: string }>(
-      'SELECT username FROM users WHERE id = $1',
-      [config.updatedBy.id]
-    );
-    if (userResult.rows.length > 0) {
-      config.updatedBy.username = userResult.rows[0].username;
-    }
-  }
-  
-  return config;
-}
-
 export async function updateRateLimits(
   db: DB,
-  updates: Partial<Record<string, number>>,
+  updates: Partial<RateLimitConfig>,
   userId: number,
   username: string,
   roleName: string,
   userIp: string,
   userAgent: string
-): Promise<RateLimitConfig> {
+): Promise<RateLimitAuditInfo> {
   // Start transaction for atomic update + audit log
   await db.query('BEGIN');
   
@@ -143,7 +84,7 @@ export async function updateRateLimits(
     
     for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
       if (camelKey in updates) {
-        const newValue = updates[camelKey];
+        const newValue = updates[camelKey as keyof RateLimitConfig];
         const oldValue = current[snakeKey as keyof RateLimitConfigRow];
         
         if (newValue !== oldValue && newValue !== undefined) {
@@ -205,22 +146,8 @@ export async function resetRateLimits(
   roleName: string,
   userIp: string,
   userAgent: string
-): Promise<RateLimitConfig> {
-  // Use updateRateLimits with default values
-  const defaults = {
-    windowMs: 900000,
-    generalMax: 100,
-    authMax: 5,
-    registerMax: 3,
-    registerWindowMs: 3600000,
-    protectedMax: 60,
-    scraperMax: 10,
-    publicMax: 100,
-    healthMax: 10,
-    healthWindowMs: 60000,
-  };
-  
-  return updateRateLimits(db, defaults, userId, username, roleName, userIp, userAgent);
+): Promise<RateLimitAuditInfo> {
+  return updateRateLimits(db, DEFAULT_CONFIG, userId, username, roleName, userIp, userAgent);
 }
 
 export async function getRateLimitAuditLog(

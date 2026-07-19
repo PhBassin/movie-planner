@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
-import type { DB } from './client.js';
+import type { DB } from './index.js';
 import {
   getAppliedMigrations,
   getPendingMigrations,
@@ -106,6 +106,7 @@ describe('System Queries', () => {
             { version: '022_fix_showtime_deduplication.sql' },
             { version: '023_rename_cinema_to_theater_and_film_to_movie.sql' },
             { version: '024_add_refresh_tokens.sql' },
+            { version: '025_drop_screen_count.sql' },
           ],
         }),
       } as unknown as DB;

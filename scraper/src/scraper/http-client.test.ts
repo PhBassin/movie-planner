@@ -1,12 +1,22 @@
 // Tests for HTTP client error handling
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchShowtimesJson, fetchMoviePage } from './http-client.js';
+import { fetchShowtimesJson, fetchMoviePage, fetchTheaterPage } from './http-client.js';
 import { HttpError, RateLimitError } from '../utils/errors.js';
 
 // Mock global fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
+
+// Mock puppeteer so a missing SSRF guard fails fast (sentinel) instead of
+// trying to launch a real browser in CI. The SSRF validation must run BEFORE
+// puppeteer.launch — so any test below that sees the sentinel indicates the
+// URL guard did not run.
+vi.mock('puppeteer-core', () => ({
+  default: {
+    launch: vi.fn().mockRejectedValue(new Error('SENTINEL_PUPPETEER_LAUNCH')),
+  },
+}));
 
 describe('HTTP Client - Error Handling', () => {
   beforeEach(() => {
@@ -124,7 +134,7 @@ describe('HTTP Client - Error Handling', () => {
         mockFetch.mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockData,
+          text: async () => JSON.stringify(mockData),
         });
 
         const result = await fetchShowtimesJson('C0072', '2026-03-24');
@@ -193,6 +203,32 @@ describe('HTTP Client - Error Handling', () => {
         const result = await fetchMoviePage(12345);
         expect(result).toBe(mockHtml);
       });
+    });
+  });
+
+  describe('fetchTheaterPage - URL validation (SSRF guard)', () => {
+    it('rejects URL with a non-allocine host before launching a browser', async () => {
+      await expect(
+        fetchTheaterPage('https://evil.com/theater/foo')
+      ).rejects.toThrow(/SSRF/i);
+    });
+
+    it('rejects http:// on the allocine host (TLS downgrade)', async () => {
+      await expect(
+        fetchTheaterPage('http://www.allocine.fr/theater/foo')
+      ).rejects.toThrow(/SSRF/i);
+    });
+
+    it('rejects an internal/loopback address (SSRF to internal service)', async () => {
+      await expect(
+        fetchTheaterPage('http://localhost:8080/admin')
+      ).rejects.toThrow(/SSRF/i);
+    });
+
+    it('rejects a malformed URL', async () => {
+      await expect(
+        fetchTheaterPage('not-a-url')
+      ).rejects.toThrow(/SSRF/i);
     });
   });
 });

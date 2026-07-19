@@ -14,6 +14,15 @@ NC='\033[0m'
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
+# Build the shared scraper-protocol workspace first — server & scraper
+# type-checks resolve its compiled declarations (dist/), which is gitignored.
+echo "${YELLOW}[pre-push] Building scraper-protocol workspace...${NC}"
+cd "$REPO_ROOT"
+if ! npm run build --workspace=allo-scrapper-scraper-protocol; then
+  echo "${RED}[pre-push] scraper-protocol build FAILED. Push aborted.${NC}"
+  exit 1
+fi
+
 echo "${YELLOW}[pre-push] Running TypeScript type-check...${NC}"
 
 # Check Server

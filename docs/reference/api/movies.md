@@ -80,7 +80,6 @@ GET /api/movies/:id
         "address": "100 Rue Mouffetard",
         "postal_code": "75005",
         "city": "Paris",
-        "screen_count": 1,
         "image_url": "https://...",
         "showtimes": [
           {

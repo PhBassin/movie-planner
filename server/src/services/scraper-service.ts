@@ -2,8 +2,8 @@ import { getRedisClient } from './redis-client.js';
 import { progressTracker } from './progress-tracker.js';
 import { createScrapeReport, getLatestScrapeReport } from '../db/report-queries.js';
 import { getTheaters } from '../db/theater-queries.js';
-import type { DB } from '../db/client.js';
-import { logger } from '../utils/logger.js';
+import type { DB } from '../db/index.js';
+import { TheaterNotFoundError } from '../utils/errors.js';
 import type { ScrapeAttempt } from '../db/scrape-attempt-queries.js';
 
 export class ScraperService {
@@ -22,7 +22,7 @@ export class ScraperService {
       const theaterExists = theaters.some(c => c.id === theaterId);
 
       if (!theaterExists) {
-        throw new Error(`Theater not found: ${theaterId}`);
+        throw new TheaterNotFoundError(theaterId);
       }
     }
 
@@ -83,25 +83,6 @@ export class ScraperService {
     return {
       isRunning: latestReport?.status === 'running',
       latestReport,
-    };
-  }
-
-  /**
-   * Subscribes an HTTP response stream to the progress tracker events.
-   */
-  subscribeToProgress(res: any, onClose: () => void) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-
-    progressTracker.addListener(res);
-    logger.info(`📡 SSE client connected (${progressTracker.getListenerCount()} total)`);
-
-    return () => {
-      progressTracker.removeListener(res);
-      logger.info(`📡 SSE client disconnected (${progressTracker.getListenerCount()} remaining)`);
-      onClose();
     };
   }
 }

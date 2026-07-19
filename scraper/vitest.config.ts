@@ -8,8 +8,9 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       // Exclude integration-heavy files that require a live DB/Redis connection.
-      // scraper/index.ts (orchestrator) and redis/client.ts are covered by
-      // integration tests, which are out of scope for Phase 1 unit tests.
+      // scraper/index.ts (thin orchestrator entry) and redis/client.ts require live
+      // infrastructure; core run logic is tested via the ScrapeRun class in
+      // scrape-run.ts and the helpers test file.
       exclude: [
         'src/scraper/index.ts',
         'src/redis/client.ts',

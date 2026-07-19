@@ -1,5 +1,5 @@
 import { createApp } from './app.js';
-import { db } from './db/client.js';
+import { db } from './db/internal/client.js';
 import { initializeDatabase } from './db/schema.js';
 import { logger } from './utils/logger.js';
 import { validateJWTSecret } from './utils/jwt-secret-validator.js';
@@ -44,8 +44,11 @@ async function startServer() {
     // Register database connection for dependency injection
     app.set('db', db);
 
-    // Start rate limit config refresher (hot-reload)
+    // Initialize rate-limit source from DB (falls back to env if DB unreachable),
+    // then start the background poller for hot-reload.
+    const { loadFromDb } = await import('./services/rate-limit-source.js');
     const { startConfigRefresher } = await import('./services/rate-limit-refresher.js');
+    await loadFromDb(db);
     startConfigRefresher(db);
 
     // Start server

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getTheaters, getTheaterConfigs, addTheater, updateTheaterConfig, deleteTheater, upsertTheater } from './theater-queries.js';
-import { type DB } from './client.js';
+import { getTheaters, getTheaterConfigs, addTheater, updateTheaterConfig, deleteTheater, upsertTheater, getTheaterCount } from './theater-queries.js';
+import { type DB } from './index.js';
 
 describe('Theater Queries', () => {
   describe('getTheaters', () => {
@@ -136,7 +136,6 @@ describe('Theater Queries', () => {
         address: '1 Rue de la Paix',
         postal_code: '75001',
         city: 'Paris',
-        screen_count: 3,
       });
 
       const sql: string = mockDb.query.mock.calls[0][0];
@@ -154,7 +153,6 @@ describe('Theater Queries', () => {
         address: '5 Rue Test',
         postal_code: '75002',
         city: 'Paris',
-        screen_count: 2,
         url: 'https://www.example-theater-site.com/seance/salle_gen_csalle=C0099.html',
       });
 
@@ -162,6 +160,46 @@ describe('Theater Queries', () => {
       // Use standard vitest expectation without casting to string array since arguments are unknown[]
       const params = mockDb.query.mock.calls[0][1] as unknown[];
       expect(params).toContain('https://www.example-theater-site.com/seance/salle_gen_csalle=C0099.html');
+    });
+  });
+
+  describe('getTheaterCount', () => {
+    it('should return the total theater count', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({
+          rows: [{ count: '42' }],
+        }),
+      } as unknown as DB;
+
+      const result = await getTheaterCount(mockDb);
+
+      expect(result).toBe(42);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('COUNT(*)'),
+        []
+      );
+    });
+
+    it('should return 0 when no theaters exist', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({
+          rows: [{ count: '0' }],
+        }),
+      } as unknown as DB;
+
+      const result = await getTheaterCount(mockDb);
+
+      expect(result).toBe(0);
+    });
+
+    it('should return 0 when count row is missing', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      const result = await getTheaterCount(mockDb);
+
+      expect(result).toBe(0);
     });
   });
 });

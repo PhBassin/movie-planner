@@ -47,6 +47,8 @@ Allo-scrapper is a **microservices architecture** with 4 parts communicating ove
 - `scrape-progress:*` — Progress tracking
 - `scrape-results:*` — Result delivery
 
+**Shared wire contract:** the canonical `ScrapeJob` discriminated union, `ProgressEvent`, `ScheduleChangeEvent`, and `ScrapeSummary` are owned by the `packages/scraper-protocol` workspace. Both the server (`server/src/services/redis-client.ts`, `server/src/services/progress-tracker.ts`) and the scraper (`scraper/src/redis/client.ts`, `scraper/src/types/scraper.ts`) re-export them from the protocol package, so the wire shape is defined exactly once. The protocol package also exposes `serializeJob` / `parseJob` to validate the discriminated union at the parse boundary — the safety net that catches drift between the two adapters.
+
 ---
 
 ## Data Flow (Full Cycle)

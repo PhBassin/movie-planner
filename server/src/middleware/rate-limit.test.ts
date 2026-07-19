@@ -1,10 +1,11 @@
 // Set secure JWT_SECRET BEFORE importing rate-limit
 process.env.JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import express from 'express';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import express, { type Request, type Response } from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import type { DB } from '../db/index.js';
 import {
   generalLimiter,
   authLimiter,
@@ -455,10 +456,152 @@ describe('Rate Limiting Middleware', () => {
       const limitedResponse = await request(tightApp)
         .get('/health')
         .set('X-Forwarded-For', clientIp);
-      
+
       expect(limitedResponse.status).toBe(429);
       expect(limitedResponse.body.success).toBe(false);
       expect(limitedResponse.body.error).toBe('Too many health check requests');
     });
+  });
+
+  describe('live source subscription', () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.resetModules();
+    });
+
+    function makeDb(rows: any[]): DB {
+      return {
+        query: vi.fn().mockResolvedValue({ rows }),
+      } as unknown as DB;
+    }
+
+    it('picks up new limits after source.loadFromDb updates the source', async () => {
+      const source = await import('../services/rate-limit-source.js');
+      const middleware = await import('./rate-limit.js');
+
+      await source.loadFromDb(makeDb([{
+        window_ms: 60000,
+        general_max: 1,
+        auth_max: 5,
+        register_max: 3,
+        register_window_ms: 3600000,
+        protected_max: 60,
+        scraper_max: 10,
+        public_max: 100,
+        health_max: 10,
+        health_window_ms: 60000,
+        updated_at: '2026-04-01T00:00:00.000Z',
+        updated_by: null,
+        environment: 'test',
+      }]));
+
+      const app = express();
+      app.set('trust proxy', 1);
+      app.get('/t', middleware.generalLimiter, (_req, res) => res.json({ ok: true }));
+
+      const r1 = await request(app).get('/t');
+      expect(r1.status).toBe(200);
+
+      const r2 = await request(app).get('/t');
+      expect(r2.status).toBe(429);
+    });
+
+    it('keeps env-derived limits when loadFromDb fails', async () => {
+      const source = await import('../services/rate-limit-source.js');
+      const middleware = await import('./rate-limit.js');
+
+      const failingDb = {
+        query: vi.fn().mockRejectedValue(new Error('DB down')),
+      } as unknown as DB;
+
+      await source.loadFromDb(failingDb);
+
+      const app = express();
+      app.set('trust proxy', 1);
+      app.get('/t', middleware.generalLimiter, (_req, res) => res.json({ ok: true }));
+
+      for (let i = 0; i < 10; i++) {
+        const r = await request(app).get('/t');
+        expect(r.status).toBe(200);
+      }
+    });
+  });
+
+  describe('each limiter reflects its own configured max after refresh', () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    function makeDb(row: Record<string, unknown>): DB {
+      return {
+        query: vi.fn().mockResolvedValue({ rows: [row] }),
+      } as unknown as DB;
+    }
+
+    const baseRow = {
+      window_ms: 60000,
+      general_max: 100,
+      auth_max: 100,
+      register_max: 100,
+      register_window_ms: 3600000,
+      protected_max: 100,
+      scraper_max: 100,
+      public_max: 100,
+      health_max: 100,
+      health_window_ms: 60000,
+      updated_at: '2026-04-01T00:00:00.000Z',
+      updated_by: null,
+      environment: 'test',
+    };
+
+    // Drive only the target limiter's max to 1 (siblings stay 100).
+    // Correct wiring => 2nd request is 429. A mis-wiring reads a sibling's
+    // key (100) => 2nd request is 200 => test fails.
+    // auth uses skipSuccessfulRequests, so its handler must fail (>=400) to count.
+    // health skips internal IPs, so it needs an external X-Forwarded-For.
+    const cases = [
+      { exportName: 'generalLimiter', maxKey: 'general_max', method: 'get' as const, handlerStatus: 200 },
+      { exportName: 'authLimiter', maxKey: 'auth_max', method: 'post' as const, handlerStatus: 401 },
+      { exportName: 'registerLimiter', maxKey: 'register_max', method: 'post' as const, handlerStatus: 201 },
+      { exportName: 'protectedLimiter', maxKey: 'protected_max', method: 'get' as const, handlerStatus: 200 },
+      { exportName: 'scraperLimiter', maxKey: 'scraper_max', method: 'post' as const, handlerStatus: 200 },
+      { exportName: 'publicLimiter', maxKey: 'public_max', method: 'get' as const, handlerStatus: 200 },
+      { exportName: 'healthCheckLimiter', maxKey: 'health_max', method: 'get' as const, handlerStatus: 200, externalIp: '203.0.113.42' },
+    ];
+
+    it.each(cases)(
+      '$exportName enforces max=1 from its own $maxKey after refresh (2nd request is 429)',
+      async ({ exportName, maxKey, method, handlerStatus, externalIp }) => {
+        const source = await import('../services/rate-limit-source.js');
+        const middleware = await import('./rate-limit.js');
+
+        await source.loadFromDb(makeDb({ ...baseRow, [maxKey]: 1 }));
+
+        const handler = (middleware as Record<string, RequestHandler>)[exportName];
+        const limiterApp = express();
+        limiterApp.set('trust proxy', 1);
+        limiterApp.use(express.json());
+        const respond = (_req: Request, res: Response) => res.status(handlerStatus).json({ ok: true });
+        if (method === 'get') {
+          limiterApp.get('/x', handler, respond);
+        } else {
+          limiterApp.post('/x', handler, respond);
+        }
+
+        const send = () => {
+          const r = method === 'get' ? request(limiterApp).get('/x') : request(limiterApp).post('/x').send({});
+          return externalIp ? r.set('X-Forwarded-For', externalIp) : r;
+        };
+
+        const first = await send();
+        expect(first.status).toBe(handlerStatus);
+
+        const second = await send();
+        expect(second.status).toBe(429);
+      },
+    );
   });
 });

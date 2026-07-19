@@ -1,53 +1,23 @@
 import Redis from 'ioredis';
-import type { ProgressEvent } from './progress-tracker.js';
+import type {
+  ProgressEvent,
+  ScrapeJob,
+  ScrapeJobAddTheater,
+  ScheduleChangeEvent,
+} from 'allo-scrapper-scraper-protocol';
 import { logger } from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
-// Types
+// Types — re-exported from allo-scrapper-scraper-protocol so existing
+// importers keep working without churn. The wire contract lives in one place.
 // ---------------------------------------------------------------------------
 
-interface BaseScrapeJob {
-  reportId: number;
-  /** OpenTelemetry trace context propagated from the HTTP request */
-  traceContext?: Record<string, string>;
-}
-
-export interface ScheduleChangeEvent {
-  action: 'created' | 'updated' | 'deleted';
-  scheduleId: number;
-  schedule?: {
-    id: number;
-    name: string;
-    cron_expression: string;
-    enabled: boolean;
-    target_theaters?: string[] | null;
-  };
-}
-
-export interface ScrapeJobScrape extends BaseScrapeJob {
-  type: 'scrape';
-  triggerType: 'manual' | 'cron';
-  options?: {
-    mode?: 'weekly' | 'from_today' | 'from_today_limited';
-    days?: number;
-    theaterId?: string;
-    movieId?: number;
-    resumeMode?: boolean;
-    pendingAttempts?: Array<{ theater_id: string; date: string }>;
-  };
-}
-
-export interface ScrapeJobAddTheater extends BaseScrapeJob {
-  type: 'add_theater';
-  triggerType: 'manual';
-  /** The Allociné theater URL to add and scrape */
-  url: string;
-}
-
-/**
- * Discriminated union of all job types the scraper can process.
- */
-export type ScrapeJob = ScrapeJobScrape | ScrapeJobAddTheater;
+export type {
+  ScrapeJob,
+  ScrapeJobScrape,
+  ScrapeJobAddTheater,
+  ScheduleChangeEvent,
+} from 'allo-scrapper-scraper-protocol';
 
 // ---------------------------------------------------------------------------
 // RedisClient

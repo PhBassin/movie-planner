@@ -1,5 +1,5 @@
 // fallow-ignore-file security-sink
-import { type DB } from './client.js';
+import { type DB } from './index.js';
 import { type Role, type Permission, type RoleWithPermissions, type PermissionCategoryLabel } from '../types/role.js';
 
 /**
@@ -75,6 +75,56 @@ export async function getRoleByName(db: DB, name: string): Promise<Role | undefi
 }
 
 /**
+ * Get just the role name by role ID (no permissions, no other columns).
+ * Returns undefined if not found. Used by routes that only need to compare
+ * the role name (e.g. last-admin demotion guard) and want to avoid the
+ * permissions fetch that getRoleById triggers.
+ */
+export async function getRoleNameById(db: DB, roleId: number): Promise<string | undefined> {
+  const result = await db.query<{ name: string }>(
+    'SELECT name FROM roles WHERE id = $1',
+    [roleId]
+  );
+
+  return result.rows[0]?.name;
+}
+
+/**
+ * Check whether a role with the given ID exists.
+ * Cheap existence check that avoids fetching the full role row.
+ */
+export async function roleExists(db: DB, roleId: number): Promise<boolean> {
+  const result = await db.query<{ exists: boolean }>(
+    'SELECT EXISTS(SELECT 1 FROM roles WHERE id = $1) AS exists',
+    [roleId]
+  );
+
+  return result.rows[0]?.exists === true;
+}
+
+/**
+ * Count how many users currently hold the given role.
+ * Used by the role-deletion route to enforce "role must not be in use".
+ *
+ * Throws if the row exists but the count is non-numeric or null — that
+ * indicates a malformed response (SQL bug, schema drift, broken migration),
+ * which the route handler must NOT silently treat as "role is unused".
+ */
+export async function getRoleInUseCount(db: DB, roleId: number): Promise<number> {
+  const result = await db.query<{ count: string }>(
+    'SELECT COUNT(*) as count FROM users WHERE role_id = $1',
+    [roleId]
+  );
+  const row = result.rows[0];
+  if (!row) return 0;
+  const count = parseInt(row.count, 10);
+  if (Number.isNaN(count)) {
+    throw new Error('getRoleInUseCount: unexpected non-numeric count from database');
+  }
+  return count;
+}
+
+/**
  * Create a new role
  */
 export async function createRole(
@@ -112,27 +162,21 @@ export async function updateRole(
 }
 
 /**
- * Delete a role by ID
- * Returns false if the role is a system role (is_system=true) or not found
- * Returns true if successfully deleted
+ * Delete a role by ID without any pre-checks.
+ *
+ * Callers MUST have already verified existence and `is_system` (typically via
+ * `getRoleById` + a system-role guard in the route). The function issues a
+ * single `DELETE` and returns whether the row was actually removed — `false`
+ * indicates a TOCTOU race where the row was deleted between the caller's
+ * check and this call.
  */
-export async function deleteRole(db: DB, roleId: number): Promise<boolean> {
-  const lookupResult = await db.query<Role>(
-    'SELECT id, name, description, is_system, created_at FROM roles WHERE id = $1',
+export async function deleteRoleById(db: DB, roleId: number): Promise<boolean> {
+  const result = await db.query(
+    'DELETE FROM roles WHERE id = $1',
     [roleId]
   );
 
-  if (lookupResult.rows.length === 0) {
-    return false;
-  }
-
-  const role = lookupResult.rows[0];
-  if (role.is_system) {
-    return false;
-  }
-
-  await db.query('DELETE FROM roles WHERE id = $1', [roleId]);
-  return true;
+  return (result.rowCount ?? 0) > 0;
 }
 
 /**

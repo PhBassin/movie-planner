@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { QueryResult } from 'pg';
 import {
-  getRateLimits,
   updateRateLimits,
   resetRateLimits,
   getRateLimitAuditLog,
   getValidationConstraints,
   type RateLimitConfigRow,
 } from './rate-limit-queries.js';
-import type { DB } from './client.js';
+import type { DB } from './index.js';
 
 // Helper to create mock QueryResult
 function mockQueryResult<T = any>(rows: T[]): QueryResult<T> {
@@ -23,7 +22,6 @@ function mockQueryResult<T = any>(rows: T[]): QueryResult<T> {
 
 describe('rate-limit-queries', () => {
   const mockConfigRow: RateLimitConfigRow = {
-    id: 1,
     window_ms: 900000,
     general_max: 100,
     auth_max: 5,
@@ -38,57 +36,6 @@ describe('rate-limit-queries', () => {
     updated_by: 1,
     environment: 'production',
   };
-
-  describe('getRateLimits', () => {
-    it('should fetch rate limit config from database', async () => {
-      const mockDb = {
-        query: vi.fn()
-          .mockResolvedValueOnce({ rows: [mockConfigRow] })
-          .mockResolvedValueOnce({ rows: [{ username: 'admin' }] }),
-        end: vi.fn(),
-      } as any as DB;
-
-      const config = await getRateLimits(mockDb);
-
-      expect(config.config).toEqual({
-        windowMs: 900000,
-        generalMax: 100,
-        authMax: 5,
-        registerMax: 3,
-        registerWindowMs: 3600000,
-        protectedMax: 60,
-        scraperMax: 10,
-        publicMax: 100,
-        healthMax: 10,
-        healthWindowMs: 60000,
-      });
-      expect(config.source).toBe('database');
-      expect(config.updatedBy).toEqual({ id: 1, username: 'admin' });
-      expect(config.environment).toBe('production');
-    });
-
-    it('should throw error if config not found', async () => {
-      const mockDb = {
-        query: vi.fn().mockResolvedValue({ rows: [] }),
-        end: vi.fn(),
-      } as any as DB;
-
-      await expect(getRateLimits(mockDb)).rejects.toThrow('Rate limit configuration not found');
-    });
-
-    it('should handle null updated_by', async () => {
-      const mockDb = {
-        query: vi.fn().mockResolvedValue({
-          rows: [{ ...mockConfigRow, updated_by: null }]
-        }),
-        end: vi.fn(),
-      } as any as DB;
-
-      const config = await getRateLimits(mockDb);
-
-      expect(config.updatedBy).toBeNull();
-    });
-  });
 
   describe('updateRateLimits', () => {
     it('should update rate limits and create audit log', async () => {
@@ -280,6 +227,51 @@ describe('rate-limit-queries', () => {
 
       expect(config.config.generalMax).toBe(100);
       expect(config.config.authMax).toBe(5);
+    });
+
+    it('should source defaults from the canonical RateLimitSource — single source of truth', async () => {
+      const { DEFAULT_CONFIG } = await import('../services/rate-limit-source.js');
+
+      const dirtyRow = {
+        ...mockConfigRow,
+        general_max: 500,
+        auth_max: 20,
+        scraper_max: 99,
+      };
+
+      const updateCalls: { params: any[] }[] = [];
+      const mockDb = {
+        query: vi.fn((sql: string, params?: any[]) => {
+          if (sql === 'BEGIN' || sql === 'COMMIT') {
+            return Promise.resolve({ rows: [] });
+          }
+          if (sql.includes('FOR UPDATE')) {
+            return Promise.resolve({ rows: [dirtyRow] });
+          }
+          if (sql.includes('UPDATE rate_limit_configs')) {
+            updateCalls.push({ params: params ?? [] });
+            return Promise.resolve({ rows: [mockConfigRow] });
+          }
+          if (sql.includes('INSERT INTO rate_limit_audit_log')) {
+            return Promise.resolve({ rows: [] });
+          }
+          return Promise.resolve({ rows: [] });
+        }),
+        end: vi.fn(),
+      } as any as DB;
+
+      await resetRateLimits(mockDb, 1, 'admin', 'admin', '127.0.0.1', 'Test');
+
+      expect(updateCalls).toHaveLength(1);
+      const params = updateCalls[0].params;
+      const expected = [
+        DEFAULT_CONFIG.generalMax,
+        DEFAULT_CONFIG.authMax,
+        DEFAULT_CONFIG.scraperMax,
+      ];
+      for (const value of expected) {
+        expect(params).toContain(value);
+      }
     });
   });
 

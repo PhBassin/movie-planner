@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { DB } from './client.js';
+import type { DB } from './index.js';
 import type { Role, Permission, RoleWithPermissions } from '../types/role.js';
 import {
   getAllRoles,
@@ -7,13 +7,16 @@ import {
   getRoleByName,
   createRole,
   updateRole,
-  deleteRole,
+  deleteRoleById,
   getAllPermissions,
   getRolePermissions,
   assignPermissionsToRole,
   removePermissionsFromRole,
   setRolePermissions,
   getPermissionNamesByRoleId,
+  roleExists,
+  getRoleNameById,
+  getRoleInUseCount,
 } from './role-queries.js';
 
 describe('Role & Permission Queries', () => {
@@ -203,54 +206,37 @@ describe('Role & Permission Queries', () => {
   });
 
   // -------------------------------------------------------------------------
-  // deleteRole
+  // deleteRoleById
   // -------------------------------------------------------------------------
-  describe('deleteRole', () => {
-    it('should delete a non-system role and return true', async () => {
-      const mockRole: Role = {
-        id: 3, name: 'moderator', description: null, is_system: false, created_at: '2024-01-01T00:00:00Z',
-      };
+  describe('deleteRoleById', () => {
+    it('should delete a role by id and return true when the row exists', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
 
-      vi.mocked(mockDb.query)
-        .mockResolvedValueOnce({ rows: [mockRole], rowCount: 1 } as any)  // lookup
-        .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);           // delete
-
-      const result = await deleteRole(mockDb, 3);
+      const result = await deleteRoleById(mockDb, 3);
 
       expect(result).toBe(true);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM roles'),
+        [3]
+      );
     });
 
-    it('should return false if role is a system role (is_system=true)', async () => {
-      const systemRole: Role = {
-        id: 1, name: 'admin', description: 'Administrateur', is_system: true, created_at: '2024-01-01T00:00:00Z',
-      };
-
-      vi.mocked(mockDb.query).mockResolvedValue({ rows: [systemRole], rowCount: 1 } as any);
-
-      const result = await deleteRole(mockDb, 1);
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false for non-existent role', async () => {
+    it('should return false when no role matches the id (rowCount=0)', async () => {
       vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
 
-      const result = await deleteRole(mockDb, 999);
+      const result = await deleteRoleById(mockDb, 999);
 
       expect(result).toBe(false);
     });
 
-    it('should not issue DELETE query for system roles', async () => {
-      const systemRole: Role = {
-        id: 1, name: 'admin', description: null, is_system: true, created_at: '2024-01-01T00:00:00Z',
-      };
+    it('should issue exactly one DELETE query and never a SELECT on roles', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
 
-      vi.mocked(mockDb.query).mockResolvedValue({ rows: [systemRole], rowCount: 1 } as any);
+      await deleteRoleById(mockDb, 3);
 
-      await deleteRole(mockDb, 1);
-
-      // Only lookup query should have been called, not a DELETE
       expect(mockDb.query).toHaveBeenCalledTimes(1);
+      const [sql] = vi.mocked(mockDb.query).mock.calls[0];
+      expect(sql).toMatch(/^\s*DELETE\s+FROM\s+roles\s+WHERE\s+id\s+=\s+\$1\s*;?\s*$/i);
     });
   });
 
@@ -448,6 +434,137 @@ describe('Role & Permission Queries', () => {
       const result = await getPermissionNamesByRoleId(mockDb, 999);
 
       expect(result).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // roleExists
+  // -------------------------------------------------------------------------
+  describe('roleExists', () => {
+    it('should return true when a row matches the role id', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({
+        rows: [{ exists: true }],
+        rowCount: 1,
+      } as any);
+
+      const result = await roleExists(mockDb, 2);
+
+      expect(result).toBe(true);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('FROM roles'),
+        [2]
+      );
+    });
+
+    it('should return false when no row matches the role id', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({
+        rows: [{ exists: false }],
+        rowCount: 1,
+      } as any);
+
+      const result = await roleExists(mockDb, 999);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false when the query returns no rows', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      const result = await roleExists(mockDb, 999);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getRoleNameById
+  // -------------------------------------------------------------------------
+  describe('getRoleNameById', () => {
+    it('should return the role name when found', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({
+        rows: [{ name: 'admin' }],
+        rowCount: 1,
+      } as any);
+
+      const result = await getRoleNameById(mockDb, 1);
+
+      expect(result).toBe('admin');
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT name FROM roles'),
+        [1]
+      );
+    });
+
+    it('should return undefined when the role does not exist', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      const result = await getRoleNameById(mockDb, 999);
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getRoleInUseCount
+  // -------------------------------------------------------------------------
+  describe('getRoleInUseCount', () => {
+    it('returns the number of users assigned to the role', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: '5' }],
+        rowCount: 1,
+      } as any);
+
+      const result = await getRoleInUseCount(mockDb, 42);
+
+      expect(result).toBe(5);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT COUNT(*)'),
+        [42],
+      );
+    });
+
+    it('returns 0 when no users are assigned to the role', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: '0' }],
+        rowCount: 1,
+      } as any);
+
+      const result = await getRoleInUseCount(mockDb, 7);
+
+      expect(result).toBe(0);
+    });
+
+    it('returns 0 when the query returns no rows', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [],
+        rowCount: 0,
+      } as any);
+
+      const result = await getRoleInUseCount(mockDb, 99);
+
+      expect(result).toBe(0);
+    });
+
+    it('throws when count is null (malformed row, not a legitimate empty result)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: null }],
+        rowCount: 1,
+      } as any);
+
+      await expect(getRoleInUseCount(mockDb, 11)).rejects.toThrow(
+        /getRoleInUseCount: unexpected non-numeric count from database/,
+      );
+    });
+
+    it('throws when count is non-numeric (malformed row, not a legitimate empty result)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValueOnce({
+        rows: [{ count: 'not-a-number' }],
+        rowCount: 1,
+      } as any);
+
+      await expect(getRoleInUseCount(mockDb, 13)).rejects.toThrow(
+        /getRoleInUseCount: unexpected non-numeric count from database/,
+      );
     });
   });
 });

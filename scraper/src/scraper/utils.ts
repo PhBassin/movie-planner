@@ -62,3 +62,14 @@ export function isValidAllocineUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * Throws if the URL is not a valid https://www.allocine.fr/... URL.
+ * The single source of truth for the SSRF rule — every outbound
+ * fetch path must call this before any I/O.
+ */
+export function validateExternalUrl(url: string): void {
+  if (!isValidAllocineUrl(url)) {
+    throw new Error(`SSRF guard: invalid Allociné URL: ${url}`);
+  }
+}

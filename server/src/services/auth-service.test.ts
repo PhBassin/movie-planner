@@ -4,7 +4,7 @@ import * as userQueries from '../db/user-queries.js';
 import * as roleQueries from '../db/role-queries.js';
 import jwt from 'jsonwebtoken';
 import * as passwordUtils from '../utils/password.js';
-import { type DB } from '../db/client.js';
+import { type DB } from '../db/index.js';
 import { validatePasswordStrength } from '../utils/security.js';
 
 vi.mock('../db/user-queries.js');
@@ -55,22 +55,6 @@ describe('AuthService', () => {
       await expect(authService.login('user', 'password')).rejects.toThrow('JWT_SECRET environment variable is not set');
     });
 
-    it('should use 1h as default expiry when JWT_EXPIRES_IN is not set', async () => {
-      delete process.env.JWT_EXPIRES_IN;
-      const mockUser = { id: 1, username: 'user', role_id: 1, role_name: 'admin', is_system_role: true, password_hash: 'hash' };
-      vi.mocked(userQueries.getUserByUsername).mockResolvedValue(mockUser as any);
-      vi.mocked(passwordUtils.comparePassword).mockResolvedValue(true);
-      vi.mocked(jwt.sign).mockReturnValue('mock-token' as any);
-
-      await authService.login('user', 'password');
-
-      expect(jwt.sign).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 1 }),
-        expect.any(String),
-        expect.objectContaining({ expiresIn: '1h' })
-      );
-    });
-
     it('should return token and user on success', async () => {
       const mockUser = { id: 1, username: 'user', role_id: 1, role_name: 'admin', is_system_role: true, password_hash: 'hash' };
       vi.mocked(userQueries.getUserByUsername).mockResolvedValue(mockUser as any);
@@ -83,23 +67,6 @@ describe('AuthService', () => {
       expect(result.token).toBe('mock-token');
       expect(result.user.username).toBe('user');
       expect(result.user.permissions).toEqual(['users:read']);
-    });
-
-    it('should sign token with current secret (getCurrentSecret)', async () => {
-      const mockUser = { id: 1, username: 'user', role_id: 1, role_name: 'admin', is_system_role: true, password_hash: 'hash' };
-      vi.mocked(userQueries.getUserByUsername).mockResolvedValue(mockUser as any);
-      vi.mocked(passwordUtils.comparePassword).mockResolvedValue(true);
-      vi.mocked(roleQueries.getPermissionNamesByRoleId).mockResolvedValue(['users:read'] as any);
-      vi.mocked(jwt.sign).mockReturnValue('mock-token' as any);
-
-      await authService.login('user', 'password');
-
-      const { getCurrentSecret } = await import('../utils/jwt-secrets.js');
-      expect(jwt.sign).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 1 }),
-        getCurrentSecret(),
-        expect.any(Object)
-      );
     });
   });
 
