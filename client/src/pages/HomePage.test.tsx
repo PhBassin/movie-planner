@@ -172,6 +172,25 @@ describe('HomePage — bouton Maintenant', () => {
     vi.useRealTimers();
   });
 
+  it('renders the FilterBar instead of the old sticky container', async () => {
+    renderHomePage();
+    await waitFor(() => expect(screen.queryByTestId('filter-bar')).toBeInTheDocument());
+    expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
+    expect(screen.queryByTestId('sticky-search-date-container')).not.toBeInTheDocument();
+  });
+
+  it('renders the reset button in the FilterBar', async () => {
+    renderHomePage();
+    await waitFor(() => expect(screen.queryByTestId('filter-reset')).toBeInTheDocument());
+    expect(screen.getByTestId('filter-reset')).toBeInTheDocument();
+  });
+
+  it('does not render the old "Tous les jours" button', async () => {
+    renderHomePage();
+    await waitFor(() => expect(screen.queryByTestId('filter-bar')).toBeInTheDocument());
+    expect(screen.queryByTestId('day-selector-all')).not.toBeInTheDocument();
+  });
+
   it('renders the Maintenant button in the DaySelector', async () => {
     renderHomePage();
     await waitFor(() => expect(screen.queryByRole('button', { name: /maintenant/i })).toBeInTheDocument());
