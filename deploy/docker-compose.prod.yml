@@ -112,6 +112,9 @@ services:
     image: containrrr/watchtower:latest
     restart: unless-stopped
     environment:
+      # Pin Docker API version — Watchtower's embedded SDK defaults to an old
+      # version (1.25) that Docker Engine 25+/29+ rejects. Same fix as Traefik.
+      DOCKER_API_VERSION: "1.44"
       # Poll interval in seconds (300 = 5 min)
       WATCHTOWER_POLL_INTERVAL: 300
       # Only update containers with com.centurylinklabs.watchtower.enable=true
