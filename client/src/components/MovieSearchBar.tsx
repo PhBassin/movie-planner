@@ -51,7 +51,7 @@ export default function MovieSearchBar({
     }
 
     performSearch();
-  }, [debouncedQuery]);
+  }, [debouncedQuery, onFilter]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

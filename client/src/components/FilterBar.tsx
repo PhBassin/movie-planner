@@ -6,7 +6,7 @@ import type { Movie } from '../types';
 interface FilterBarProps {
   weekStart: string;
   selectedDate: string;
-  onSelectDate: (date: string) => void;
+  onSelectDate: (date: string | null) => void;
   onNow: (date: string, time: string) => void;
   isNowActive: boolean;
   onFilter: (movies: Movie[]) => void;
@@ -39,7 +39,7 @@ function FilterBar({
         <DaySelector
           weekStart={weekStart}
           selectedDate={selectedDate || null}
-          onSelectDate={(date) => onSelectDate(date || '')}
+          onSelectDate={onSelectDate}
           onNow={onNow}
           isNowActive={isNowActive}
         />

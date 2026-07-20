@@ -50,8 +50,8 @@ export default function HomePage() {
   const isLoading = isLoadingTheaters || isLoadingMovies;
   const error = moviesError instanceof Error ? moviesError.message : null;
 
-  const handleDateSelect = useCallback((date: string) => {
-    selectDate(date);
+  const handleDateSelect = useCallback((date: string | null) => {
+    selectDate(date || '');
   }, [selectDate]);
 
   const handleFilter = useCallback((movies: Movie[]) => {
@@ -107,7 +107,7 @@ export default function HomePage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      {/* Title and Date Info - Above sticky header */}
+      {/* Title and Date Info */}
       <div className="mb-4">
         <h1 className="text-4xl font-bold mb-3">
           {selectedDate ? 'Films du jour' : 'Au programme cette semaine'}
