@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -129,5 +130,58 @@ describe('MovieSearchBar — inline filter mode', () => {
     // onFilter shouldn't be called because it wasn't provided
     // (no error thrown means the code handles the missing prop gracefully)
     expect(screen.getByRole('link', { name: /Inception/i })).toBeInTheDocument();
+  });
+
+  it('renders a "Voir la fiche" affordance in each dropdown result', async () => {
+    const onFilter = vi.fn();
+    const mockResults = [makeMovie(1, 'Inception'), makeMovie(2, 'Interstellar')];
+    (searchMovies as any).mockResolvedValue(mockResults);
+
+    renderSearchBar({ onFilter });
+
+    await userEvent.type(screen.getByTestId('search-input'), 'In');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-results')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('search-result-fiche-1')).toHaveTextContent('Voir la fiche');
+    expect(screen.getByTestId('search-result-fiche-2')).toHaveTextContent('Voir la fiche');
+  });
+
+  it('clears local input state when resetKey prop changes', async () => {
+    const onFilter = vi.fn();
+    (searchMovies as any).mockResolvedValue([makeMovie(1, 'Inception')]);
+
+    function Harness() {
+      const [resetKey, setResetKey] = useState(0);
+      return (
+        <>
+          <MovieSearchBar onFilter={onFilter} resetKey={resetKey} />
+          <button data-testid="bump-reset" onClick={() => setResetKey(k => k + 1)}>
+            bump
+          </button>
+        </>
+      );
+    }
+
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>
+    );
+
+    const input = screen.getByTestId('search-input') as HTMLInputElement;
+    await userEvent.type(input, 'In');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-results')).toBeInTheDocument();
+    });
+    expect(input.value).toBe('In');
+
+    await userEvent.click(screen.getByTestId('bump-reset'));
+
+    expect(input.value).toBe('');
+    expect(screen.queryByTestId('search-results')).not.toBeInTheDocument();
   });
 });

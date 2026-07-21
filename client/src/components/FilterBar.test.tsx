@@ -6,9 +6,10 @@ import FilterBar from './FilterBar';
 
 // Mock MovieSearchBar
 vi.mock('./MovieSearchBar', () => ({
-  default: ({ onFilter }: any) => (
+  default: ({ onFilter, resetKey }: any) => (
     <input
       data-testid="search-input"
+      data-reset-key={resetKey ?? 0}
       placeholder="Rechercher un film..."
       onChange={(e) => onFilter?.([{ id: 1, title: e.target.value, genres: [], actors: [], source_url: '' }])}
     />
@@ -118,5 +119,18 @@ describe('FilterBar', () => {
     renderFilterBar();
     const container = screen.getByTestId('filter-bar');
     expect(container.className).toContain('flex');
+  });
+
+  it('uses responsive layout (column on mobile, row on desktop)', () => {
+    renderFilterBar();
+    const container = screen.getByTestId('filter-bar');
+    expect(container.className).toContain('flex-col');
+    expect(container.className).toContain('sm:flex-row');
+  });
+
+  it('forwards resetKey to MovieSearchBar', () => {
+    renderFilterBar({ resetKey: 3 } as any);
+    const input = screen.getByTestId('search-input');
+    expect(input.getAttribute('data-reset-key')).toBe('3');
   });
 });

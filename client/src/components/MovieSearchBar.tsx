@@ -9,20 +9,34 @@ interface MovieSearchBarProps {
   className?: string;
   placeholder?: string;
   onFilter?: (movies: Movie[] | null) => void;
+  resetKey?: number;
 }
 
 export default function MovieSearchBar({ 
   className = '', 
   placeholder = 'Rechercher un film...',
   onFilter,
+  resetKey = 0,
 }: MovieSearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [lastResetKey, setLastResetKey] = useState(resetKey);
   const debouncedQuery = useDebounce(query, 300);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Reset internal state when parent bumps resetKey (e.g. FilterBar reset click).
+  // Canonical "adjust state during render when a prop changes" pattern — see
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  if (resetKey !== lastResetKey) {
+    setLastResetKey(resetKey);
+    setQuery('');
+    setResults([]);
+    setIsOpen(false);
+    setSelectedIndex(-1);
+  }
 
   // Perform search when debounced query changes
   useEffect(() => {
@@ -222,6 +236,9 @@ export default function MovieSearchBar({
                       </span>
                     </div>
                   )}
+                  <span className="inline-block mt-1.5 text-xs text-primary font-semibold" data-testid={`search-result-fiche-${movie.id}`}>
+                    Voir la fiche →
+                  </span>
                 </div>
               </Link>
             ))

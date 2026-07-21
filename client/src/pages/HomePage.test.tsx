@@ -39,6 +39,7 @@ vi.mock('../api/client', () => ({
   getMoviesByDate: vi.fn(),
   getTheaters: vi.fn(),
   addTheater: vi.fn(),
+  searchMovies: vi.fn(),
 }));
 
 describe('HomePage', () => {
@@ -228,5 +229,23 @@ describe('HomePage — bouton Maintenant', () => {
     await waitFor(() => {
       expect(screen.getByText('Film Futur')).toBeInTheDocument();
     });
+  });
+
+  it('reset button clears the search input text (end-to-end)', async () => {
+    (clientApi.searchMovies as any).mockResolvedValue([
+      { id: 101, title: 'Film Passé', genres: [], actors: [], source_url: '' },
+    ]);
+
+    renderHomePage();
+    await waitFor(() => expect(screen.getByTestId('search-input')).toBeInTheDocument());
+
+    const input = screen.getByTestId('search-input') as HTMLInputElement;
+    await fireEvent.change(input, { target: { value: 'Film' } });
+
+    await waitFor(() => expect(input.value).toBe('Film'));
+
+    fireEvent.click(screen.getByTestId('filter-reset'));
+
+    await waitFor(() => expect(input.value).toBe(''));
   });
 });

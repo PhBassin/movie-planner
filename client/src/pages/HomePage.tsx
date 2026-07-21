@@ -15,6 +15,7 @@ export default function HomePage() {
   const { selectedDate, afterTime, selectDate, selectNow, resetAll } = useDateTimeFilter();
   const { isAuthenticated, hasPermission } = useContext(AuthContext);
   const [searchResults, setSearchResults] = useState<Movie[] | null>(null);
+  const [resetKey, setResetKey] = useState(0);
 
   const { data: theaters = [], isLoading: isLoadingTheaters } = useQuery({
     queryKey: ['theaters'],
@@ -61,6 +62,7 @@ export default function HomePage() {
   const handleReset = useCallback(() => {
     resetAll();
     setSearchResults(null);
+    setResetKey(k => k + 1);
   }, [resetAll]);
   const formatterDate = useMemo(() => new Intl.DateTimeFormat('fr-FR', {
     day: 'numeric',
@@ -141,6 +143,7 @@ export default function HomePage() {
             isNowActive={afterTime !== null}
             onFilter={handleFilter}
             onReset={handleReset}
+            resetKey={resetKey}
           />
         )}
       </div>
