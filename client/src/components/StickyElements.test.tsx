@@ -64,15 +64,17 @@ const renderWithProviders = (ui: React.ReactElement) => {
 };
 
 describe('Sticky Elements Stickiness', () => {
-  it('HomePage filter bar should be rendered', async () => {
+  it('HomePage filter bar container should be sticky with offset', async () => {
     (clientApi.getTheaters as any).mockResolvedValue([]);
     (clientApi.getWeeklyMovies as any).mockResolvedValue({ movies: [], weekStart: '2024-01-01' });
 
     renderWithProviders(<HomePage />);
 
-    const filterBar = await screen.findByTestId('filter-bar');
-    expect(filterBar).toBeInTheDocument();
-    expect(filterBar).toHaveClass('flex');
+    const stickySection = await screen.findByTestId('sticky-search-date-container');
+    expect(stickySection).toBeInTheDocument();
+    expect(stickySection).toHaveClass('sticky');
+    expect(stickySection).toHaveClass('z-40');
+    expect(stickySection).toHaveStyle({ top: 'var(--layout-header-offset, 64px)' });
   });
 
   it('TheaterPage date selector should be sticky with offset', async () => {

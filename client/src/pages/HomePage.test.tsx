@@ -172,11 +172,11 @@ describe('HomePage — bouton Maintenant', () => {
     vi.useRealTimers();
   });
 
-  it('renders the FilterBar instead of the old sticky container', async () => {
+  it('renders the FilterBar inside the sticky container', async () => {
     renderHomePage();
     await waitFor(() => expect(screen.queryByTestId('filter-bar')).toBeInTheDocument());
     expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
-    expect(screen.queryByTestId('sticky-search-date-container')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sticky-search-date-container')).toBeInTheDocument();
   });
 
   it('renders the reset button in the FilterBar', async () => {

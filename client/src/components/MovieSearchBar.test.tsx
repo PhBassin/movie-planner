@@ -36,7 +36,7 @@ describe('MovieSearchBar — inline filter mode', () => {
     vi.clearAllMocks();
   });
 
-  const renderSearchBar = (props: { onFilter?: (movies: Movie[]) => void } = {}) =>
+  const renderSearchBar = (props: { onFilter?: (movies: Movie[] | null) => void } = {}) =>
     render(
       <MemoryRouter>
         <MovieSearchBar {...props} />
@@ -58,7 +58,7 @@ describe('MovieSearchBar — inline filter mode', () => {
     });
   });
 
-  it('calls onFilter with empty array when query is cleared', async () => {
+  it('calls onFilter with null when query is cleared (inactive)', async () => {
     const onFilter = vi.fn();
     const mockResults = [makeMovie(1, 'Inception')];
     (searchMovies as any).mockResolvedValue(mockResults);
@@ -74,6 +74,20 @@ describe('MovieSearchBar — inline filter mode', () => {
 
     onFilter.mockClear();
     await userEvent.clear(input);
+
+    await waitFor(() => {
+      expect(onFilter).toHaveBeenCalledWith(null);
+    });
+  });
+
+  it('calls onFilter with empty array when search yields no matches (active empty)', async () => {
+    const onFilter = vi.fn();
+    (searchMovies as any).mockResolvedValue([]);
+
+    renderSearchBar({ onFilter });
+
+    const input = screen.getByTestId('search-input');
+    await userEvent.type(input, 'zzz');
 
     await waitFor(() => {
       expect(onFilter).toHaveBeenCalledWith([]);

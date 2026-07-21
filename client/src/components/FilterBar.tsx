@@ -9,7 +9,7 @@ interface FilterBarProps {
   onSelectDate: (date: string | null) => void;
   onNow: (date: string, time: string) => void;
   isNowActive: boolean;
-  onFilter: (movies: Movie[]) => void;
+  onFilter: (movies: Movie[] | null) => void;
   onReset: () => void;
 }
 

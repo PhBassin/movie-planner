@@ -8,7 +8,7 @@ import type { Movie } from '../types';
 interface MovieSearchBarProps {
   className?: string;
   placeholder?: string;
-  onFilter?: (movies: Movie[]) => void;
+  onFilter?: (movies: Movie[] | null) => void;
 }
 
 export default function MovieSearchBar({ 
@@ -30,7 +30,7 @@ export default function MovieSearchBar({
       if (!debouncedQuery || debouncedQuery.trim().length < 2) {
         setResults([]);
         setIsOpen(false);
-        onFilter?.([]);
+        onFilter?.(null);
         return;
       }
 

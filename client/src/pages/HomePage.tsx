@@ -14,7 +14,7 @@ export default function HomePage() {
   const queryClient = useQueryClient();
   const { selectedDate, afterTime, selectDate, selectNow, resetAll } = useDateTimeFilter();
   const { isAuthenticated, hasPermission } = useContext(AuthContext);
-  const [searchResults, setSearchResults] = useState<Movie[]>([]);
+  const [searchResults, setSearchResults] = useState<Movie[] | null>(null);
 
   const { data: theaters = [], isLoading: isLoadingTheaters } = useQuery({
     queryKey: ['theaters'],
@@ -38,7 +38,7 @@ export default function HomePage() {
       );
     }
 
-    if (searchResults.length > 0) {
+    if (searchResults !== null) {
       const searchIds = new Set(searchResults.map(m => m.id));
       filtered = filtered.filter(movie => searchIds.has(movie.id));
     }
@@ -54,13 +54,13 @@ export default function HomePage() {
     selectDate(date || '');
   }, [selectDate]);
 
-  const handleFilter = useCallback((movies: Movie[]) => {
+  const handleFilter = useCallback((movies: Movie[] | null) => {
     setSearchResults(movies);
   }, []);
 
   const handleReset = useCallback(() => {
     resetAll();
-    setSearchResults([]);
+    setSearchResults(null);
   }, [resetAll]);
   const formatterDate = useMemo(() => new Intl.DateTimeFormat('fr-FR', {
     day: 'numeric',
@@ -126,8 +126,12 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Unified Filter Bar */}
-      <div className="mb-4">
+      {/* Sticky Unified Filter Bar — stays visible while scrolling */}
+      <div
+        className="sticky z-40 bg-gray-50/95 backdrop-blur-sm pt-3 pb-3 mb-4 shadow-sm -mx-4 px-4"
+        style={{ top: 'var(--layout-header-offset, 64px)' }}
+        data-testid="sticky-search-date-container"
+      >
         {weekStart && (
           <FilterBar
             weekStart={weekStart}
