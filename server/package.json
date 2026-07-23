@@ -1,12 +1,12 @@
 {
-  "name": "allo-scrapper-server",
-  "version": "3.0.0",
-  "description": "Backend Express API for Allo-Scrapper",
+  "name": "@movie-planner/server",
+  "version": "0.0.0-development",
+  "description": "Backend Express API for Movie Planner",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx --env-file-if-exists=.env watch src/index.ts",
-    "prebuild": "npm run build --workspace=allo-scrapper-scraper-protocol",
+    "prebuild": "npm run build --workspace=@movie-planner/scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/schema.ts",
@@ -23,7 +23,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "allo-scrapper-scraper-protocol": "*",
+    "@movie-planner/scraper-protocol": "*",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.2.1",

@@ -1,9 +1,9 @@
 import { Response } from 'express';
-import type { ProgressEvent } from 'allo-scrapper-scraper-protocol';
+import type { ProgressEvent } from '@movie-planner/scraper-protocol';
 
-// Progress event types — re-exported from allo-scrapper-scraper-protocol so
+// Progress event types — re-exported from @movie-planner/scraper-protocol so
 // existing importers keep working. The wire contract lives in one place.
-export type { ProgressEvent, ScrapeSummary } from 'allo-scrapper-scraper-protocol';
+export type { ProgressEvent, ScrapeSummary } from '@movie-planner/scraper-protocol';
 
 // Progress tracker class
 class ProgressTracker {

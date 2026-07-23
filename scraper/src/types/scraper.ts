@@ -1,8 +1,8 @@
 // Types TypeScript partagés pour le scraper microservice
 
-// Wire-format types live in allo-scrapper-scraper-protocol — re-exported here
+// Wire-format types live in @movie-planner/scraper-protocol — re-exported here
 // so existing import paths keep working.
-export type { ProgressEvent, ScrapeSummary } from 'allo-scrapper-scraper-protocol';
+export type { ProgressEvent, ScrapeSummary } from '@movie-planner/scraper-protocol';
 
 export interface Theater {
   id: string; // Unique theater identifier (e.g., "W7504", "C0072")
@@ -98,6 +98,6 @@ export interface MoviePageData {
 }
 
 // Progress event types (published to Redis) — re-exported above from
-// allo-scrapper-scraper-protocol so the canonical home is in one place.
+// @movie-planner/scraper-protocol so the canonical home is in one place.
 
-// ScrapeSummary — re-exported above from allo-scrapper-scraper-protocol.
+// ScrapeSummary — re-exported above from @movie-planner/scraper-protocol.

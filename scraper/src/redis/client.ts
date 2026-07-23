@@ -5,11 +5,11 @@ import type {
   ScrapeJobScrape,
   ScrapeJobAddTheater,
   ScheduleChangeEvent,
-} from 'allo-scrapper-scraper-protocol';
+} from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
-// Types — re-exported from allo-scrapper-scraper-protocol so existing
+// Types — re-exported from @movie-planner/scraper-protocol so existing
 // importers keep working without churn. The wire contract lives in one place.
 // ---------------------------------------------------------------------------
 
@@ -18,7 +18,7 @@ export type {
   ScrapeJobScrape,
   ScrapeJobAddTheater,
   ScheduleChangeEvent,
-} from 'allo-scrapper-scraper-protocol';
+} from '@movie-planner/scraper-protocol';
 
 // ---------------------------------------------------------------------------
 // RedisProgressPublisher – implements ProgressPublisher interface

@@ -18,7 +18,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 # type-checks resolve its compiled declarations (dist/), which is gitignored.
 echo "${YELLOW}[pre-push] Building scraper-protocol workspace...${NC}"
 cd "$REPO_ROOT"
-if ! npm run build --workspace=allo-scrapper-scraper-protocol; then
+if ! npm run build --workspace=@movie-planner/scraper-protocol; then
   echo "${RED}[pre-push] scraper-protocol build FAILED. Push aborted.${NC}"
   exit 1
 fi

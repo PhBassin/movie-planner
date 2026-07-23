@@ -52,7 +52,7 @@ const SYSTEM_FONTS = [
  * Default settings fallback when database is unavailable or settings are missing
  */
 const DEFAULT_SETTINGS: AppSettingsPublic = {
-  site_name: 'Allo-Scrapper',
+  site_name: 'Movie Planner',
   logo_base64: null,
   favicon_base64: null,
   color_primary: '#FECC00',
@@ -223,7 +223,7 @@ export async function generateThemeCSS(db: DB): Promise<string> {
 
     // Build complete CSS document
     const parts: string[] = [
-      '/* Auto-generated theme CSS from Allo-Scrapper white-label settings */',
+      '/* Auto-generated theme CSS from Movie Planner white-label settings */',
       '@charset "UTF-8";',
       '',
     ];
@@ -242,7 +242,7 @@ export async function generateThemeCSS(db: DB): Promise<string> {
     logger.error('Error generating theme CSS, using defaults', { error: err });
 
     // Return minimal fallback CSS on error (don't fail hard)
-    return `/* Auto-generated theme CSS from Allo-Scrapper white-label settings */
+    return `/* Auto-generated theme CSS from Movie Planner white-label settings */
 @charset "UTF-8";
 
 ${generateCSSVariables(DEFAULT_SETTINGS)}`;

@@ -1,12 +1,12 @@
 {
-  "name": "allo-scrapper-scraper",
-  "version": "3.0.0",
-  "description": "Standalone scraper microservice for Allo-Scrapper",
+  "name": "@movie-planner/scraper",
+  "version": "0.0.0-development",
+  "description": "Standalone scraper microservice for Movie Planner",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx --env-file-if-exists=.env watch src/index.ts",
-    "prebuild": "npm run build --workspace=allo-scrapper-scraper-protocol",
+    "prebuild": "npm run build --workspace=@movie-planner/scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "test": "vitest",
@@ -22,7 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "allo-scrapper-scraper-protocol": "*",
+    "@movie-planner/scraper-protocol": "*",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
     "@opentelemetry/instrumentation-http": "^0.218.0",
     "@opentelemetry/instrumentation-pg": "^0.70.0",

@@ -172,7 +172,7 @@ export async function resetSettings(db: DB, userId: number): Promise<AppSettings
   const query = `
     UPDATE app_settings
     SET 
-      site_name = 'Allo-Scrapper',
+      site_name = 'Movie Planner',
       logo_base64 = NULL,
       favicon_base64 = NULL,
       color_primary = '#FECC00',
@@ -188,8 +188,8 @@ export async function resetSettings(db: DB, userId: number): Promise<AppSettings
       font_secondary = 'Roboto',
       footer_text = NULL,
       footer_links = '[]'::jsonb,
-      email_from_name = 'Allo-Scrapper',
-      email_from_address = 'no-reply@allocine-scrapper.com',
+      email_from_name = 'Movie Planner',
+      email_from_address = 'no-reply@movie-planner.local',
       updated_at = NOW(),
       updated_by = $1
     WHERE id = 1

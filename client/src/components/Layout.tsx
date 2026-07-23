@@ -18,7 +18,7 @@ export default function Layout({ children, title }: LayoutProps) {
   const { publicSettings } = useContext(SettingsContext);
   const navigate = useNavigate();
 
-  const APP_NAME = publicSettings?.site_name || import.meta.env.VITE_APP_NAME || 'Allo-Scrapper';
+  const APP_NAME = publicSettings?.site_name || import.meta.env.VITE_APP_NAME || 'Movie Planner';
   const logo = publicSettings?.logo_base64 ?? undefined;
   const hasAdminAccess = isAuthenticated && ADMIN_PERMISSIONS.some((perm) => hasPermission(perm));
 

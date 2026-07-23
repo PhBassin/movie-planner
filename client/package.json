@@ -1,7 +1,7 @@
 {
-  "name": "client",
+  "name": "@movie-planner/client",
   "private": true,
-  "version": "3.0.0",
+  "version": "0.0.0-development",
   "type": "module",
   "scripts": {
     "dev": "vite",
