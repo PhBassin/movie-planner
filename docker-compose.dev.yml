@@ -25,7 +25,7 @@ services:
     image: node:20-alpine
     container_name: allo-scrapper-server-dev
     working_dir: /app
-    command: sh -c "npm install --legacy-peer-deps && npm run dev --workspace=allo-scrapper-server"
+    command: sh -c "npm install --legacy-peer-deps && npm run dev --workspace=@movie-planner/server"
     volumes:
       - .:/app
       - /app/node_modules

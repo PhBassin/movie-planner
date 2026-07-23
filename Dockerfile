@@ -68,7 +68,7 @@ COPY server/ ./server/
 COPY packages/ ./packages/
 
 # Build backend workspace
-RUN npm run build --workspace=allo-scrapper-server && \
+RUN npm run build --workspace=@movie-planner/server && \
     rm -rf node_modules/.cache
 
 # Cleanup build artifacts in builder stage
@@ -101,7 +101,7 @@ COPY --chown=nodejs:nodejs packages/scraper-protocol/package.json ./packages/scr
 # Remove package-lock.json and regenerate to get correct platform-specific bindings
 # (sharp, and any other native modules need this for Alpine Linux)
 RUN rm -f package-lock.json && \
-    npm install --omit=dev --workspace=allo-scrapper-server --legacy-peer-deps && \
+    npm install --omit=dev --workspace=@movie-planner/server --legacy-peer-deps && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/*
 
