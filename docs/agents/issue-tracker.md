@@ -1,6 +1,6 @@
 # Issue tracker
 
-This repo's issues are tracked on **GitHub Issues** (repository: `PhBassin/allo-scrapper`).
+This repo's issues are tracked on **GitHub Issues** (repository: `PhBassin/movie-planner`).
 
 ## Tooling
 
