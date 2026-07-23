@@ -17,7 +17,7 @@ Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) 
   - server: `cd server && npx tsc --noEmit`
   - scraper: `cd scraper && npx tsc --noEmit`
   - client: `cd client && npx tsc -b`
-- Tests (vitest): `npm run test:run --workspace=allo-scrapper-server` (or `-scraper`, or `client`). Root `npm test` runs all.
+- Tests (vitest): `npm run test:run --workspace=@movie-planner/server` (or `@movie-planner/scraper`, or `@movie-planner/client`). Root `npm test` runs all.
   - Single test: `cd server && npx vitest run src/path/file.test.ts -t "name"`
 - Server coverage gate (enforced): `cd server && npm run test:coverage` — pre-push and CI fail if thresholds unmet.
 - E2E (Playwright, from root): `npm run e2e` / `npm run e2e:ui`.

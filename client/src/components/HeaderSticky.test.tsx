@@ -17,7 +17,7 @@ const mockAuthContext = {
 
 const mockSettingsContext = {
   publicSettings: {
-    site_name: 'Allo-Scrapper',
+    site_name: 'Movie Planner',
     logo_base64: null,
     favicon_base64: null,
     color_primary: '#1976d2',

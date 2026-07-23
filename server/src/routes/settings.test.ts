@@ -269,7 +269,7 @@ describe('Settings Routes', () => {
     it('should reset settings to defaults', async () => {
       const defaultSettings = {
         id: 1,
-        site_name: 'Allo-Scrapper',
+        site_name: 'Movie Planner',
         logo_base64: null,
         favicon_base64: null,
         color_primary: '#FECC00',
@@ -285,8 +285,8 @@ describe('Settings Routes', () => {
         font_secondary: 'Roboto',
         footer_text: null,
         footer_links: [],
-        email_from_name: 'Allo-Scrapper',
-        email_from_address: 'no-reply@allocine-scrapper.com',
+        email_from_name: 'Movie Planner',
+        email_from_address: 'no-reply@movie-planner.local',
         updated_at: '2026-03-01T06:00:00Z',
         updated_by: 1,
       };
@@ -299,7 +299,7 @@ describe('Settings Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.site_name).toBe('Allo-Scrapper');
+      expect(response.body.data.site_name).toBe('Movie Planner');
     });
 
     it('should return 401 without authentication', async () => {

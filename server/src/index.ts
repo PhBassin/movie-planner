@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
-    logger.info('🚀 Starting Allo-Scrapper Server...\n');
+    logger.info('🚀 Starting Movie Planner Server...\n');
 
     // Validate JWT secret before proceeding
     logger.info('🔐 Validating JWT configuration...');

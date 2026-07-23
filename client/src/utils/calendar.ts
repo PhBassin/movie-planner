@@ -109,12 +109,12 @@ export function buildIcsContent(showtime: Showtime, movie: Movie, theater: Theat
   const dtEnd = addMinutesToIso(showtime.datetime_iso, durationMinutes);
   const location = buildLocation(theater);
   const details = buildDetails(showtime);
-  const uid = `${showtime.datetime_iso}-${showtime.theater_id}@allo-scrapper`;
+  const uid = `${showtime.datetime_iso}-${showtime.theater_id}@movie-planner`;
 
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//allo-scrapper//FR',
+    'PRODID:-//movie-planner//FR',
     'BEGIN:VEVENT',
     `UID:${uid}`,
     `DTSTART:${dtStart}`,

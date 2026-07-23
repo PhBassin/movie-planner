@@ -1,21 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - develop
-      - 'feat/**'
-      - 'fix/**'
-      - 'docs/**'
-      - 'chore/**'
-      - 'ci/**'
-      - 'refactor/**'
-      - 'test/**'
-      - 'perf/**'
-  pull_request:
-    branches:
-      - main
-      - develop
+  workflow_dispatch:
 
 jobs:
   unit-and-coverage:
@@ -39,7 +25,7 @@ jobs:
           npm install --legacy-peer-deps
 
       - name: Build scraper-protocol workspace
-        run: npm run build --workspace=allo-scrapper-scraper-protocol
+        run: npm run build --workspace=@movie-planner/scraper-protocol
 
       - name: TypeScript type-check (server)
         run: npx tsc --noEmit
@@ -62,4 +48,4 @@ jobs:
         working-directory: server
 
       - name: Scraper-protocol tests & coverage
-        run: npm run test:coverage --workspace=allo-scrapper-scraper-protocol
+        run: npm run test:coverage --workspace=@movie-planner/scraper-protocol

@@ -257,7 +257,7 @@ describe('Settings Queries', () => {
     it('should reset all settings to default values', async () => {
       const defaultSettings = {
         ...mockSettingsRow,
-        site_name: 'Allo-Scrapper',
+        site_name: 'Movie Planner',
         logo_base64: null,
         favicon_base64: null,
         color_primary: '#FECC00',
@@ -274,7 +274,7 @@ describe('Settings Queries', () => {
       const result = await resetSettings(db, 1);
 
       expect(result).toBeDefined();
-      expect(result?.site_name).toBe('Allo-Scrapper');
+      expect(result?.site_name).toBe('Movie Planner');
       expect(result?.logo_base64).toBeNull();
       expect(db.query).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE app_settings'),

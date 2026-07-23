@@ -22,7 +22,7 @@ COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
 
 # Install scraper workspace dependencies (including devDependencies for build)
 # Use --omit=optional to skip platform-specific bindings
-RUN npm install --workspace=allo-scrapper-scraper --legacy-peer-deps --include=dev --omit=optional && \
+RUN npm install --workspace=@movie-planner/scraper --legacy-peer-deps --include=dev --omit=optional && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/* /var/tmp/*
 
@@ -49,7 +49,7 @@ COPY scraper/tsconfig.json ./scraper/
 COPY packages/scraper-protocol/ ./packages/scraper-protocol/
 
 # Build TypeScript
-RUN npm run build --workspace=allo-scrapper-scraper && \
+RUN npm run build --workspace=@movie-planner/scraper && \
     rm -rf node_modules/.cache
 
 # Remove source maps and declaration files from dist (not needed at runtime)
@@ -90,7 +90,7 @@ COPY --chown=nodejs:nodejs packages/scraper-protocol/package.json ./packages/scr
 
 # Install production dependencies only for scraper workspace
 # Use --omit=optional to skip platform-specific bindings
-RUN npm install --omit=dev --workspace=allo-scrapper-scraper --legacy-peer-deps --omit=optional && \
+RUN npm install --omit=dev --workspace=@movie-planner/scraper --legacy-peer-deps --omit=optional && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/*
 

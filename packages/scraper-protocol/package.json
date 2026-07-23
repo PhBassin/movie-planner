@@ -1,7 +1,7 @@
 {
-  "name": "allo-scrapper-scraper-protocol",
-  "version": "1.0.0",
-  "description": "Canonical wire-format types and serializers shared between the allo-scrapper server and scraper microservice.",
+  "name": "@movie-planner/scraper-protocol",
+  "version": "0.0.0-development",
+  "description": "Canonical wire-format types and serializers shared between the Movie Planner server and scraper microservice.",
   "type": "module",
   "private": true,
   "main": "./dist/index.js",

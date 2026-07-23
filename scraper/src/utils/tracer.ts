@@ -6,7 +6,7 @@ import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { trace, type Tracer } from '@opentelemetry/api';
 
-const SERVICE_NAME = `${process.env.APP_NAME ?? 'Allo-Scrapper'}-scraper`;
+const SERVICE_NAME = `${process.env.APP_NAME ?? 'Movie Planner'}-scraper`;
 const SERVICE_VERSION = '1.0.0';
 
 let _sdk: NodeSDK | null = null;

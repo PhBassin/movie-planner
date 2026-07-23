@@ -1,4 +1,4 @@
-# 🎬 Allo-Scrapper
+# 🎬 Movie Planner
 
 [![Node.js](https://img.shields.io/badge/Node.js-24+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -8,6 +8,8 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
 **Theater showtimes aggregator** that scrapes and centralizes movie screening schedules from the source website theater pages. Built with Express.js, React, and PostgreSQL, fully containerized with Docker.
+
+> **Provenance:** Movie Planner is a permanently diverged project derived from the allo-scrapper codebase. The inherited history is preserved up to the `allo-scrapper-import` boundary tag; see [ADR 0008](docs/adr/0008-fork-monolith-single-db.md) for the fork and permanent-divergence decision.
 
 > **Latest Version**: 4.3.0 | **Status**: Production Ready ✅
 

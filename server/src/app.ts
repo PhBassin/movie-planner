@@ -134,7 +134,7 @@ export function createApp() {
       return res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        name: process.env.APP_NAME ?? 'Allo-Scrapper'
+        name: process.env.APP_NAME ?? 'Movie Planner'
       });
     }
 
