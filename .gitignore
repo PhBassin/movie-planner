@@ -16,7 +16,6 @@ client/dist/
 .env
 .env.*
 !.env.example
-!.env.monitoring.example
 .env-*
 *.bak
 
