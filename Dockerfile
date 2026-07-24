@@ -34,7 +34,7 @@ RUN rm -f package-lock.json && \
 # ----------------------------------------------------------------------------
 FROM node:24-alpine AS frontend-builder
 
-ARG VITE_APP_NAME=Allo-Scrapper
+ARG VITE_APP_NAME=Movie-Planner
 WORKDIR /app
 
 # Copy node_modules from deps stage

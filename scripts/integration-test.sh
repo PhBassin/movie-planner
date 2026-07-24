@@ -1,5 +1,5 @@
 #!/bin/bash
-# Integration test script for allo-scrapper
+# Integration test script for Movie Planner
 # Builds Docker stack, waits for health, runs E2E tests, and cleans up
 
 set -e  # Exit on any error
@@ -40,7 +40,7 @@ echo "⏳ Waiting for services to be healthy..."
 DB_MAX_WAIT=30
 DB_WAIT=0
 while [ $DB_WAIT -lt $DB_MAX_WAIT ]; do
-  if docker compose exec -T ics-db pg_isready -U postgres > /dev/null 2>&1; then
+  if docker compose exec -T db pg_isready -U postgres > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Database is healthy${NC}"
     break
   fi
@@ -50,17 +50,17 @@ done
 
 if [ $DB_WAIT -ge $DB_MAX_WAIT ]; then
   echo -e "${RED}❌ Database health check timeout${NC}"
-  docker compose logs ics-db
+  docker compose logs db
   exit 1
 fi
 
-# Wait for web service
+# Wait for web server service
 WEB_MAX_WAIT=60
 WEB_WAIT=0
-echo "⏳ Waiting for web service to be healthy..."
+echo "⏳ Waiting for server service to be healthy..."
 while [ $WEB_WAIT -lt $WEB_MAX_WAIT ]; do
   if curl -f -s http://localhost:3000/api/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Web service is healthy${NC}"
+    echo -e "${GREEN}✅ Server service is healthy${NC}"
     break
   fi
   sleep 2
@@ -68,8 +68,8 @@ while [ $WEB_WAIT -lt $WEB_MAX_WAIT ]; do
 done
 
 if [ $WEB_WAIT -ge $WEB_MAX_WAIT ]; then
-  echo -e "${RED}❌ Web service health check timeout${NC}"
-  docker compose logs ics-web
+  echo -e "${RED}❌ Server service health check timeout${NC}"
+  docker compose logs server
   exit 1
 fi
 
@@ -102,11 +102,11 @@ else
   echo ""
   echo "📋 Capturing logs for debugging..."
   echo ""
-  echo "=== Web Service Logs ==="
-  docker compose logs ics-web | tail -100
+  echo "=== Server Service Logs ==="
+  docker compose logs server | tail -100
   echo ""
   echo "=== Database Logs ==="
-  docker compose logs ics-db | tail -50
+  docker compose logs db | tail -50
   exit 1
 fi
 
