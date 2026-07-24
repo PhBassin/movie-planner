@@ -1,0 +1,2 @@
+# Future SQL migrations (NNN_description.sql) live here.
+# The consolidated baseline is docker/init.sql; this directory starts empty.

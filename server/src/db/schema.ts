@@ -5,6 +5,7 @@ import { db } from './internal/client.js';
 import type { TheaterConfig } from '../types/scraper.js';
 import { logger } from '../utils/logger.js';
 import { runMigrations } from './migrations.js';
+import { ensureInitialAdmin } from './admin-bootstrap.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,8 +36,13 @@ export async function initializeDatabase() {
   } else {
     logger.warn('⚠️  Auto-migration disabled (AUTO_MIGRATE=false)');
     logger.warn('⚠️  Ensure migrations are applied manually before starting server');
-    logger.warn('⚠️  Run: docker compose exec -T ics-db psql -U postgres -d ics < migrations/XXX_*.sql');
+    logger.warn('⚠️  Run: npm run server:db:init  (or: psql "$DATABASE_URL" -f docker/init.sql)');
   }
+
+  // Bootstrap the initial administrator with a random password. The schema
+  // (from docker/init.sql and/or the migration runner) defines the admin role;
+  // no static credential lives in SQL.
+  await ensureInitialAdmin(db);
 
   // Seed theaters from theaters.json if DB is empty
   await seedTheatersIfEmpty();

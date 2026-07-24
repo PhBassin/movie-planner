@@ -1,6 +1,0 @@
-BEGIN;
-
-ALTER TABLE movies
-  ADD COLUMN IF NOT EXISTS screenwriters TEXT;
-
-COMMIT;
