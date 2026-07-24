@@ -43,7 +43,7 @@ The Member is the reason movie-planner exists; Staff exist to operate it for the
 
 The collective term for the Users who **operate** the platform, as opposed to those who merely use it. Staff = the union of the `admin` and `operator` roles. "Staff" exists in the glossary primarily to draw a clean line against **Member**; it is not itself a single role.
 
-- **Admin** (`admin` role, system) — full access via the hardcoded permission bypass (`is_system_role === true && role_name === 'admin'`, enforced at `middleware/auth.ts:isAdminUser`). The French **"admin général"** is a *role description* for any holder of this role — not a distinct entity, sub-role, or flagged user. There is no singular owner/primary Admin in the model; multiple peer Admins are supported (a backup Admin is recommended), all with identical powers. An Admin owns the scraping pipeline, the catalog curation, the user roster, and every setting — all as peer Staff actions, no power reserved to a singular admin. See ADR 0007.
+- **Admin** (`admin` role, system) — full access via the hardcoded permission bypass (`is_system_role === true && role_name === 'admin'`, enforced at `middleware/auth.ts:isAdminUser`). The French **"admin général"** is a *role description* for any holder of this role — not a distinct entity, sub-role, or flagged user. There is no singular owner/primary Admin in the model; multiple peer Admins are supported (a backup Admin is recommended), all with identical powers. An Admin owns the scraping pipeline, the catalog curation, the user roster, and every setting — all as peer Staff actions, no power reserved to a singular admin. See ADR 0007. The *first* admin comes into existence through the **Bootstrap admin** (see Database initialization), not via the staff-creation route.
 - **Operator** (`operator` role) — a scoped Staff role: may trigger scrapes and manage Theaters and reports, but not users or settings.
 
 Staff are created by an Admin (no self-registration), authenticate through the same Session mechanism as Members, and hold their permissions via the role-based permission model (the RBAC).
@@ -329,3 +329,25 @@ The concept is implemented as a single deep module: `server/src/services/session
 - Not the **access token** itself. The access token is one credential *inside* a Session; `AuthService.mintAccessToken` is the canonical minter, and `SessionService` is its sole caller in the request cycle.
 - Not an **SSE subscriber session**. The word "session" is reused loosely for a live SSE subscriber connection (see `attachProgressStream` in `services/sse-bridge.ts`); that is a transport-lifetime concept, unrelated to user-auth Sessions. The two share only the word.
 - Not a **ScrapeRun** (one scrape execution) or a **Showtime** (a movie showing) — see those entries.
+
+## Database initialization
+
+### Baseline
+
+The single source of truth for a fresh, empty Movie Planner database: the consolidated `docker/init.sql`. The baseline carries the full schema (all tables, constraints, indexes) **and** all reference data that an instance starts with — the two system **Roles** (`admin`, `operator`), the canonical **permission** set, role/permission grants, the **Branding** singleton defaults, the **RateLimitConfig** singleton, the permission-category labels, and the default weekly **scrape schedule**. It deliberately holds **no static administrator credential**; the first admin is created by application code (see Bootstrap admin).
+
+The baseline is **not** a migration. It is applied once to a bare database — by the Docker postgres image on first container start, or by the host-side `server:db:init` runner (`server/src/db/init.ts`) for non-Docker development. Forward schema changes thereafter are ordinary numbered files under `migrations/` (starting at `001_*`), tracked in `schema_migrations`; the baseline leaves that table empty so the first real migration is `001`. See `docs/adr/0008-fork-monolith-single-db.md` for the single-DB fork decision.
+
+**What the Baseline is *not*:**
+- Not a **migration**. Migrations are deltas applied by the runner against an existing database; the baseline is the full initial state laid down on a bare one. The runner does not read `init.sql`.
+- Not a **backup** or a data-restore format. It seeds only reference/seed data (roles, permissions, defaults), never runtime rows (users, theaters, showtimes).
+
+### Bootstrap admin
+
+The operational act that brings the **first** `admin` user into existence on a freshly initialized database. Implemented by `ensureInitialAdmin` (`server/src/db/admin-bootstrap.ts`), wired into `initializeDatabase` after the baseline/migrations are in place. When no user holding the `admin` role exists, it creates the `admin` user with a securely generated random password (via `generateRandomPassword`), persists only the hash, and logs the plaintext password **exactly once** to stdout — after which it is unrecoverable. Idempotent: if any admin already exists, it is a no-op, so it is safe to run on every startup.
+
+This is the **sole** mechanism by which the peer-Admin model (see Admin under People & roles) bootstraps its first member. No static credential lives in the **Baseline**; the application owns initial-admin creation so that every fresh instance gets a unique, secret password rather than a shared default.
+
+**What the Bootstrap admin is *not*:**
+- Not a **special kind of Admin**. The created user is an ordinary `admin`-role User, identical in powers to every other admin; "bootstrap" names the creation path, not a role or flag.
+- Not the **staff-creation route**. Staff (including subsequent admins) are created via the existing admin `POST /auth/register` flow; the bootstrap runs once, at startup, only when the roster is empty.

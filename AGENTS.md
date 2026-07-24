@@ -35,7 +35,7 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 
 - Full stack with hot reload: `npm run dev` (Docker compose: db + server + client). `npm run dev:down` / `dev:logs`.
 - Server alone (no Docker): `npm run server:dev` (tsx watch). Needs a reachable Postgres + the env vars below.
-- **Required env** (server refuses to start without): `JWT_SECRET` (min 32 chars, `openssl rand -base64 64`) and `POSTGRES_PASSWORD`. DB name is `ics`, user `postgres`. See `.env.example`.
+- **Required env** (server refuses to start without): `JWT_SECRET` (min 32 chars, `openssl rand -base64 64`) and `POSTGRES_PASSWORD`. DB name is `movie_planner`, user `postgres`. See `.env.example`.
 
 ## Architecture (non-obvious)
 

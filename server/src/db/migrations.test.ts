@@ -6,7 +6,6 @@ import {
   getPendingMigrations,
   applyMigration,
   runMigrations,
-  type Migration,
 } from './migrations.js';
 import fs from 'fs/promises';
 import path from 'path';

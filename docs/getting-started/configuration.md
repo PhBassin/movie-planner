@@ -93,7 +93,7 @@ This adds variables needed for development mode (`docker-compose.dev.yml`):
 |----------|---------|
 | `POSTGRES_HOST` | `localhost` |
 | `POSTGRES_PORT` | `5432` |
-| `POSTGRES_DB` | `ics` |
+| `POSTGRES_DB` | `movie_planner` |
 | `POSTGRES_USER` | `postgres` |
 
 ### Dev Server
@@ -170,7 +170,7 @@ The following variables are **hardcoded** inside `docker-compose.yaml` and do **
 | `NODE_ENV` | `production` | All |
 | `POSTGRES_HOST` | `ics-db` | ics-web, ics-scraper, ics-scraper-cron |
 | `POSTGRES_PORT` | `5432` | ics-web, ics-scraper, ics-scraper-cron |
-| `POSTGRES_DB` | `ics` | ics-web, ics-scraper, ics-scraper-cron |
+| `POSTGRES_DB` | `movie_planner` | ics-web, ics-scraper, ics-scraper-cron |
 | `POSTGRES_USER` | `postgres` | ics-web, ics-scraper, ics-scraper-cron |
 | `PORT` | `3000` | ics-web |
 | `REDIS_URL` | `redis://ics-redis:6379` | ics-web, ics-scraper, ics-scraper-cron |

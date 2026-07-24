@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import fs from 'fs/promises';
-import path from 'path';
 import type { DB } from './index.js';
 import {
   getAppliedMigrations,
@@ -116,22 +114,21 @@ describe('System Queries', () => {
       expect(result).toEqual([]);
     });
 
-    it('should return pending migrations not in schema_migrations table', async () => {
+    it('should return no pending migrations when the baseline dir is empty', async () => {
+      // After the consolidated baseline, migrations/ starts empty: any recorded
+      // applied versions are historical and there are no files left to apply.
       const mockDb: DB = {
         query: vi.fn().mockResolvedValue({
           rows: [
             { version: '001_neutralize_references.sql' },
             { version: '002_add_pg_trgm_extension.sql' },
-            // 003, 004, 005, 006, 007 are missing
           ],
         }),
       } as unknown as DB;
 
       const result = await getPendingMigrations(mockDb);
 
-      // Should find all missing migrations
-      expect(result.length).toBeGreaterThan(0);
-      expect(result.every(m => m.status === 'pending')).toBe(true);
+      expect(result).toEqual([]);
     });
 
     it('should order pending migrations by version', async () => {
@@ -151,16 +148,15 @@ describe('System Queries', () => {
       }
     });
 
-    it('should handle empty database (no migrations applied)', async () => {
+    it('should handle empty database (no migrations applied) with an empty baseline dir', async () => {
       const mockDb: DB = {
         query: vi.fn().mockResolvedValue({ rows: [] }),
       } as unknown as DB;
 
       const result = await getPendingMigrations(mockDb);
 
-      // Should find all migration files as pending
-      expect(result.length).toBeGreaterThan(0);
-      expect(result.every(m => m.status === 'pending')).toBe(true);
+      // Consolidated baseline: migrations/ is empty, so nothing is pending.
+      expect(result).toEqual([]);
     });
   });
 
@@ -249,26 +245,6 @@ describe('System Queries', () => {
       } as unknown as DB;
 
       await expect(getPendingMigrations(mockDb)).rejects.toThrow('Database error');
-    });
-  });
-
-  describe('Migration 010 - remove phantom permissions', () => {
-    it('should have migration file 010_remove_phantom_permissions.sql', async () => {
-      const migrationsDir = path.resolve(process.cwd(), '../migrations');
-      const files = await fs.readdir(migrationsDir);
-      expect(files).toContain('010_remove_phantom_permissions.sql');
-    });
-
-    it('migration 010 should DELETE permissions not in canonical list', async () => {
-      const migrationsDir = path.resolve(process.cwd(), '../migrations');
-      const content = await fs.readFile(
-        path.join(migrationsDir, '010_remove_phantom_permissions.sql'),
-        'utf-8'
-      );
-      // Must contain a DELETE statement targeting non-canonical permissions
-      expect(content).toMatch(/DELETE\s+FROM\s+permissions/i);
-      // Must reference canonical permission names or use NOT IN
-      expect(content).toMatch(/NOT\s+IN/i);
     });
   });
 });

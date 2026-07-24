@@ -29,6 +29,7 @@
     "server:build": "npm run build --workspace=@movie-planner/server",
     "server:start": "npm start --workspace=@movie-planner/server",
     "server:db:migrate": "npm run db:migrate --workspace=@movie-planner/server",
+    "server:db:init": "npm run db:init --workspace=@movie-planner/server",
     "scraper:dev": "npm run dev --workspace=@movie-planner/scraper",
     "scraper:build": "npm run build --workspace=@movie-planner/scraper",
     "scraper:start": "npm start --workspace=@movie-planner/scraper",
