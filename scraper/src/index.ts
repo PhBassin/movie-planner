@@ -206,6 +206,11 @@ async function runCron(): Promise<void> {
   const activeTasks = new Map<number, ScheduleTask>();
 
   async function executeSchedule(schedule: { id?: number; name: string; cron_expression: string }): Promise<void> {
+    if (process.env.ENABLE_SCRAPE_CRON !== 'true') {
+      logger.info(`[scraper] External scheduled scraping disabled (ENABLE_SCRAPE_CRON is not true). Skipping cron execution for "${schedule.name}".`);
+      return;
+    }
+
     logger.info(`[scraper] Cron triggered for "${schedule.name}", starting scrape...`);
 
     let reportId: number;
@@ -333,6 +338,10 @@ async function runCron(): Promise<void> {
 
   await loadInitialSchedules();
   await subscribeToScheduleChanges();
+
+  if (process.env.ENABLE_SCRAPE_CRON !== 'true') {
+    logger.info('[scraper] ENABLE_SCRAPE_CRON is not set to "true". External scheduled scrapes will be skipped when triggered.');
+  }
 
   logger.info(`[scraper] ${activeTasks.size} cron task(s) scheduled. Listening for schedule changes...`);
 
