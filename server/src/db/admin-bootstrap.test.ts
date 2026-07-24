@@ -3,8 +3,10 @@ import type { DB } from './index.js';
 import { ensureInitialAdmin } from './admin-bootstrap.js';
 
 // Mock password + random password generators so no real crypto cost is paid.
+// The stubbed password must still satisfy validatePasswordStrength, since
+// ensureInitialAdmin validates it before persisting.
 vi.mock('./user-queries.js', () => ({
-  generateRandomPassword: vi.fn().mockReturnValue(' GENERATED_PW_123!'),
+  generateRandomPassword: vi.fn().mockReturnValue('Generated_PW_123!'),
 }));
 vi.mock('../utils/password.js', () => ({
   hashPassword: vi.fn().mockResolvedValue('scrypt:hash'),
@@ -69,6 +71,23 @@ describe('ensureInitialAdmin', () => {
     expect(db.query).toHaveBeenCalledWith(
       `INSERT INTO users (username, password_hash, role_id) VALUES ($1, $2, $3)`,
       ['admin', 'scrypt:hash', 7]
+    );
+  });
+
+  it('throws and persists nothing if the generated password fails the strength check', async () => {
+    const { generateRandomPassword } = await import('./user-queries.js');
+    vi.mocked(generateRandomPassword).mockReturnValueOnce('weak');
+
+    vi.mocked(db.query)
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] } as any) // admin role lookup
+      .mockResolvedValueOnce({ rows: [{ count: '0' }] } as any); // admin count
+
+    await expect(ensureInitialAdmin(db)).rejects.toThrow(/strength check/);
+
+    // No password hash persisted.
+    expect(db.query).not.toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO users'),
+      expect.anything()
     );
   });
 

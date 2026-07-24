@@ -2,6 +2,8 @@ import { type DB } from './index.js';
 import { logger } from '../utils/logger.js';
 import { generateRandomPassword } from './user-queries.js';
 import { hashPassword } from '../utils/password.js';
+import { parseStrictInt } from '../utils/number.js';
+import { validatePasswordStrength } from '../utils/security.js';
 
 /**
  * Ensure an initial administrator exists.
@@ -33,7 +35,7 @@ export async function ensureInitialAdmin(db: DB): Promise<void> {
     `SELECT COUNT(*) as count FROM users WHERE role_id = $1`,
     [adminRoleId]
   );
-  const adminCount = parseInt(adminCountResult.rows[0].count, 10);
+  const adminCount = parseStrictInt(adminCountResult.rows[0].count);
 
   if (adminCount > 0) {
     logger.info(`Admin user already exists (count: ${adminCount}), skipping bootstrap`);
@@ -41,6 +43,11 @@ export async function ensureInitialAdmin(db: DB): Promise<void> {
   }
 
   const password = generateRandomPassword();
+  const passwordError = validatePasswordStrength(password);
+  if (passwordError) {
+    // A weak generated password means the generator itself is broken; never persist it.
+    throw new Error(`Generated admin password failed strength check: ${passwordError}`);
+  }
   const passwordHash = await hashPassword(password);
 
   await db.query(

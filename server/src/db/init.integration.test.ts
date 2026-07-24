@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { runMigrations } from './migrations.js';
 import { ensureInitialAdmin } from './admin-bootstrap.js';
+import { parseStrictInt } from '../utils/number.js';
 
 // Real-PostgreSQL integration test for the consolidated baseline.
 //
@@ -129,7 +130,7 @@ describe.runIf(Boolean(TEST_URL))(
 
     it('seeds the canonical permission set', async () => {
       const result = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM permissions`);
-      expect(parseInt(result.rows[0].count, 10)).toBe(34);
+      expect(parseStrictInt(result.rows[0].count)).toBe(34);
 
       for (const name of [
         'users:read', 'theaters:read', 'roles:read', 'roles:list',
@@ -147,7 +148,7 @@ describe.runIf(Boolean(TEST_URL))(
         JOIN roles r ON r.id = rp.role_id
         WHERE r.name = 'admin'
       `);
-      expect(parseInt(result.rows[0].count, 10)).toBe(34);
+      expect(parseStrictInt(result.rows[0].count)).toBe(34);
     });
 
     it('grants the operator role the expected scoped permissions', async () => {
@@ -158,7 +159,7 @@ describe.runIf(Boolean(TEST_URL))(
         WHERE r.name = 'operator'
       `);
       // 2 scraper base + 4 schedule + 3 theaters write + theaters:read + users:read + 2 reports
-      expect(parseInt(result.rows[0].count, 10)).toBe(13);
+      expect(parseStrictInt(result.rows[0].count)).toBe(13);
     });
 
     it('seeds the Movie Planner app_settings singleton with canonical defaults', async () => {
@@ -176,7 +177,7 @@ describe.runIf(Boolean(TEST_URL))(
       expect(rl.rows).toHaveLength(1);
 
       const labels = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM permission_category_labels`);
-      expect(parseInt(labels.rows[0].count, 10)).toBe(9);
+      expect(parseStrictInt(labels.rows[0].count)).toBe(9);
     });
 
     it('seeds the default weekly scrape schedule', async () => {
@@ -188,13 +189,13 @@ describe.runIf(Boolean(TEST_URL))(
 
     it('leaves schema_migrations empty (baseline, no recorded migrations)', async () => {
       const result = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM schema_migrations`);
-      expect(parseInt(result.rows[0].count, 10)).toBe(0);
+      expect(parseStrictInt(result.rows[0].count)).toBe(0);
     });
 
     it('migration runner succeeds with no pending files', async () => {
       await expect(runMigrations(db)).resolves.toBeUndefined();
       const result = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM schema_migrations`);
-      expect(parseInt(result.rows[0].count, 10)).toBe(0);
+      expect(parseStrictInt(result.rows[0].count)).toBe(0);
     });
 
     it('bootstraps a secure initial administrator when none exists', async () => {
@@ -218,7 +219,7 @@ describe.runIf(Boolean(TEST_URL))(
         SELECT COUNT(*) as count FROM users u
         JOIN roles r ON r.id = u.role_id WHERE r.name = 'admin'
       `);
-      expect(parseInt(result.rows[0].count, 10)).toBe(1);
+      expect(parseStrictInt(result.rows[0].count)).toBe(1);
     });
   }
 );
