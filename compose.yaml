@@ -63,7 +63,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 30s
 
   client:
     image: node:24-alpine
@@ -88,7 +88,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 60s
 
   scraper:
     build:
