@@ -1,0 +1,294 @@
+name: Prepare Release
+
+# Manual release-PR workflow (issue #3, PR 5).
+#
+# A maintainer dispatches this with a version (e.g. 0.1.0). The workflow:
+#   1. Validates the version (semver, not already released, not already in CHANGELOG).
+#   2. Validates Conventional Commit compliance of every commit since the last
+#      release tag (or the `allo-scrapper-import` boundary for the first release).
+#   3. Generates the changelog section from those commits.
+#   4. Bumps every workspace package.json + package-lock.json to the target version.
+#   5. Opens a protected-branch-compatible PR named `release/<version>` against main.
+#
+# The tag and GitHub Release are created by tag-release.yml when that PR merges.
+#
+# Failures: malformed version, existing target version, duplicate changelog
+# section, non-Conventional-Commits commit subject.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Target version (e.g. 0.1.0) — no leading "v"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  validate:
+    name: Validate version, commits, and changelog state
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      previous_tag: ${{ steps.resolve.outputs.previous_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Normalize and validate version
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Strip an accidental leading "v"
+          VERSION="${INPUT_VERSION#v}"
+
+          # Strict x.y.z semver, no prerelease/build metadata for the first release line.
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid version '${INPUT_VERSION}'. Expected 'x.y.z' (e.g. 0.1.0)."
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+
+          # Refuse if the tag already exists locally or on the remote.
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag '${TAG}' already exists. Releases are immutable; bump to a higher version."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag '${TAG}' already exists on the remote."
+            exit 1
+          fi
+
+          # Refuse if a GitHub Release exists for this version.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::GitHub Release for '${TAG}' already exists."
+            exit 1
+          fi
+
+          # Previous tag: the latest Movie Planner version tag, or the
+          # `allo-scrapper-import` boundary for the first release.
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            if git rev-parse -q --verify "refs/tags/allo-scrapper-import" >/dev/null; then
+              PREVIOUS_TAG="allo-scrapper-import"
+            else
+              echo "::error::No previous release tag and no 'allo-scrapper-import' boundary tag found."
+              exit 1
+            fi
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved: previous=${PREVIOUS_TAG}, target=${TAG}"
+
+      - name: Check CHANGELOG has no duplicate section
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          if grep -qE "^## \[${VERSION}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md already has a section for ${VERSION}. Refusing to create a duplicate."
+            exit 1
+          fi
+
+      - name: Validate Conventional Commit subjects
+        env:
+          PREVIOUS_TAG: ${{ steps.resolve.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+          # Every merge commit subject on a protected-branch repository is a Conventional
+          # Commit. We lint the subjects of all commits since the previous tag/boundary.
+          # Allowed types: feat, fix, perf, refactor, docs, test, chore, build, ci, style, revert.
+          # Format: <type>(<optional scope>): <description>  OR  type: <description>
+          # Merge commits from GitHub UI ("Merge pull request #...") are tolerated because
+          # a squash-based workflow is not enforced yet.
+          PATTERN='^(feat|fix|perf|refactor|docs|test|chore|build|ci|style|revert)(\([^)]+\))?!?: .+|^Merge (pull request|branch|tag)'
+
+          mapfile -t SUBJECTS < <(git log --pretty=format:"%s" "${PREVIOUS_TAG}..HEAD")
+
+          if [ "${#SUBJECTS[@]}" -eq 0 ]; then
+            echo "::error::No commits between ${PREVIOUS_TAG} and HEAD — nothing to release."
+            exit 1
+          fi
+
+          BAD=0
+          for SUBJECT in "${SUBJECTS[@]}"; do
+            if ! echo "$SUBJECT" | grep -qE "$PATTERN"; then
+              echo "::error file=CHANGELOG.md::Non-conforming commit subject: '${SUBJECT}'"
+              BAD=$((BAD + 1))
+            fi
+          done
+
+          if [ "$BAD" -gt 0 ]; then
+            echo "::error::${BAD} commit(s) since ${PREVIOUS_TAG} do not follow Conventional Commits."
+            echo "::error::Rebase or amend before dispatching the release workflow."
+            exit 1
+          fi
+
+          echo "All ${#SUBJECTS[@]} commit subject(s) conform to Conventional Commits."
+
+  prepare-pr:
+    name: Bump versions, generate changelog, open release PR
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Resolve previous tag
+        id: prev
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            PREVIOUS_TAG="allo-scrapper-import"
+          fi
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog section
+        id: changelog
+        env:
+          PREVIOUS_TAG: ${{ steps.prev.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/generate-changelog.sh
+          .github/scripts/generate-changelog.sh "$PREVIOUS_TAG" "HEAD" > /tmp/changelog-entry.md
+          echo "## Generated changelog entry"
+          cat /tmp/changelog-entry.md
+
+      - name: Update CHANGELOG.md
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.prev.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+          TODAY=$(date -u +%Y-%m-%d)
+
+          # Keep-a-Changelog convention: insert the new version section right
+          # below the "## [Unreleased]" block (or before the first existing
+          # released-version heading if there is no Unreleased block).
+          UNRELEASED_LINE=$(grep -nE '^## \[Unreleased\]' CHANGELOG.md | head -1 | cut -d: -f1 || true)
+          if [ -n "$UNRELEASED_LINE" ]; then
+            # Find the next '## [' heading after the Unreleased block.
+            INSERT_LINE=$(awk -v start="$((UNRELEASED_LINE + 1))" 'NR >= start && /^## \[/ { print NR; exit }' CHANGELOG.md)
+            if [ -z "$INSERT_LINE" ]; then
+              # No version heading after Unreleased — append at end of file.
+              INSERT_LINE=$(($(wc -l < CHANGELOG.md) + 1))
+            fi
+          else
+            INSERT_LINE=$(grep -nE '^## \[' CHANGELOG.md | head -1 | cut -d: -f1 || true)
+            if [ -z "$INSERT_LINE" ]; then
+              echo "::error::Could not find a version heading in CHANGELOG.md"
+              exit 1
+            fi
+          fi
+
+          {
+            awk -v n="$INSERT_LINE" 'NR < n' CHANGELOG.md
+            echo ""
+            echo "## [${VERSION}] - ${TODAY}"
+            echo ""
+            cat /tmp/changelog-entry.md
+            awk -v n="$INSERT_LINE" 'NR >= n' CHANGELOG.md
+          } > CHANGELOG.md.new
+          # Collapse any run of 3+ blank lines introduced by the splice into one.
+          awk 'BEGIN{blank=0} /^$/{blank++; if (blank<=1) print; next} {blank=0; print}' \
+            CHANGELOG.md.new > CHANGELOG.md
+          rm -f CHANGELOG.md.new
+
+          # Append the compare link at the bottom.
+          REPO_URL="https://github.com/${{ github.repository }}"
+          printf '\n[%s]: %s/compare/%s...%s\n' "$VERSION" "$REPO_URL" "$PREVIOUS_TAG" "$TAG" >> CHANGELOG.md
+
+          echo "## CHANGELOG.md after update"
+          head -40 CHANGELOG.md
+
+      - name: Bump workspace versions
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Root + every workspace package.json.
+          for FILE in package.json server/package.json client/package.json scraper/package.json packages/scraper-protocol/package.json; do
+            if [ -f "$FILE" ]; then
+              jq --arg v "$VERSION" '.version = $v' "$FILE" > "$FILE.tmp"
+              mv "$FILE.tmp" "$FILE"
+              echo "Bumped $FILE to $VERSION"
+            fi
+          done
+
+      - name: Refresh package-lock.json
+        run: npm install --legacy-peer-deps --package-lock-only
+
+      - name: Create release branch and commit
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/${VERSION}"
+          git checkout -b "$BRANCH"
+          git add package.json package-lock.json server/package.json client/package.json scraper/package.json packages/scraper-protocol/package.json CHANGELOG.md
+          git commit -m "chore(release): prepare ${VERSION} [skip ci]"
+
+      - name: Open release PR
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.prev.outputs.previous_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/${VERSION}"
+          git push origin "$BRANCH"
+
+          BODY=$(cat <<EOF
+          Automated release preparation for **${TAG}**.
+
+          - Version bumped to \`${VERSION}\` across root + all workspaces.
+          - \`package-lock.json\` refreshed.
+          - Changelog generated from Conventional Commits between \`${PREVIOUS_TAG}\` and \`HEAD\`.
+
+          Merging this PR creates the annotated \`${TAG}\` tag and the GitHub Release
+          via \`tag-release.yml\`. Do not edit the commit subject — it is what the
+          tagger workflow matches on.
+          EOF
+          )
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(release): ${VERSION}" \
+            --body "$BODY" \
+            --label "release"
