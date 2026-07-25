@@ -2,7 +2,7 @@
 
 **Last updated:** March 18, 2026 | Status: Current ✅
 
-Complete guide to extending Allo-Scrapper with custom data sources, implementing new scraper strategies, and managing multiple theater source integrations.
+Complete guide to extending Movie Planner with custom data sources, implementing new scraper strategies, and managing multiple theater source integrations.
 
 ---
 
@@ -21,7 +21,7 @@ Complete guide to extending Allo-Scrapper with custom data sources, implementing
 
 ## Overview
 
-Allo-Scrapper uses the **Strategy Pattern** to support multiple theater data sources. By default, only AlloCiné is implemented, but you can add:
+Movie Planner uses the **Strategy Pattern** to support multiple theater data sources. By default, only AlloCiné is implemented, but you can add:
 
 - **New theater websites** (CGR, Theater Pathé, independent theaters)
 - **Regional theater chains** with custom APIs

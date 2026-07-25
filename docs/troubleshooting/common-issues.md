@@ -1,6 +1,6 @@
 # 🔍 Common Issues
 
-Solutions to frequently encountered problems in Allo-Scrapper.
+Solutions to frequently encountered problems in Movie Planner.
 
 **Related Documentation:**
 - [Installation Guide](../getting-started/installation.md) - Initial setup
@@ -40,13 +40,13 @@ docker compose ps
 cat .env | grep POSTGRES
 
 # Restart database
-docker compose restart ics-db
+docker compose restart db
 
 # View database logs
-docker compose logs ics-db
+docker compose logs db
 
 # Verify connection
-docker compose exec ics-db psql -U postgres -d ics -c "SELECT 1;"
+docker compose exec db psql -U postgres -d ics -c "SELECT 1;"
 ```
 
 ---
@@ -59,10 +59,10 @@ docker compose exec ics-db psql -U postgres -d ics -c "SELECT 1;"
 
 ```bash
 # Run migration manually
-docker compose exec ics-web npm run db:migrate
+docker compose exec server npm run db:migrate
 
 # Or connect to database and run schema manually
-docker compose exec ics-db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d ics
 
 # In psql:
 \i /path/to/schema.sql
@@ -78,13 +78,13 @@ docker compose exec ics-db psql -U postgres -d ics
 
 ```bash
 # Apply migration manually
-docker compose exec -T ics-db psql -U postgres -d ics < migrations/003_add_users_table.sql
+docker compose exec -T db psql -U postgres -d ics < migrations/003_add_users_table.sql
 
 # Verify table exists
-docker compose exec ics-db psql -U postgres -d ics -c "\d users"
+docker compose exec db psql -U postgres -d ics -c "\d users"
 
 # Restart application
-docker compose restart ics-web
+docker compose restart server
 
 # Test authentication
 curl -X POST http://localhost:3000/api/auth/login \
@@ -104,7 +104,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 # The config directory is volume-mounted, so API changes are visible on host immediately.
 
 # If you manually edited theaters.json on the host, restart the server to pick up changes:
-docker compose restart ics-web
+docker compose restart server
 
 # Trigger a new scrape to fetch data for updated theaters:
 curl -X POST http://localhost:3000/api/scraper/trigger
@@ -132,7 +132,7 @@ docker compose up -d
 curl http://localhost:3000/api/scraper/status
 
 # View server logs
-docker compose logs ics-web
+docker compose logs server
 
 # Check scrape reports
 curl http://localhost:3000/api/reports
@@ -185,7 +185,7 @@ SCRAPE_THEATER_DELAY_MS=5000  # Increase from 3000
 SCRAPE_MOVIE_DELAY_MS=1000    # Increase from 500
 
 # Restart application
-docker compose restart ics-web
+docker compose restart server
 
 # Reduce number of days scraped
 SCRAPE_DAYS=3  # Reduce from 7
@@ -211,7 +211,7 @@ curl http://localhost:3000/api/health
 cat client/.env | grep VITE_API_BASE_URL
 
 # Check server logs for errors
-docker compose logs ics-web -f
+docker compose logs server -f
 
 # Restart services
 docker compose restart
@@ -227,7 +227,7 @@ docker compose restart
 
 ```bash
 # Check if database has data
-docker compose exec ics-db psql -U postgres -d ics -c "SELECT COUNT(*) FROM theaters;"
+docker compose exec db psql -U postgres -d ics -c "SELECT COUNT(*) FROM theaters;"
 
 # Trigger scrape
 curl -X POST http://localhost:3000/api/scraper/trigger
@@ -274,7 +274,7 @@ docker compose up -d
 docker builder prune -a
 
 # Remove existing images
-docker rmi allo-scrapper:latest
+docker rmi movie-planner:latest
 
 # Rebuild from scratch
 docker compose build --no-cache
@@ -296,10 +296,10 @@ docker compose build --progress=plain
 
 ```bash
 # View container logs
-docker compose logs ics-web --tail=100
+docker compose logs server --tail=100
 
 # Check health status
-docker inspect ics-web | jq '.[0].State.Health'
+docker inspect server | jq '.[0].State.Health'
 
 # Common causes:
 # - Missing environment variables
@@ -307,10 +307,10 @@ docker inspect ics-web | jq '.[0].State.Health'
 # - Port conflict
 
 # Disable restart policy temporarily
-docker update --restart=no ics-web
+docker update --restart=no server
 
 # Fix the issue, then re-enable
-docker update --restart=unless-stopped ics-web
+docker update --restart=unless-stopped server
 ```
 
 ---
@@ -323,10 +323,10 @@ docker update --restart=unless-stopped ics-web
 
 ```bash
 # Check volume permissions
-docker compose exec ics-web ls -la /app
+docker compose exec server ls -la /app
 
 # Fix ownership (run as root)
-docker compose exec -u root ics-web chown -R node:node /app
+docker compose exec -u root server chown -R node:node /app
 
 # Or recreate volumes
 docker compose down -v
@@ -352,7 +352,7 @@ cat .env | grep ALLOWED_ORIGINS
 echo "ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000" >> .env
 
 # 3. Restart container
-docker compose restart ics-web
+docker compose restart server
 
 # 4. Clear browser cache and reload page
 ```
@@ -374,7 +374,7 @@ Access to fetch at 'http://192.168.1.100:3000/api/movies' from origin
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 
 # Restart
-docker compose restart ics-web
+docker compose restart server
 ```
 
 See [Networking Guide](../guides/deployment/networking.md) for complete network troubleshooting.
@@ -420,7 +420,7 @@ openssl rand -base64 32
 echo "JWT_SECRET=Kx7JhF9mP3nQ8wE2vY5zL1dR6sT4cW0oA9bN8xM7uI=" >> .env
 
 # 3. Restart services
-docker compose restart ics-web
+docker compose restart server
 
 # 4. Verify authentication works
 curl -X POST http://localhost:3000/api/auth/login \
@@ -477,11 +477,11 @@ curl -I http://localhost:3000/api/auth/login \
 # Retry-After: 896  (seconds until reset, ~15 minutes)
 
 # Option 2: Restart server to clear rate limit (development only)
-docker compose restart ics-web
+docker compose restart server
 
 # Option 3: Configure higher limit (in .env)
 RATE_LIMIT_AUTH_MAX=10  # Allow 10 failed attempts instead of 5
-docker compose restart ics-web
+docker compose restart server
 ```
 
 **Note:** Successful logins do NOT count toward rate limit - only failed attempts.
@@ -581,31 +581,6 @@ docker build -t test .
 
 ---
 
-### Problem: Pre-built image not found
-
-**Error:** `Error response from daemon: manifest for ghcr.io/phbassin/allo-scrapper:latest not found`
-
-**Solution:**
-
-```bash
-# Check available tags
-docker search ghcr.io/phbassin/allo-scrapper
-
-# Or use GitHub API
-gh api \
-  -H "Accept: application/vnd.github+json" \
-  /user/packages/container/allo-scrapper/versions \
-  | jq -r '.[].metadata.container.tags[]'
-
-# Use correct tag
-docker pull ghcr.io/phbassin/allo-scrapper:stable
-
-# Or build locally
-docker compose -f docker-compose.build.yml up --build -d
-```
-
----
-
 ## General Troubleshooting Steps
 
 ### 1. Check Logs
@@ -615,10 +590,10 @@ docker compose -f docker-compose.build.yml up --build -d
 docker compose logs -f
 
 # Specific service
-docker compose logs -f ics-web
+docker compose logs -f server
 
 # Last 100 lines
-docker compose logs --tail=100 ics-web
+docker compose logs --tail=100 server
 ```
 
 ### 2. Verify Environment Variables
@@ -638,7 +613,7 @@ grep -E "POSTGRES_|JWT_SECRET|ALLOWED_ORIGINS" .env
 docker compose restart
 
 # Restart specific service
-docker compose restart ics-web
+docker compose restart server
 
 # Full restart (recreate containers)
 docker compose down && docker compose up -d
@@ -651,7 +626,7 @@ docker compose down && docker compose up -d
 docker compose down -v
 
 # Remove all images
-docker rmi $(docker images -q allo-scrapper*)
+docker rmi $(docker images -q movie-planner*)
 
 # Rebuild from scratch
 docker compose up --build -d
@@ -667,10 +642,10 @@ docker compose ps
 curl http://localhost:3000/api/health
 
 # Database connection
-docker compose exec ics-db psql -U postgres -d ics -c "SELECT 1;"
+docker compose exec db psql -U postgres -d ics -c "SELECT 1;"
 
 # Redis connection
-docker compose exec ics-redis redis-cli ping
+docker compose exec redis redis-cli ping
 ```
 
 ---
@@ -679,13 +654,13 @@ docker compose exec ics-redis redis-cli ping
 
 If you can't resolve the issue:
 
-1. **Check existing issues**: https://github.com/PhBassin/allo-scrapper/issues
+1. **Check existing issues**: https://github.com/PhBassin/movie-planner/issues
 2. **Create new issue**: Include:
    - Error message (full text)
    - Steps to reproduce
    - Environment (OS, Docker version, Node version)
    - Relevant logs
-3. **Ask in discussions**: https://github.com/PhBassin/allo-scrapper/discussions
+3. **Ask in discussions**: https://github.com/PhBassin/movie-planner/discussions
 
 ---
 

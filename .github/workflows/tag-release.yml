@@ -1,0 +1,154 @@
+name: Tag & Release
+
+# Post-merge tag/release workflow (issue #3, PR 5).
+#
+# Runs when a `release/x.y.z` PR is merged into `main`. Creates the annotated
+# `vx.y.z` tag at the merge commit and publishes the GitHub Release from the
+# matching CHANGELOG.md section.
+#
+# The release artifacts are produced entirely by prepare-release.yml; this
+# workflow only stamps and publishes. It refuses to move or rewrite an existing
+# tag.
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create annotated tag and GitHub Release
+    # Only act on *merged* PRs whose head branch is `release/<version>`.
+    if: |
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version from branch name
+        id: resolve
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          VERSION="${BRANCH#release/}"
+          VERSION="${VERSION#v}"
+
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Release branch '${BRANCH}' does not encode a valid x.y.z version."
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse if tag already exists
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag '${TAG}' already exists. Releases are immutable."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag '${TAG}' already exists on the remote."
+            exit 1
+          fi
+
+      - name: Refuse if GitHub Release already exists
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::GitHub Release for '${TAG}' already exists."
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, sys, os
+          version = os.environ["VERSION"]
+          with open("CHANGELOG.md") as f:
+              content = f.read()
+          # Match "## [<version>] - <date>" up to (but excluding) the next "## [" heading.
+          pattern = re.compile(
+              r"^## \[" + re.escape(version) + r"\][^\n]*\n(.*?)(?=^## \[|\Z)",
+              flags=re.DOTALL | re.MULTILINE,
+          )
+          m = pattern.search(content)
+          if not m:
+              print(f"::error::CHANGELOG.md has no section for {version}")
+              sys.exit(1)
+          # Drop trailing markdown link-reference definitions (e.g. the compare link).
+          body = "\n".join(
+              line for line in m.group(1).splitlines()
+              if not re.match(r"^\[[^\]]+\]:\s+https?://", line)
+          )
+          notes = body.strip()
+          if not notes:
+              print(f"::error::CHANGELOG section for {version} is empty.")
+              sys.exit(1)
+          with open("/tmp/release-notes.md", "w") as f:
+              f.write(f"# Release {version}\n\n{notes}\n")
+          print("## Extracted release notes")
+          print(notes[:500])
+          PY
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create annotated tag
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+
+      - name: Create GitHub Release
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file /tmp/release-notes.md \
+            --verify-tag
+
+      - name: Summary
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          {
+            echo "### Release ${TAG} published"
+            echo ""
+            echo "- Annotated tag \`${TAG}\` created at the merge commit."
+            echo "- GitHub Release published from the CHANGELOG.md section."
+            echo "- No Docker image build or GHCR push (unsupported — local builds only)."
+          } >> "$GITHUB_STEP_SUMMARY"

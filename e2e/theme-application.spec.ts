@@ -10,7 +10,7 @@ test.describe('White-Label Theme Application', () => {
 
       // Check default site name in header
       const header = page.locator('header a').first();
-      await expect(header).toContainText('Allo-Scrapper');
+      await expect(header).toContainText('Movie Planner');
 
       // Check default logo (emoji) exists
       const logo = page.locator('header a span').first();
@@ -27,7 +27,7 @@ test.describe('White-Label Theme Application', () => {
 
       const footer = page.locator('footer');
       await expect(footer).toContainText('Données fournies par le site source');
-      await expect(footer).toContainText('Allo-Scrapper');
+      await expect(footer).toContainText('Movie Planner');
     });
   });
 
@@ -76,7 +76,7 @@ test.describe('White-Label Theme Application', () => {
       // Reset site name back to default
       await page.click('[data-testid="user-menu-button"]');
       await page.click('[data-testid="admin-settings-link"]');
-      await page.fill('input[name="site_name"]', 'Allo-Scrapper');
+      await page.fill('input[name="site_name"]', 'Movie Planner');
       await page.click('button:has-text("Save Changes")');
       await expect(page.locator('text=Settings saved successfully')).toBeVisible();
     });

@@ -6,13 +6,13 @@ Guide to managing users and access control through the admin panel.
 
 ## Overview
 
-Allo-Scrapper uses a comprehensive Role-Based Access Control (RBAC) system with granular permissions and flexible role assignments:
+Movie Planner uses a comprehensive Role-Based Access Control (RBAC) system with granular permissions and flexible role assignments:
 
 - **Admin**: Full system access with bypass privileges for all operations
 - **Operator**: Predefined role for scraping operations and theater management (7 specific permissions)
 - **Custom Roles**: User-defined roles with specific permission combinations
 
-This guide covers managing user accounts through the admin panel interface. For API-based user management, see the [Users API Reference](../../reference/api/users.md).
+This guide covers managing user accounts through the admin panel interface. For API-based user management, see the Users API Reference.
 
 **Who should use this guide:**
 - System administrators managing user accounts
@@ -684,8 +684,7 @@ Custom roles provide flexibility to create specific permission sets for differen
 ## Related Documentation
 
 - [Admin Panel Guide](./admin-panel.md) - Complete admin panel reference
-- [Users API Reference](../../reference/api/users.md) - API documentation for developers
-- [Security Policy](../../project/security.md) - Security best practices and policies
+- Users API Reference - API documentation for developers
 - [Authentication API Reference](../../reference/api/auth.md) - API authentication endpoints
 - [Quick Start](../../getting-started/quick-start.md) - Initial setup and configuration
 

@@ -1,6 +1,6 @@
 # 🗄️ Database Troubleshooting
 
-PostgreSQL troubleshooting and debugging guide for Allo-Scrapper.
+PostgreSQL troubleshooting and debugging guide for Movie Planner.
 
 **Related Documentation:**
 - [Database Reference](../reference/database/README.md) - Schema and queries
@@ -36,16 +36,16 @@ docker compose ps
 cat .env | grep POSTGRES
 
 # Restart database
-docker compose restart ics-db
+docker compose restart db
 
 # View database logs
-docker compose logs ics-db
+docker compose logs db
 
 # Verify connection
-docker compose exec ics-db psql -U postgres -d ics -c "SELECT 1;"
+docker compose exec db psql -U postgres -d ics -c "SELECT 1;"
 ```
 
-**Docker-specific:** Use service name `ics-db`, not `localhost` in `POSTGRES_HOST`.
+**Docker-specific:** Use service name `db`, not `localhost` in `POSTGRES_HOST`.
 
 ---
 
@@ -64,7 +64,7 @@ docker compose down -v
 docker compose up -d
 
 # Or connect with correct password
-docker compose exec ics-db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d ics
 ```
 
 ---
@@ -82,16 +82,16 @@ docker compose exec ics-db psql -U postgres -d ics
 
 ```bash
 # Check active connections
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT count(*) FROM pg_stat_activity WHERE datname='ics';"
 
 # View connection details
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT pid, usename, application_name, state, query_start 
    FROM pg_stat_activity WHERE datname='ics';"
 
 # Kill idle connections (if needed)
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT pg_terminate_backend(pid) 
    FROM pg_stat_activity 
    WHERE datname='ics' AND state='idle' AND query_start < NOW() - INTERVAL '5 minutes';"
@@ -116,22 +116,22 @@ Since **v3.1.0**, migrations run automatically at server startup:
 echo "AUTO_MIGRATE=true" >> .env
 
 # Restart server to apply migrations
-docker compose restart ics-web
+docker compose restart server
 
 # Check server logs for migration output
-docker compose logs ics-web | grep -i migration
+docker compose logs server | grep -i migration
 ```
 
 **Solution (manual mode):**
 
 ```bash
 # Apply all pending migrations
-docker compose exec -T ics-db psql -U postgres -d ics < migrations/001_neutralize_references.sql
-docker compose exec -T ics-db psql -U postgres -d ics < migrations/002_add_pg_trgm_extension.sql
+docker compose exec -T db psql -U postgres -d ics < migrations/001_neutralize_references.sql
+docker compose exec -T db psql -U postgres -d ics < migrations/002_add_pg_trgm_extension.sql
 # ... repeat for all migrations
 
 # Or apply specific migration
-docker compose exec -T ics-db psql -U postgres -d ics < migrations/003_add_users_table.sql
+docker compose exec -T db psql -U postgres -d ics < migrations/003_add_users_table.sql
 ```
 
 ---
@@ -154,7 +154,7 @@ docker compose exec -T ics-db psql -U postgres -d ics < migrations/003_add_users
 
 ```bash
 # View migration history
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT version, checksum, applied_at FROM schema_migrations ORDER BY applied_at;"
 
 # Check if file was intentionally modified
@@ -192,7 +192,7 @@ Password: Xk8#mP2qLz7!nV5w
 
 ```bash
 # Reset admin password manually
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "UPDATE users SET password_hash = '\$2b\$10\$...' WHERE username='admin';"
 
 # Or use API to change password after login
@@ -210,19 +210,19 @@ curl -X POST http://localhost:3000/api/auth/change-password \
 
 **Symptoms:**
 - API responses take >1 second
-- High CPU usage on `ics-db`
+- High CPU usage on `db`
 
 **Diagnosis:**
 
 ```bash
 # Find slow queries (>100ms)
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT pid, now() - pg_stat_activity.query_start AS duration, query 
    FROM pg_stat_activity 
    WHERE state = 'active' AND (now() - pg_stat_activity.query_start) > interval '100 milliseconds';"
 
 # Check table statistics
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT schemaname, tablename, seq_scan, seq_tup_read, idx_scan, idx_tup_fetch 
    FROM pg_stat_user_tables 
    ORDER BY seq_tup_read DESC LIMIT 10;"
@@ -233,7 +233,7 @@ docker compose exec ics-db psql -U postgres -d ics -c \
 Check indexes exist:
 
 ```bash
-docker compose exec ics-db psql -U postgres -d ics -c "\d+ showtimes"
+docker compose exec db psql -U postgres -d ics -c "\d+ showtimes"
 ```
 
 Expected indexes:
@@ -248,11 +248,11 @@ Expected indexes:
 **Check database size:**
 
 ```bash
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT pg_size_pretty(pg_database_size('ics'));"
 
 # Check table sizes
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
    FROM pg_tables 
    WHERE schemaname='public' 
@@ -263,11 +263,11 @@ docker compose exec ics-db psql -U postgres -d ics -c \
 
 ```bash
 # Delete old showtimes (older than 30 days)
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "DELETE FROM showtimes WHERE showtime_datetime < NOW() - INTERVAL '30 days';"
 
 # Vacuum to reclaim space
-docker compose exec ics-db psql -U postgres -d ics -c "VACUUM FULL ANALYZE;"
+docker compose exec db psql -U postgres -d ics -c "VACUUM FULL ANALYZE;"
 ```
 
 ---
@@ -284,11 +284,11 @@ docker compose exec ics-db psql -U postgres -d ics -c "VACUUM FULL ANALYZE;"
 
 ```bash
 # Check for duplicates
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT theater_id, COUNT(*) FROM theaters GROUP BY theater_id HAVING COUNT(*) > 1;"
 
 # Find constraint details
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "\d+ theaters"
 ```
 
@@ -304,7 +304,7 @@ docker compose exec ics-db psql -U postgres -d ics -c \
 
 ```bash
 # Find orphaned showtimes
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT s.id, s.movie_id 
    FROM showtimes s 
    LEFT JOIN movies f ON s.movie_id = f.id 
@@ -312,7 +312,7 @@ docker compose exec ics-db psql -U postgres -d ics -c \
    LIMIT 10;"
 
 # Clean up orphaned records
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "DELETE FROM showtimes 
    WHERE movie_id NOT IN (SELECT id FROM movies);"
 ```
@@ -325,23 +325,22 @@ docker compose exec ics-db psql -U postgres -d ics -c \
 
 ```bash
 # Backup entire database
-docker compose exec -T ics-db pg_dump -U postgres ics > backup-$(date +%Y%m%d).sql
+docker compose exec -T db pg_dump -U postgres ics > backup-$(date +%Y%m%d).sql
 
 # Backup with compression
-docker compose exec -T ics-db pg_dump -U postgres ics | gzip > backup-$(date +%Y%m%d).sql.gz
+docker compose exec -T db pg_dump -U postgres ics | gzip > backup-$(date +%Y%m%d).sql.gz
 ```
 
 ### Manual Restore
 
 ```bash
 # Restore from backup (stops all connections first)
-docker compose exec -T ics-db psql -U postgres -d ics < backup-20260305.sql
+docker compose exec -T db psql -U postgres -d ics < backup-20260305.sql
 
 # Restore compressed backup
-gunzip -c backup-20260305.sql.gz | docker compose exec -T ics-db psql -U postgres -d ics
+gunzip -c backup-20260305.sql.gz | docker compose exec -T db psql -U postgres -d ics
 ```
 
-**See also:** [Backup & Restore Guide](../guides/deployment/backup-restore.md)
 
 ---
 
@@ -351,10 +350,10 @@ gunzip -c backup-20260305.sql.gz | docker compose exec -T ics-db psql -U postgre
 
 ```bash
 # Interactive psql session
-docker compose exec ics-db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d ics
 
 # Execute single query
-docker compose exec ics-db psql -U postgres -d ics -c "SELECT COUNT(*) FROM theaters;"
+docker compose exec db psql -U postgres -d ics -c "SELECT COUNT(*) FROM theaters;"
 ```
 
 ### Useful psql Commands
@@ -383,23 +382,23 @@ SELECT pg_size_pretty(pg_database_size('ics'));
 
 ```bash
 # From host
-docker compose exec ics-db pg_isready -U postgres
+docker compose exec db pg_isready -U postgres
 
 # Check from web container
-docker compose exec ics-web psql -h ics-db -U postgres -d ics -c "SELECT 1;"
+docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
 ```
 
 ### View Logs
 
 ```bash
 # PostgreSQL logs
-docker compose logs ics-db
+docker compose logs db
 
 # Follow logs in real-time
-docker compose logs -f ics-db
+docker compose logs -f db
 
 # Filter for errors
-docker compose logs ics-db | grep ERROR
+docker compose logs db | grep ERROR
 ```
 
 ---
@@ -431,7 +430,6 @@ Application uses default `pg.Pool` settings:
 
 - [Database Reference](../reference/database/README.md) - Schema documentation
 - [Installation Guide](../getting-started/installation.md) - Initial setup
-- [Backup & Restore Guide](../guides/deployment/backup-restore.md) - Backup procedures
 - [Migration README](../../migrations/README.md) - Migration system details
 - [Common Issues](./common-issues.md) - General troubleshooting
 

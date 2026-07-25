@@ -2,7 +2,7 @@
 
 **Date de création :** 01/03/2026  
 **Dernière mise à jour :** 01/03/2026  
-**Objectif :** Transformer Allo-Scrapper en plateforme marque blanche avec personnalisation avancée + gestion complète des utilisateurs
+**Objectif :** Transformer Movie Planner en plateforme marque blanche avec personnalisation avancée + gestion complète des utilisateurs
 
 **Statut global : 100% COMPLÉTÉ** 🎉🎉🎉
 
@@ -85,7 +85,7 @@
 ```sql
 CREATE TABLE app_settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  site_name TEXT NOT NULL DEFAULT 'Allo-Scrapper',
+  site_name TEXT NOT NULL DEFAULT 'Movie Planner',
   logo_base64 TEXT,
   favicon_base64 TEXT,
   color_primary TEXT NOT NULL DEFAULT '#FECC00',
@@ -102,7 +102,7 @@ CREATE TABLE app_settings (
   footer_text TEXT DEFAULT 'Données fournies par le site source - Mise à jour hebdomadaire',
   footer_copyright TEXT DEFAULT '{site_name} © {year}',
   footer_links JSONB DEFAULT '[]'::jsonb,
-  email_from_name TEXT DEFAULT 'Allo-Scrapper',
+  email_from_name TEXT DEFAULT 'Movie Planner',
   email_header_color TEXT DEFAULT '#FECC00',
   email_footer_text TEXT,
   updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -327,7 +327,7 @@ CREATE INDEX idx_users_role ON users(role);
 - [ ] Update types exports
   - [ ] Vérifier tous types exportés
 - [ ] Docker build test
-  - [ ] `docker compose build ics-web`
+  - [ ] `docker compose build server`
   - [ ] `docker compose up -d`
   - [ ] Vérifier migrations appliquées
 - [ ] Tests end-to-end backend
@@ -509,7 +509,7 @@ CREATE INDEX idx_users_role ON users(role);
 
 ### ✅ Phase 11 : System Information & Diagnostics Dashboard
 
-**Issue GitHub :** [`#231`](https://github.com/PhBassin/allo-scrapper/issues/231) - `feat(admin): add system information and diagnostics dashboard`  
+**Issue GitHub :** [`#231`](https://github.com/PhBassin/movie-planner/issues/231) - `feat(admin): add system information and diagnostics dashboard`  
 **Branch :** `feature/admin-system-tab`  
 **Statut :** ✅ COMPLETE (01/03/2026)
 
@@ -606,7 +606,7 @@ CREATE INDEX idx_users_role ON users(role);
 - ⚠️ E2E tests have auth state management issues when run in sequence (pass individually)
 
 **Implementation Details:**
-- See Issue [#231](https://github.com/PhBassin/allo-scrapper/issues/231) for original requirements
+- See Issue [#231](https://github.com/PhBassin/movie-planner/issues/231) for original requirements
 - See commits above for detailed implementation history
 - Total implementation time: ~10 hours (matching estimate)
 
@@ -772,7 +772,7 @@ CREATE INDEX idx_users_role ON users(role);
 - [Guide TDD](../guides/development/testing.md)
 - [API Documentation](../reference/api/README.md)
 - [Admin Panel User Guide](../guides/administration/admin-panel.md)
-- [Issue #231 - System Tab](https://github.com/PhBassin/allo-scrapper/issues/231)
+- [Issue #231 - System Tab](https://github.com/PhBassin/movie-planner/issues/231)
 
 ---
 
@@ -864,4 +864,4 @@ gh pr create --title "feat(admin): add system information and diagnostics dashbo
 
 ---
 
-[← Back to Project](./README.md) | [Back to Documentation](../README.md)
+[← Back to Documentation](../README.md)

@@ -1,6 +1,6 @@
 # Roles and Permissions Reference
 
-Complete reference for the Role-Based Access Control (RBAC) system in Allo-Scrapper.
+Complete reference for the Role-Based Access Control (RBAC) system in Movie Planner.
 
 **Last updated:** March 25, 2026
 
@@ -24,7 +24,7 @@ Complete reference for the Role-Based Access Control (RBAC) system in Allo-Scrap
 
 ## Overview
 
-Allo-Scrapper uses a comprehensive Role-Based Access Control (RBAC) system that replaced the previous binary admin/user role system. This system provides fine-grained permissions across all application features.
+Movie Planner uses a comprehensive Role-Based Access Control (RBAC) system that replaced the previous binary admin/user role system. This system provides fine-grained permissions across all application features.
 
 ### What RBAC Replaced
 

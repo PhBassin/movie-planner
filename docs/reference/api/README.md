@@ -1,6 +1,6 @@
 # API Reference
 
-Complete REST API documentation for Allo-Scrapper.
+Complete REST API documentation for Movie Planner.
 
 ## 📑 API Endpoints
 
@@ -87,7 +87,7 @@ Role and permission management.
 
 ---
 
-### [Users](./users.md)
+### Users
 User management and role assignment.
 
 **Endpoints:**

@@ -1,10 +1,9 @@
 # 🐳 Docker Troubleshooting
 
-Container and Docker Compose troubleshooting for Allo-Scrapper.
+Container and Docker Compose troubleshooting for Movie Planner.
 
 **Related Documentation:**
 - [Docker Deployment](../guides/deployment/docker.md) - Docker setup guide
-- [Production Deployment](../guides/deployment/production.md) - Production configuration
 - [Common Issues](./common-issues.md) - General troubleshooting
 
 ---
@@ -41,7 +40,7 @@ Error: JWT_SECRET environment variable is required
 echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
 
 # Restart containers
-docker compose restart ics-web
+docker compose restart server
 ```
 
 ---
@@ -59,16 +58,16 @@ docker compose restart ics-web
 docker compose ps
 
 # View recent logs
-docker compose logs --tail=50 ics-web
+docker compose logs --tail=50 server
 
 # Check exit code
-docker inspect ics-web --format='{{.State.ExitCode}}'
+docker inspect server --format='{{.State.ExitCode}}'
 ```
 
 **Common causes:**
 1. **Health check failures** - `/api/health` endpoint not responding
 2. **Missing environment variables** - `JWT_SECRET`, `POSTGRES_PASSWORD`
-3. **Database not ready** - waiting for `ics-db` to be healthy
+3. **Database not ready** - waiting for `db` to be healthy
 4. **Port already in use** - another process using port 3000
 5. **Application crash** - check logs for errors
 
@@ -76,10 +75,10 @@ docker inspect ics-web --format='{{.State.ExitCode}}'
 
 ```bash
 # Remove restart policy temporarily to see error
-docker compose up ics-web
+docker compose up server
 
 # Check health check endpoint manually
-docker compose exec ics-web wget -qO- http://localhost:3000/api/health
+docker compose exec server wget -qO- http://localhost:3000/api/health
 ```
 
 ---
@@ -89,8 +88,8 @@ docker compose exec ics-web wget -qO- http://localhost:3000/api/health
 **Cause:** `depends_on: healthy` waiting for database/Redis health checks.
 
 **Expected behavior:**
-- `ics-web` waits for `ics-db` and `ics-redis` to be **healthy**
-- `ics-scraper` waits for `ics-db` and `ics-redis` to be **healthy**
+- `server` waits for `db` and `redis` to be **healthy**
+- `scraper` waits for `db` and `redis` to be **healthy**
 
 **Check dependency status:**
 
@@ -99,22 +98,22 @@ docker compose exec ics-web wget -qO- http://localhost:3000/api/health
 docker compose ps
 
 # Expected output:
-# ics-db      healthy
-# ics-redis   healthy
-# ics-web     running (after deps healthy)
+# db      healthy
+# redis   healthy
+# server     running (after deps healthy)
 ```
 
 **If dependencies stuck:**
 
 ```bash
 # Check database health
-docker compose exec ics-db pg_isready -U postgres
+docker compose exec db pg_isready -U postgres
 
 # Check Redis health
-docker compose exec ics-redis redis-cli ping
+docker compose exec redis redis-cli ping
 
 # Restart dependencies
-docker compose restart ics-db ics-redis
+docker compose restart db redis
 ```
 
 ---
@@ -124,9 +123,9 @@ docker compose restart ics-db ics-redis
 ### `Error: bind: address already in use`
 
 **Default ports used:**
-- `3000` - Web server (ics-web)
-- `5432` - PostgreSQL (ics-db)
-- `6379` - Redis (ics-redis)
+- `3000` - Web server (server)
+- `5432` - PostgreSQL (db)
+- `6379` - Redis (redis)
 - `3001` - Grafana (monitoring profile)
 - `9090` - Prometheus (monitoring profile)
 - `3100` - Loki (monitoring profile)
@@ -164,7 +163,7 @@ docker compose up -d
 
 ```yaml
 services:
-  ics-web:
+  server:
     ports:
       - "${PORT:-3000}:3000"  # Maps host ${PORT} to container 3000
 ```
@@ -206,13 +205,13 @@ docker compose up -d
 
 ```bash
 # Restart to pick up config changes
-docker compose restart ics-web
+docker compose restart server
 
 # Verify mount
-docker compose exec ics-web ls -la /app/dist/config/
+docker compose exec server ls -la /app/dist/config/
 
 # Force recreate container
-docker compose up -d --force-recreate ics-web
+docker compose up -d --force-recreate server
 ```
 
 **Note:** Config volume mount: `./server/src/config:/app/dist/config`
@@ -246,7 +245,7 @@ docker system prune -a
 docker volume prune
 
 # Remove specific old images
-docker images | grep allo-scrapper | awk '{print $3}' | xargs docker rmi
+docker images | grep movie-planner | awk '{print $3}' | xargs docker rmi
 ```
 
 ---
@@ -278,7 +277,7 @@ healthcheck:
 curl http://localhost:3000/api/health
 
 # Inside container
-docker compose exec ics-web wget -qO- http://localhost:3000/api/health
+docker compose exec server wget -qO- http://localhost:3000/api/health
 
 # Expected response:
 # {"status":"ok","timestamp":"2026-03-05T..."}
@@ -288,13 +287,13 @@ docker compose exec ics-web wget -qO- http://localhost:3000/api/health
 
 ```bash
 # Check if server is listening
-docker compose exec ics-web netstat -tulpn | grep :3000
+docker compose exec server netstat -tulpn | grep :3000
 
 # Check application logs
-docker compose logs ics-web | tail -50
+docker compose logs server | tail -50
 
 # Test without health check
-docker compose up ics-web --no-deps
+docker compose up server --no-deps
 ```
 
 ---
@@ -314,7 +313,7 @@ healthcheck:
 **Manual test:**
 
 ```bash
-docker compose exec ics-db pg_isready -U postgres
+docker compose exec db pg_isready -U postgres
 
 # Expected output:
 # /var/run/postgresql:5432 - accepting connections
@@ -337,7 +336,7 @@ healthcheck:
 **Manual test:**
 
 ```bash
-docker compose exec ics-redis redis-cli ping
+docker compose exec redis redis-cli ping
 
 # Expected output:
 # PONG
@@ -352,7 +351,7 @@ docker compose exec ics-redis redis-cli ping
 **Configuration:**
 
 ```yaml
-ics-redis:
+redis:
   command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
 ```
 
@@ -370,10 +369,10 @@ ics-redis:
 
 ```bash
 # Check memory usage
-docker compose exec ics-redis redis-cli INFO memory | grep used_memory_human
+docker compose exec redis redis-cli INFO memory | grep used_memory_human
 
 # Check evicted keys count
-docker compose exec ics-redis redis-cli INFO stats | grep evicted_keys
+docker compose exec redis redis-cli INFO stats | grep evicted_keys
 ```
 
 **Increase limit (if needed):**
@@ -389,9 +388,9 @@ command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendo
 ### No Memory Limits on Other Services
 
 **⚠️ Warning:** No explicit memory/CPU limits on:
-- `ics-web`
-- `ics-scraper`
-- `ics-db`
+- `server`
+- `scraper`
+- `db`
 
 **Risk:** Services can exhaust host resources.
 
@@ -399,7 +398,7 @@ command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendo
 
 ```yaml
 services:
-  ics-web:
+  server:
     deploy:
       resources:
         limits:
@@ -420,7 +419,7 @@ services:
 **Check if OOM killed:**
 
 ```bash
-docker inspect ics-web --format='{{.State.OOMKilled}}'
+docker inspect server --format='{{.State.OOMKilled}}'
 ```
 
 **Solution:**
@@ -442,8 +441,8 @@ docker inspect ics-web --format='{{.State.OOMKilled}}'
 
 ```bash
 # ✅ CORRECT in Docker
-POSTGRES_HOST=ics-db
-REDIS_URL=redis://ics-redis:6379
+POSTGRES_HOST=db
+REDIS_URL=redis://redis:6379
 
 # ❌ WRONG in Docker
 POSTGRES_HOST=localhost
@@ -453,14 +452,14 @@ REDIS_URL=redis://localhost:6379
 **Test connectivity:**
 
 ```bash
-# From ics-web, ping database
-docker compose exec ics-web ping ics-db
+# From server, ping database
+docker compose exec server ping db
 
 # Check DNS resolution
-docker compose exec ics-web nslookup ics-db
+docker compose exec server nslookup db
 
 # Test PostgreSQL connection
-docker compose exec ics-web psql -h ics-db -U postgres -d ics -c "SELECT 1;"
+docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
 ```
 
 ---
@@ -473,7 +472,7 @@ docker compose exec ics-web psql -h ics-db -U postgres -d ics -c "SELECT 1;"
 
 ```bash
 docker network ls
-docker network inspect allo-scrapper_default
+docker network inspect movie-planner_default
 ```
 
 ---
@@ -497,7 +496,7 @@ ERROR: Failed to download Chromium
 DOCKER_BUILDKIT=1 docker compose build --build-arg BUILDKIT_INLINE_CACHE=1
 
 # Or download Playwright browsers manually first
-docker compose build --no-cache ics-web
+docker compose build --no-cache server
 ```
 
 **Dockerfile optimization:**
@@ -518,7 +517,7 @@ docker compose build --no-cache ics-web
 docker compose build --platform linux/amd64
 
 # Or use multi-platform build
-docker buildx build --platform linux/amd64,linux/arm64 -t allo-scrapper .
+docker buildx build --platform linux/amd64,linux/arm64 -t movie-planner .
 ```
 
 ---
@@ -552,9 +551,6 @@ docker builder prune -a
 # Start all services
 docker compose up -d
 
-# Start with profiles
-docker compose --env-file .env --env-file .env.monitoring -f docker-compose.yaml -f docker-compose.monitoring.yml up -d
-
 # Stop all services
 docker compose down
 
@@ -562,7 +558,7 @@ docker compose down
 docker compose down -v
 
 # Restart specific service
-docker compose restart ics-web
+docker compose restart server
 
 # View service status
 docker compose ps
@@ -575,29 +571,29 @@ docker compose ps
 docker compose logs
 
 # Follow logs in real-time
-docker compose logs -f ics-web
+docker compose logs -f server
 
 # Last 50 lines
-docker compose logs --tail=50 ics-web
+docker compose logs --tail=50 server
 
 # Filter for errors
-docker compose logs ics-web | grep ERROR
+docker compose logs server | grep ERROR
 ```
 
 ### Debugging
 
 ```bash
 # Inspect container
-docker inspect ics-web
+docker inspect server
 
 # View container processes
-docker compose top ics-web
+docker compose top server
 
 # Execute command in container
-docker compose exec ics-web sh
+docker compose exec server sh
 
 # View resource usage
-docker stats ics-web
+docker stats server
 
 # Validate docker-compose.yaml
 docker compose config
@@ -650,7 +646,7 @@ docker compose stop  # Sends SIGTERM, waits for graceful shutdown
 
 ```yaml
 services:
-  ics-web:
+  server:
     restart: "no"  # Never restart
     # or
     restart: always  # Always restart
@@ -663,8 +659,6 @@ services:
 ## Related Documentation
 
 - [Docker Deployment Guide](../guides/deployment/docker.md) - Full Docker setup
-- [Production Deployment](../guides/deployment/production.md) - Production configuration
-- [Monitoring Guide](../guides/deployment/monitoring.md) - Observability stack
 - [Networking Guide](../guides/deployment/networking.md) - Network configuration
 - [Common Issues](./common-issues.md) - General troubleshooting
 

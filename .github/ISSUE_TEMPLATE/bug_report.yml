@@ -71,7 +71,7 @@ body:
       description: Please provide relevant environment details.
       placeholder: |
         - OS: macOS 14.0
-        - Node.js: 20.x
+        - Node.js: 24.x
         - Docker: 24.x
         - Browser (if frontend): Chrome 120
       render: markdown

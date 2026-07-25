@@ -1,6 +1,6 @@
 # CONTEXT
 
-Domain glossary for movie-planner. Devoid of implementation details — this is what things *mean*, not how they're stored. movie-planner is a fork of allo-scrapper (see ADR 0008 for the fork/permanent-diverge decision); it inherits the shared cinema model below (Theater, Showtime, WeeklyProgram, Source, and the Scraping section) verbatim and extends it with the SaaS concepts that follow.
+Domain glossary for Movie Planner. Devoid of implementation details — this is what things *mean*, not how they're stored. Movie Planner is a permanently diverged project derived from an inherited cinema codebase (see [ADR 0008](docs/adr/0008-fork-monolith-single-db.md) for the fork and permanent-divergence decision); it inherits the shared cinema model below (Theater, Showtime, WeeklyProgram, Source, and the Scraping section) verbatim and extends it with the SaaS concepts that follow.
 
 ## People & roles
 

@@ -1,6 +1,6 @@
 # White-Label System Architecture
 
-Architecture and design of the white-label branding system for Allo-Scrapper.
+Architecture and design of the white-label branding system for Movie Planner.
 
 **Last updated:** March 6, 2026
 
@@ -27,7 +27,7 @@ Architecture and design of the white-label branding system for Allo-Scrapper.
 
 ## Overview
 
-The white-label system allows administrators to **fully customize the branding** of their Allo-Scrapper instance without rebuilding the application.
+The white-label system allows administrators to **fully customize the branding** of their Movie Planner instance without rebuilding the application.
 
 ### Key Features
 
@@ -53,7 +53,7 @@ The white-label system allows administrators to **fully customize the branding**
 | Column | Type | Description | Default |
 |--------|------|-------------|---------|
 | `id` | INTEGER | Primary key (always 1) | 1 |
-| `site_name` | VARCHAR(100) | Site name (title, header) | 'Allo-Scrapper' |
+| `site_name` | VARCHAR(100) | Site name (title, header) | 'Movie Planner' |
 | `logo_base64` | TEXT | Logo image (base64 data URL) | NULL |
 | `favicon_base64` | TEXT | Favicon (base64 data URL) | NULL |
 | `color_primary` | VARCHAR(7) | Primary color (hex) | '#FECC00' |
@@ -69,7 +69,7 @@ The white-label system allows administrators to **fully customize the branding**
 | `font_secondary` | VARCHAR(255) | Secondary font family | 'system-ui, sans-serif' |
 | `footer_text` | TEXT | Custom footer text (HTML) | NULL |
 | `footer_links` | JSONB | Footer links array | `[]` |
-| `email_from_name` | VARCHAR(100) | Email sender name | 'Allo-Scrapper' |
+| `email_from_name` | VARCHAR(100) | Email sender name | 'Movie Planner' |
 | `email_from_address` | VARCHAR(255) | Email sender address | 'noreply@example.com' |
 | `updated_at` | TIMESTAMP | Last update timestamp | NOW() |
 | `updated_by` | INTEGER | User who made the change | NULL |
@@ -276,7 +276,7 @@ function Header() {
   
   return (
     <header>
-      <h1>{settings?.site_name || 'Allo-Scrapper'}</h1>
+      <h1>{settings?.site_name || 'Movie Planner'}</h1>
       {settings?.logo_base64 && (
         <img src={settings.logo_base64} alt="Logo" />
       )}

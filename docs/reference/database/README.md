@@ -1,6 +1,6 @@
 # 🗄 Database Schema
 
-Complete database schema documentation for the Allo-Scrapper PostgreSQL database.
+Complete database schema documentation for the Movie Planner PostgreSQL database.
 
 **Related Documentation:**
 - [API Reference](../api/README.md) - API endpoints that query this data
@@ -344,17 +344,17 @@ cd server
 npm run db:migrate
 
 # Docker Compose (automatic on startup)
-docker compose exec ics-web npm run db:migrate
+docker compose exec server npm run db:migrate
 
 # Production
-docker compose exec ics-web npm run db:migrate
+docker compose exec server npm run db:migrate
 ```
 
 ### Checking Schema
 
 ```bash
 # Connect to PostgreSQL
-docker compose exec ics-db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d ics
 
 # Inside psql:
 \dt                    # List tables

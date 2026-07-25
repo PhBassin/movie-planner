@@ -1,6 +1,6 @@
 # 🧪 Testing Guide
 
-Comprehensive guide for testing the Allo-Scrapper application.
+Comprehensive guide for testing the Movie Planner application.
 
 **Last updated:** March 4, 2026
 
@@ -225,13 +225,13 @@ npx playwright test --headed --debug
 2. **Run tests sequentially** - Config already set to `workers: 1` to avoid scrape conflicts
 3. **Use data-testid selectors** - More stable than text-based selectors
 4. **Handle timing** - Scrapes may complete quickly; use appropriate timeouts
-5. **Clean state** - Restart Docker between test sessions if needed: `docker compose restart ics-web`
+5. **Clean state** - Restart Docker between test sessions if needed: `docker compose restart server`
 
 ### Known Limitations
 
 - Scrapes complete quickly in Docker, so some timing-sensitive tests may need adjustments
 - Tests work best when run individually or after a clean Docker restart
-- If tests interfere with each other, restart services: `docker compose restart ics-web`
+- If tests interfere with each other, restart services: `docker compose restart server`
 
 ### Test Locations
 

@@ -49,12 +49,13 @@ The white-label system allows you to completely customize your theater applicati
 
 1. Navigate to your application homepage
 2. Click **"Login"** in the top-right corner
-3. Enter admin credentials:
-   - **Username**: `admin` (or your custom admin username)
-   - **Password**: Your admin password
-4. Click **"Login"**
+3. Sign in with the bootstrap admin credentials:
+   - **Username:** `admin`
+   - **Password:** the random password the server logged **once** on first
+     startup of a fresh database (no static default).
+4. Click **"Login"**.
 
-> **⚠️ Security Note**: Change the default admin password immediately after first login!
+> **⚠️ Security:** change the admin password immediately after first sign-in.
 
 ### Step 2: Access Admin Settings
 
@@ -300,7 +301,7 @@ Configure email template branding for system-generated communications.
 **Email From Name:**
 - **Purpose**: Sender name in email "From" field
 - **Example**: "CinéParis Notifications"
-- **Default**: "Allo-Scrapper"
+- **Default**: "Movie Planner"
 
 **Email From Address:**
 - **Purpose**: Sender email address
@@ -367,7 +368,7 @@ As you make changes in any tab, you can see a live preview of how your customiza
 
 **Export Configuration:**
 1. Click **"Export Configuration"** at bottom of admin panel
-2. JSON file downloads: `allo-scrapper-settings-YYYY-MM-DD.json`
+2. JSON file downloads: `movie-planner-settings-YYYY-MM-DD.json`
 3. Store securely for backup or migration
 
 **Import Configuration:**
@@ -378,7 +379,7 @@ As you make changes in any tab, you can see a live preview of how your customiza
 **Reset to Defaults:**
 1. Click **"Reset to Defaults"**
 2. Confirm action in dialog
-3. All settings return to original Allo-Scrapper branding
+3. All settings return to original Movie Planner branding
 
 > **⚠️ Warning**: Reset cannot be undone. Export your settings before resetting!
 

@@ -21,7 +21,7 @@ Master role-based access control, permission design patterns, and operational pl
 
 ## Overview
 
-Allo-Scrapper's Role-Based Access Control (RBAC) system manages user permissions across 7 categories (users, scraper, theaters, settings, reports, system, roles) with 26 granular permissions. This guide covers operational patterns for enterprise deployments.
+Movie Planner's Role-Based Access Control (RBAC) system manages user permissions across 7 categories (users, scraper, theaters, settings, reports, system, roles) with 26 granular permissions. This guide covers operational patterns for enterprise deployments.
 
 ### Key RBAC Concepts
 

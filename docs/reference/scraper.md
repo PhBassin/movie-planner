@@ -137,7 +137,7 @@ git push
 ### Alternative: Manual Edit (Development/Testing)
 
 1. Edit `server/src/config/theaters.json` directly on the host
-2. Restart: `docker compose restart ics-web`
+2. Restart: `docker compose restart server`
 3. Resync DB from JSON: `curl http://localhost:3000/api/theaters/sync`
 4. Commit: `git add server/src/config/theaters.json && git commit -m "feat(theater): add <theater>"`
 
@@ -295,15 +295,15 @@ See [API.md](./api/README.md) for complete API reference:
 The scraper runs as a microservice, decoupled from the API server via Redis.
 
 ```
-Express API (ics-web)
+Express API (server)
  └─> Redis Publisher (scrape:jobs)
-      └─> Redis Consumer (ics-scraper)
+      └─> Redis Consumer (scraper)
            └─> PostgreSQL (direct insert)
            └─> Redis Publisher (progress events)
                 └─> Express API (SSE streaming)
 ```
 
-The scraper microservice (`ics-scraper` and `ics-scraper-cron`) is always included in `docker-compose.yaml` — no feature flag needed.
+The scraper microservice (`scraper` and `scraper-cron`) is always included in `docker-compose.yaml` — no feature flag needed.
 
 **Benefits:**
 - Isolates scraping workload from API server
