@@ -43,10 +43,6 @@ vi.mock('../../src/utils/metrics.js', () => ({
   showtimesScrapedTotal: mockShowtimesScrapedTotal,
 }));
 
-vi.mock('../../src/utils/tracer.js', () => ({
-  initTracing: vi.fn(),
-}));
-
 // --- Import the function under test (after mocks) ---
 // We test executeJob indirectly by exercising it through the exported
 // function. Since executeJob is not exported, we test it via its

@@ -286,7 +286,7 @@ A Resume always produces a **new** ScrapeReport with `parent_report_id` set to t
 
 ### ScrapeJob
 
-A unit of work submitted by the server over the Redis `scrape:jobs` list for the scraper microservice to execute. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId` and an optional OpenTelemetry `traceContext`.
+A unit of work submitted by the server over the Redis `scrape:jobs` list for the scraper microservice to execute. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
 
 **Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). Both `server/src/services/redis-client.ts` and `scraper/src/redis/client.ts` re-export the type and the `serializeJob` / `parseJob` helpers from the protocol package; the previous duplicate declarations are gone. `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
 

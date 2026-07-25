@@ -42,8 +42,8 @@ export class RedisClient {
   }
 
   /** Push an add_theater job onto the queue. Returns the new queue length. */
-  async publishAddTheaterJob(reportId: number, url: string, traceContext?: Record<string, string>): Promise<number> {
-    const job: ScrapeJobAddTheater = { type: 'add_theater', triggerType: 'manual', reportId, url, ...(traceContext && { traceContext }) };
+  async publishAddTheaterJob(reportId: number, url: string): Promise<number> {
+    const job: ScrapeJobAddTheater = { type: 'add_theater', triggerType: 'manual', reportId, url };
     return this.publisher.rpush('scrape:jobs', JSON.stringify(job));
   }
 

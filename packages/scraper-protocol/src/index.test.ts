@@ -62,19 +62,6 @@ describe('scraper-protocol', () => {
       expect(parsed).toEqual(job);
     });
 
-    it('round-trips a ScrapeJobScrape with traceContext', () => {
-      const job: ScrapeJobScrape = {
-        type: 'scrape',
-        reportId: 9,
-        triggerType: 'cron',
-        traceContext: { traceparent: '00-aaaa-bbbb-01' },
-      };
-
-      const parsed = parseJob(serializeJob(job));
-
-      expect(parsed).toEqual(job);
-    });
-
     it('round-trips a ScrapeJobAddTheater', () => {
       const job: ScrapeJobAddTheater = {
         type: 'add_theater',
@@ -179,14 +166,6 @@ describe('scraper-protocol', () => {
             triggerType: 'manual',
             options: { pendingAttempts: [{ theater_id: 'C0042' }] },
           })
-        )
-      ).toThrow('Invalid ScrapeJob');
-    });
-
-    it('rejects a scrape job with a non-string-record traceContext', () => {
-      expect(() =>
-        parseJob(
-          JSON.stringify({ type: 'scrape', reportId: 1, triggerType: 'manual', traceContext: { traceparent: 7 } })
         )
       ).toThrow('Invalid ScrapeJob');
     });

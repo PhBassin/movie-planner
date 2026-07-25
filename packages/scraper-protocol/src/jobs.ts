@@ -1,6 +1,5 @@
 export interface BaseScrapeJob {
   reportId: number;
-  traceContext?: Record<string, string>;
 }
 
 export interface ScrapeJobScrape extends BaseScrapeJob {
@@ -47,14 +46,6 @@ function isScrapeJob(value: unknown): value is ScrapeJob {
   return false;
 }
 
-function isStringRecord(value: unknown): value is Record<string, string> {
-  if (!isRecord(value)) return false;
-  for (const v of Object.values(value)) {
-    if (typeof v !== 'string') return false;
-  }
-  return true;
-}
-
 const SCRAPE_MODES = new Set<string>(['weekly', 'from_today', 'from_today_limited']);
 
 function isPendingAttempt(value: unknown): value is { theater_id: string; date: string } {
@@ -81,7 +72,6 @@ function isScrapeOptions(value: unknown): boolean {
 
 function isBaseScrapeJob(value: Record<string, unknown>): boolean {
   if (typeof value.reportId !== 'number') return false;
-  if (value.traceContext !== undefined && !isStringRecord(value.traceContext)) return false;
   return true;
 }
 

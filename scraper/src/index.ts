@@ -1,6 +1,5 @@
 import { logger } from './utils/logger.js';
 import { registry, scrapeJobsTotal, scrapeDurationSeconds, moviesScrapedTotal, showtimesScrapedTotal } from './utils/metrics.js';
-import { initTracing } from './utils/tracer.js';
 
 import { runScraper, addTheaterAndScrape } from './scraper/index.js';
 import { getRedisPublisher, getRedisConsumer, getRedisSubscriber, disconnectRedis, type ScrapeJob, type ScrapeJobScrape, type ScrapeJobAddTheater, type ScheduleChangeEvent } from './redis/client.js';
@@ -409,9 +408,6 @@ async function runDirect(): Promise<void> {
 
 async function main(): Promise<void> {
   logger.info(`[scraper] Starting in ${RUN_MODE} mode...`);
-
-  // Initialise distributed tracing (OTLP → Tempo)
-  initTracing();
 
   // Start metrics HTTP endpoint (non-blocking)
   await startMetricsServer();
