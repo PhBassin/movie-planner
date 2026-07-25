@@ -1,6 +1,6 @@
 # System Design
 
-High-level system architecture, component overview, and design decisions for Allo-Scrapper.
+High-level system architecture, component overview, and design decisions for Movie Planner.
 
 **Last updated:** March 6, 2026
 
@@ -26,7 +26,7 @@ High-level system architecture, component overview, and design decisions for All
 
 ## Overview
 
-Allo-Scrapper is a **full-stack theater showtimes aggregator** that scrapes movie screening schedules from external theater websites, stores them in a PostgreSQL database, and exposes them via a REST API and React frontend.
+Movie Planner is a **full-stack theater showtimes aggregator** that scrapes movie screening schedules from external theater websites, stores them in a PostgreSQL database, and exposes them via a REST API and React frontend.
 
 ### Key Features
 
@@ -100,15 +100,16 @@ Monitoring Stack (Optional):
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
-| `ics-web` | Node.js 20 | 3000 | Express API + React frontend |
-| `ics-db` | PostgreSQL 15 | 5432 | Database |
-| `ics-redis` | Redis 7 | 6379 | Job queue (optional) |
-| `ics-scraper` | Node.js 20 | - | Scraper microservice (optional) |
-| `ics-scraper-cron` | Node.js 20 | - | Scheduled scraper (optional) |
-| `ics-prometheus` | Prometheus | 9090 | Metrics collection (optional) |
-| `ics-grafana` | Grafana | 3100 | Monitoring dashboards (optional) |
-| `ics-loki` | Loki | 3101 | Log aggregation (optional) |
-| `ics-tempo` | Tempo | 3102 | Distributed tracing (optional) |
+| `server` | Node.js 20 | 3000 | Express API + React frontend |
+| `db` | PostgreSQL 15 | 5432 | Database |
+| `redis` | Redis 7 | 6379 | Job queue (mandatory) |
+| `scraper` | Node.js 24 | - | Scraper microservice (consumer) |
+| `scraper-cron` | Node.js 24 | - | Scheduled scraper (idle unless `ENABLE_SCRAPE_CRON=true`) |
+
+The bundled Grafana / Loki / Tempo / Prometheus-server stack was removed in
+issue #3 (PR 4). Prometheus instrumentation remains in-app via `prom-client`
+and is exposed at the authenticated `/metrics` endpoint.
+
 
 ---
 
@@ -182,7 +183,7 @@ See [Database Schema](../database/schema.md) for complete details.
 
 ### 4. Scraper Service
 
-All scraping is dispatched via Redis to the standalone scraper microservice (`ics-scraper` container), always included in `docker-compose.yaml`.
+All scraping is dispatched via Redis to the standalone scraper microservice (`scraper` container), always included in `docker-compose.yaml`.
 
 **Responsibilities**:
 - Fetch HTML from theater websites
@@ -220,7 +221,6 @@ See [Scraper System Architecture](./scraper-system.md) for details.
 
 **When to use**: Production deployments requiring observability
 
-See [Monitoring Guide](../../guides/deployment/monitoring.md) for setup.
 
 ---
 
@@ -251,7 +251,7 @@ Admin → [Trigger Scrape] → Express API
                                ↓
                           Redis Queue
                                ↓
-                   Scraper Microservice (ics-scraper)
+                   Scraper Microservice (scraper)
                                ↓
                          HTTP Client
                                ↓
@@ -507,7 +507,6 @@ See [White-Label System Architecture](./white-label-system.md) for details.
 - [White-Label System Architecture](./white-label-system.md) - Branding system
 - [Database Schema](../database/schema.md) - Data model
 - [API Reference](../api/) - REST API documentation
-- [Deployment Guide](../../guides/deployment/production.md) - Production setup
 
 ---
 

@@ -1,279 +1,72 @@
 # Quick Start
 
-Get Allo-Scrapper up and running in 5 minutes using Docker Compose.
+Get Movie Planner up and running in five minutes with Docker Compose.
 
 ## Prerequisites
 
-- **Docker Desktop** or Docker Engine + Docker Compose
-- **Git** (to clone the repository)
+- Docker and Docker Compose
+- Git
 
-That's it! No need to install Node.js, PostgreSQL, or any other dependencies.
-
----
-
-## 🚀 Quick Setup
-
-### 1. Clone the Repository
+## Setup
 
 ```bash
-git clone https://github.com/PhBassin/allo-scrapper.git
-cd allo-scrapper
+git clone https://github.com/PhBassin/movie-planner.git
+cd movie-planner
+
+cp .env.example .env
+# Edit .env: set POSTGRES_PASSWORD and JWT_SECRET
+#   JWT_SECRET=$(openssl rand -base64 64)
+
+npm run dev          # docker compose up --build
 ```
 
-### 2. Configure Environment
+First startup takes about a minute. The compose file builds the server and
+scraper images locally and starts:
 
-```bash
-# Create .env with production base + dev overrides
-cat .env.example .env.dev.example > .env
+- `db` — PostgreSQL on port 5432
+- `redis` — Redis
+- `server` — Express API on port 3000
+- `client` — Vite dev server on port 5173
+- `scraper` — scraper consumer
+- `scraper-cron` — scraper cron (idle unless `ENABLE_SCRAPE_CRON=true`)
 
-# Generate a JWT secret and set POSTGRES_PASSWORD in .env
-# openssl rand -base64 64  →  paste into JWT_SECRET=
-```
+## Access
 
-### 3. Start All Services
+- Web UI: http://localhost:5173
+- API: http://localhost:3000/api
+- Health check: http://localhost:3000/api/health
 
-```bash
-npm run dev
-```
+## First admin password
 
-This command starts:
-- **PostgreSQL database** (port 5432)
-- **Express API server** (port 3000) with hot-reload
-- **React client dev server** (port 5173) with Vite HMR
+On a fresh database, the bootstrap creates the `admin` user with a securely
+generated **random** password and logs it once to stdout. There is no static
+default password. Copy the logged password, sign in, and change it immediately
+via the admin panel.
 
-**First startup takes ~1 minute** to pull images and initialize the database.
-
-### 4. Access the Application
-
-Open your browser to:
-
-**http://localhost:5173**
-
-You should see the Allo-Scrapper interface.
-
----
-
-## ✅ Verify Installation
-
-### Check API Health
-
-```bash
-curl http://localhost:3000/api/health
-```
-
-Expected response:
-```json
-{
-  "success": true,
-  "data": {
-    "status": "healthy",
-    "timestamp": "2026-03-01T20:00:00.000Z",
-    "database": "connected"
-  }
-}
-```
-
-### View Running Services
+## Verify
 
 ```bash
 docker compose ps
+curl http://localhost:3000/api/health
 ```
 
-You should see:
-- `ics-db` - PostgreSQL (healthy)
-- `ics-web` - API server (healthy)
-- `ics-client` - React dev server (healthy)
+Trigger the first scrape from the admin panel or via the API; progress streams
+back through SSE.
 
----
-
-## 🎬 Trigger Your First Scrape
-
-### Option 1: Using the Web Interface
-
-1. Navigate to **http://localhost:5173**
-2. Click the **"Start Scrape"** button
-3. Watch real-time progress as theaters are scraped
-4. View showtimes when complete
-
-### Option 2: Using the API
+## Common commands
 
 ```bash
-curl -X POST http://localhost:3000/api/scraper/start
+npm run dev          # build + start
+npm run dev:logs     # tail logs
+npm run dev:down     # stop
 ```
 
-**Note:** The first scrape may take several minutes depending on the number of configured theaters.
+## Next steps
 
----
-
-## 📊 View the Results
-
-After scraping completes:
-
-### Web Interface
-
-- **Home page**: View all theaters and their showtime counts
-- **Theater details**: Click a theater to see its complete schedule
-- **Reports**: View statistics and aggregated data
-
-### API
-
-```bash
-# Get all theaters
-curl http://localhost:3000/api/theaters
-
-# Get showtimes report
-curl http://localhost:3000/api/reports/showtimes
-
-# Get all movies
-curl http://localhost:3000/api/movies
-```
-
----
-
-## 🛠️ Common Commands
-
-### View Logs
-
-```bash
-# All services
-npm run dev:logs
-
-# Follow logs in real-time
-docker compose logs -f
-
-# Specific service only
-docker compose logs -f ics-web
-```
-
-### Stop Services
-
-```bash
-npm run dev:down
-```
-
-### Restart Services
-
-```bash
-# Stop and start
-npm run dev:down && npm run dev
-
-# Or just restart web service
-docker compose restart ics-web
-```
-
-### Clean Restart (Reset Database)
-
-```bash
-npm run dev:down
-docker compose down -v  # Remove volumes (deletes database data)
-npm run dev
-```
-
----
-
-## 🔧 Customization
-
-### Add Your Own Theaters
-
-Edit the theater configuration file:
-
-```bash
-# File: server/src/config/theaters.json
-nano server/src/config/theaters.json
-```
-
-Add a theater entry:
-```json
-{
-  "id": "C0001",
-  "name": "My Local Theater",
-  "url": "https://www.allocine.fr/seance/salle_gen_csalle=C0001.html"
-}
-```
-
-Restart the API server:
-```bash
-docker compose restart ics-web
-```
-
-### Change Scrape Schedule
-
-Edit `.env`:
-```bash
-# Every day at 3 AM
-SCRAPE_CRON_SCHEDULE=0 3 * * *
-
-# Every 6 hours
-SCRAPE_CRON_SCHEDULE=0 */6 * * *
-```
-
-Restart services:
-```bash
-npm run dev:down && npm run dev
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Port Already in Use
-
-If ports 3000, 5173, or 5432 are already in use, edit `.env`:
-
-```bash
-PORT=8080                    # API server
-VITE_PORT=3001              # Client dev server
-POSTGRES_PORT=5433          # PostgreSQL
-```
-
-### Database Connection Errors
-
-```bash
-# Check database is running
-docker compose ps ics-db
-
-# View database logs
-docker compose logs ics-db
-
-# Restart database
-docker compose restart ics-db
-```
-
-### Services Not Starting
-
-```bash
-# View all logs
-docker compose logs
-
-# Check for port conflicts
-docker compose down
-lsof -i :3000
-lsof -i :5173
-lsof -i :5432
-```
-
-For more troubleshooting, see [Troubleshooting Guide](../troubleshooting/).
-
----
-
-## 📚 Next Steps
-
-Now that you're up and running:
-
-- **[Installation Guide](./installation.md)** - Detailed installation options (manual setup, production)
-- **[Configuration Guide](./configuration.md)** - Complete environment variable reference
-- **[API Reference](../reference/api/)** - Explore the REST API
-- **[Development Setup](../guides/development/setup.md)** - Set up for development and contributing
-- **[Production Deployment](../guides/deployment/production.md)** - Deploy to production
-
----
-
-## 💡 Tips
-
-- **Hot Reload**: Code changes in `server/` and `client/` automatically reload
-- **Database GUI**: Use [pgAdmin](https://www.pgadmin.org/) or [DBeaver](https://dbeaver.io/) to connect to `localhost:5432`
-- **API Testing**: Use [Postman](https://www.postman.com/) or [HTTPie](https://httpie.io/) for API exploration
-- **Monitoring**: Enable the monitoring stack with `docker compose --env-file .env --env-file .env.monitoring -f docker-compose.yaml -f docker-compose.monitoring.yml up -d`
+- [Installation](./installation.md) — host-application (Node 24) path
+- [Configuration](./configuration.md) — environment variable reference
+- [API reference](../reference/api/)
+- [Development setup](../guides/development/setup.md)
 
 ---
 

@@ -1,13 +1,12 @@
 # Performance Optimization
 
-Technical reference for performance optimization techniques, caching strategies, and performance monitoring in Allo-Scrapper.
+Technical reference for performance optimization techniques, caching strategies, and performance monitoring in Movie Planner.
 
 **Last updated:** March 7, 2026
 
 **Related Documentation:**
 - [Configuration Guide](../getting-started/configuration.md) - Environment variables
 - [System Design](./architecture/system-design.md) - Architecture overview
-- [Monitoring Guide](../guides/deployment/monitoring.md) - Observability stack
 
 ---
 
@@ -24,7 +23,7 @@ Technical reference for performance optimization techniques, caching strategies,
 
 ## Overview
 
-Allo-Scrapper implements several performance optimizations to handle high-volume database queries and API requests efficiently. The primary optimization is **JSON parse caching**, which eliminates redundant JSON parsing for frequently repeated data.
+Movie Planner implements several performance optimizations to handle high-volume database queries and API requests efficiently. The primary optimization is **JSON parse caching**, which eliminates redundant JSON parsing for frequently repeated data.
 
 ### Key Performance Characteristics
 
@@ -188,7 +187,7 @@ console.log({
 
 ### Connection Pooling
 
-Allo-Scrapper uses `pg` connection pooling to manage concurrent database connections efficiently.
+Movie Planner uses `pg` connection pooling to manage concurrent database connections efficiently.
 
 **Configuration** (`server/src/db/index.ts`):
 ```typescript
@@ -268,19 +267,9 @@ if (duration > 100) {
 
 ### Distributed Tracing
 
-**OpenTelemetry** (optional, requires monitoring profile):
-```bash
-# Enable tracing
-OTEL_ENABLED=true
-OTEL_EXPORTER_OTLP_ENDPOINT=http://ics-tempo:4317
-
-# Start with monitoring
-docker compose --env-file .env --env-file .env.monitoring -f docker-compose.yaml -f docker-compose.monitoring.yml up -d
-
-# View traces in Grafana
-open http://localhost:3001
-# Explore → Tempo → Search traces
-```
+Distributed tracing via OpenTelemetry / Tempo was removed in issue #3 (PR 4).
+The application still emits structured logs (Winston) and Prometheus metrics
+at the authenticated `/metrics` endpoint — see [Performance metrics](#) below.
 
 ---
 
@@ -369,10 +358,10 @@ curl -H "Accept-Encoding: gzip" http://localhost:3000/api/movies -I
 **Diagnosis**:
 ```bash
 # Check query logs
-docker compose logs ics-web | grep "duration"
+docker compose logs server | grep "duration"
 
 # Monitor database connections
-docker compose exec ics-db psql -U postgres -d ics -c "SELECT count(*) FROM pg_stat_activity;"
+docker compose exec db psql -U postgres -d ics -c "SELECT count(*) FROM pg_stat_activity;"
 ```
 
 **Common Causes**:
@@ -392,10 +381,10 @@ docker compose exec ics-db psql -U postgres -d ics -c "SELECT count(*) FROM pg_s
 **Diagnosis**:
 ```bash
 # Check container memory
-docker stats --no-stream ics-web
+docker stats --no-stream server
 
 # Check Node.js heap
-docker compose exec ics-web node -e "console.log(process.memoryUsage())"
+docker compose exec server node -e "console.log(process.memoryUsage())"
 ```
 
 **Common Causes**:
@@ -457,7 +446,7 @@ const pool = new Pool({
 
 ```bash
 # Check PostgreSQL max_connections
-docker compose exec ics-db psql -U postgres -c "SHOW max_connections;"
+docker compose exec db psql -U postgres -c "SHOW max_connections;"
 
 # Increase if needed (postgresql.conf or docker-compose.yaml)
 ```
@@ -527,7 +516,6 @@ beforeEach(() => {
 
 - [Configuration Guide](../getting-started/configuration.md) - `JSON_PARSE_CACHE_SIZE` and other env vars
 - [System Design](./architecture/system-design.md) - Overall architecture
-- [Monitoring Guide](../guides/deployment/monitoring.md) - Prometheus, Grafana, Tempo
 - [Database Schema](./database/schema.md) - Table structure and indexes
 
 ---

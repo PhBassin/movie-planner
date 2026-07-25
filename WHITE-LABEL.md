@@ -337,13 +337,13 @@ npm run test:coverage
 
 2. Check database:
    ```bash
-   docker compose exec ics-db psql -U postgres -d ics
+   docker compose exec db psql -U postgres -d ics
    SELECT * FROM app_settings;
    ```
 
 3. Check backend logs:
    ```bash
-   docker compose logs ics-web | grep -i error
+   docker compose logs server | grep -i error
    ```
 
 ### Theme Not Applying
@@ -364,7 +364,7 @@ npm run test:coverage
 
 1. Check user role in database:
    ```bash
-   docker compose exec ics-db psql -U postgres -d ics
+   docker compose exec db psql -U postgres -d ics
    SELECT id, username, role FROM users;
    ```
 

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: GitHub Discussions
-    url: https://github.com/PhBassin/allo-scrapper/discussions
+    url: https://github.com/PhBassin/movie-planner/discussions
     about: Ask questions and discuss ideas with the community
   - name: Documentation
-    url: https://github.com/PhBassin/allo-scrapper#readme
+    url: https://github.com/PhBassin/movie-planner#readme
     about: Read the project documentation

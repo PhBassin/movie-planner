@@ -1,6 +1,6 @@
 # Interactive API Reference
 
-Explore the Allo-Scrapper REST API with full interactive documentation.
+Explore the Movie Planner REST API with full interactive documentation.
 
 **Last updated:** March 18, 2026
 
@@ -8,7 +8,7 @@ Explore the Allo-Scrapper REST API with full interactive documentation.
 
 ## OpenAPI Specification
 
-The Allo-Scrapper API is documented using the **OpenAPI 3.0 standard**. This enables interactive exploration, client SDK generation, and integration with tools like Swagger UI and Redocly.
+The Movie Planner API is documented using the **OpenAPI 3.0 standard**. This enables interactive exploration, client SDK generation, and integration with tools like Swagger UI and Redocly.
 
 **Specification File**: `docs/reference/openapi.yaml`
 
@@ -22,7 +22,7 @@ View and test API endpoints in browser with live examples:
 
 ```bash
 # Using SwaggerUI online (no setup needed)
-https://editor.swagger.io/?url=https://raw.githubusercontent.com/phbassin/allo-scrapper/develop/docs/reference/openapi.yaml
+https://editor.swagger.io/?url=https://raw.githubusercontent.com/phbassin/movie-planner/develop/docs/reference/openapi.yaml
 ```
 
 **Features:**
@@ -39,7 +39,7 @@ Host Swagger UI locally for offline access:
 **Docker:**
 ```bash
 docker run -p 80:8080 \
-  -e SWAGGER_JSON_URL=https://raw.githubusercontent.com/phbassin/allo-scrapper/develop/docs/reference/openapi.yaml \
+  -e SWAGGER_JSON_URL=https://raw.githubusercontent.com/phbassin/movie-planner/develop/docs/reference/openapi.yaml \
   swaggerapi/swagger-ui
 ```
 
@@ -53,7 +53,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SWAGGER_JSON_URL: https://raw.githubusercontent.com/phbassin/allo-scrapper/develop/docs/reference/openapi.yaml
+      SWAGGER_JSON_URL: https://raw.githubusercontent.com/phbassin/movie-planner/develop/docs/reference/openapi.yaml
 ```
 
 ### Option 3: Redocly (Beautiful Documentation)
@@ -62,7 +62,7 @@ Generate beautiful static documentation:
 
 ```bash
 # Online (no setup needed)
-https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/phbassin/allo-scrapper/develop/docs/reference/openapi.yaml
+https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/phbassin/movie-planner/develop/docs/reference/openapi.yaml
 ```
 
 **Features:**
@@ -418,7 +418,7 @@ Import the OpenAPI spec into Postman for integrated API testing:
 1. Open **Postman**
 2. Click **Import** (top left)
 3. Select **Link** tab
-4. Paste: `https://raw.githubusercontent.com/phbassin/allo-scrapper/develop/docs/reference/openapi.yaml`
+4. Paste: `https://raw.githubusercontent.com/phbassin/movie-planner/develop/docs/reference/openapi.yaml`
 5. Click **Import**
 
 All endpoints will be pre-configured in Postman.
@@ -530,9 +530,9 @@ curl -X POST http://localhost:3000/api/settings/import \
 ## Need Help?
 
 - **Interactive Testing**: Use Swagger UI at https://editor.swagger.io
-- **Report Issues**: [GitHub Issues](https://github.com/phbassin/allo-scrapper/issues)
+- **Report Issues**: [GitHub Issues](https://github.com/phbassin/movie-planner/issues)
 - **Documentation**: [Full docs](../../README.md)
-- **Discussions**: [GitHub Discussions](https://github.com/phbassin/allo-scrapper/discussions)
+- **Discussions**: [GitHub Discussions](https://github.com/phbassin/movie-planner/discussions)
 
 ---
 

@@ -165,9 +165,9 @@ SCRAPE_THEATER_DELAY_MS=3000  # ✅ Safer
 SCRAPE_THEATER_DELAY_MS=5000  # ✅ Very conservative
 
 # Apply by restarting:
-docker compose restart ics-web
+docker compose restart server
 # or for microservice mode:
-docker compose restart ics-scraper
+docker compose restart scraper
 ```
 
 **2. Reduce Theater Count**
@@ -190,7 +190,7 @@ If running multiple scraper instances on same IP:
 docker compose ps | grep scraper
 
 # Reduce to single instance temporarily
-docker compose stop ics-scraper-cron
+docker compose stop scraper-cron
 ```
 
 **4. Check Current AlloCiné Status**
@@ -513,7 +513,7 @@ scrape_duration_seconds               # How long scrapes take
 **In application logs:**
 
 ```bash
-docker compose logs ics-web | grep -i "429\|403\|timeout"
+docker compose logs server | grep -i "429\|403\|timeout"
 
 # Example output showing rate limit:
 2026-03-18T10:15:23Z [scraper] Theater C0042: 429 Too Many Requests
@@ -528,15 +528,16 @@ docker compose logs ics-web | grep -i "429\|403\|timeout"
 ```bash
 # In .env
 LOG_LEVEL=debug
-OTEL_ENABLED=true  # Distributed tracing
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
 # Restart
-docker compose restart ics-web
+docker compose restart server
 ```
 
-**View detailed traces:**
-- Open Tempo UI: `http://localhost:3200`
+**View detailed logs:**
+
+```bash
+docker compose logs -f server | grep -i "429\|rate"
+```
 - Search for scrape trace
 - See exact timing of each request
 
@@ -560,8 +561,6 @@ SCRAPE_CRON_SCHEDULE="0 3 * * 3"  # Wednesday 3am (off-peak)
 
 # ✅ Monitoring
 LOG_LEVEL=info
-OTEL_ENABLED=true
-OTEL_EXPORTER_OTLP_ENDPOINT=http://ics-tempo:4317
 
 # ✅ Resilience
 SCRAPE_DAYS=7
@@ -582,7 +581,7 @@ For **scaling to 50+ theaters**:
 
 2. **Use multiple scraper instances**
    ```bash
-   docker compose up -d --scale ics-scraper=2
+   docker compose up -d --scale scraper=2
    ```
 
 3. **Monitor queue depth**
@@ -684,7 +683,6 @@ for (const theater of theaters) {
 - [Scraper Configuration Reference](../../reference/scraper.md) - Env vars and modes
 - [Scraper System Architecture](../../reference/architecture/scraper-system.md) - How scraper works
 - [Troubleshooting Scraper](../../troubleshooting/scraper.md) - Common issues
-- [Monitoring Guide](../deployment/monitoring.md) - Production monitoring
 - [Docker Deployment](../deployment/docker.md) - Container configuration
 
 ---

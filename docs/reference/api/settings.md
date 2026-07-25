@@ -225,7 +225,7 @@ POST /api/settings/reset
 
 **Authentication:** Required (Admin role only)
 
-**Description:** Reset all settings to default values (original Allo-Scrapper branding).
+**Description:** Reset all settings to default values (original Movie Planner branding).
 
 **Response (200):**
 ```json
@@ -234,7 +234,7 @@ POST /api/settings/reset
   "data": {
     "message": "Settings reset to defaults",
     "settings": {
-      "site_name": "Allo-Scrapper",
+      "site_name": "Movie Planner",
       "color_primary": "#FECC00",
       "color_secondary": "#1F2937"
     }

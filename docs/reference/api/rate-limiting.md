@@ -1,6 +1,6 @@
 # Rate Limiting
 
-API rate limiting policies, headers, and configuration for Allo-Scrapper.
+API rate limiting policies, headers, and configuration for Movie Planner.
 
 **Last updated:** March 6, 2026
 
@@ -25,7 +25,7 @@ API rate limiting policies, headers, and configuration for Allo-Scrapper.
 
 ## Overview
 
-Allo-Scrapper uses **`express-rate-limit`** middleware to protect the API from abuse and ensure fair usage.
+Movie Planner uses **`express-rate-limit`** middleware to protect the API from abuse and ensure fair usage.
 
 ### Key Features
 
@@ -676,7 +676,6 @@ Returns a paginated history of all rate limit changes with user attribution.
 - [API Reference](./README.md) - All API endpoints
 - [Authentication API](./auth.md) - Login and authentication
 - [Configuration Guide](../../getting-started/configuration.md) - Environment setup
-- [Security Best Practices](../../project/security.md) - Security guidelines
 
 ---
 

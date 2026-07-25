@@ -2,17 +2,17 @@
 
 **Last updated:** March 18, 2026 | Status: Current ✅
 
-Complete reference for the Allo-Scrapper REST API.
+Complete reference for the Movie Planner REST API.
 
 **Related Documentation:**
-- [Health Check](./health.md) - Service health endpoint
+- Health Check - Service health endpoint
 - [Theaters](./theaters.md) - Theater management endpoints
 - [Movies](./movies.md) - Movie data endpoints
 - [Authentication](./auth.md) - Auth endpoints
 - [Scraper](./scraper.md) - Scraping control endpoints
 - [Reports](./reports.md) - Scrape reports endpoints
 - [Settings](./settings.md) - Settings management
-- [Users](./users.md) - User management
+- Users - User management
 - [System](./system.md) - System information
 - [../../getting-started/configuration.md](../../getting-started/configuration.md) - Environment variables
 - [../../reference/database/](../../reference/database/) - Database schema
@@ -241,7 +241,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 | Category | Endpoint | Method | Auth Required |
 |----------|----------|--------|---------------|
-| [Health](./health.md) | `/api/health` | GET | No |
+| Health | `/api/health` | GET | No |
 | [Theaters](./theaters.md) | `/api/theaters` | GET | No |
 | [Theaters](./theaters.md) | `/api/theaters/:id` | GET | No |
 | [Theaters](./theaters.md) | `/api/theaters` | POST | `theaters:create` |
@@ -265,12 +265,12 @@ curl -X POST http://localhost:3000/api/auth/login \
 | [Settings](./settings.md) | `/api/settings/export` | GET | `settings:export` |
 | [Settings](./settings.md) | `/api/settings/import` | POST | `settings:import` |
 | [Settings](./settings.md) | `/api/theme.css` | GET | No |
-| [Users](./users.md) | `/api/users` | GET | `users:list` |
-| [Users](./users.md) | `/api/users/:id` | GET | `users:list` |
-| [Users](./users.md) | `/api/users` | POST | `users:create` |
-| [Users](./users.md) | `/api/users/:id/role` | PUT | `users:update` |
-| [Users](./users.md) | `/api/users/:id/reset-password` | POST | `users:update` |
-| [Users](./users.md) | `/api/users/:id` | DELETE | `users:delete` |
+| Users | `/api/users` | GET | `users:list` |
+| Users | `/api/users/:id` | GET | `users:list` |
+| Users | `/api/users` | POST | `users:create` |
+| Users | `/api/users/:id/role` | PUT | `users:update` |
+| Users | `/api/users/:id/reset-password` | POST | `users:update` |
+| Users | `/api/users/:id` | DELETE | `users:delete` |
 | [System](./system.md) | `/api/system/info` | GET | `system:info` |
 | [System](./system.md) | `/api/system/health` | GET | `system:health` |
 | [System](./system.md) | `/api/system/migrations` | GET | `system:migrations` |
@@ -287,14 +287,14 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ## Related Documentation
 
-- [Health Check](./health.md) - Service health endpoint
+- Health Check - Service health endpoint
 - [Theaters API](./theaters.md) - Theater management
 - [Movies API](./movies.md) - Movie data
 - [Authentication](./auth.md) - Login, registration, password management
 - [Scraper API](./scraper.md) - Trigger and monitor scraping
 - [Reports API](./reports.md) - View scrape reports
 - [Settings API](./settings.md) - Application settings management
-- [Users API](./users.md) - User management (admin only)
+- Users API - User management (admin only)
 - [System API](./system.md) - System information and health
 
 ---

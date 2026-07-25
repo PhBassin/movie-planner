@@ -3,7 +3,6 @@
 Guide for accessing the application from external devices (LAN/network access).
 
 **Related Guides:**
-- [Production Deployment](./production.md) - Production setup
 - [Docker Setup](./docker.md) - Container management
 - [../../getting-started/configuration.md](../../getting-started/configuration.md) - Environment variables
 
@@ -68,7 +67,7 @@ ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 #                                      Add your server's LAN IP
 
 # Restart the container to apply changes
-docker compose restart ics-web
+docker compose restart server
 ```
 
 ---
@@ -199,7 +198,7 @@ curl ifconfig.me
 ```bash
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000,http://203.0.113.45:3000
 
-docker compose restart ics-web
+docker compose restart server
 ```
 
 ---
@@ -209,7 +208,7 @@ docker compose restart ics-web
 http://203.0.113.45:3000
 ```
 
-**Recommended:** Use a reverse proxy (nginx) with HTTPS and authentication for production internet access. See [Production Deployment](./production.md) for details.
+**Recommended:** Use a reverse proxy (nginx) with HTTPS and authentication for production internet access.
 
 ---
 
@@ -229,7 +228,7 @@ ALLOWED_ORIGINS=http://localhost:3000,https://theater.example.com
 # Reverse proxy forwards requests to localhost:3000
 ```
 
-See [Production Deployment](./production.md) for complete custom domain setup.
+
 
 ---
 
@@ -252,7 +251,7 @@ cat .env | grep ALLOWED_ORIGINS
 echo "ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000" >> .env
 
 # 3. Restart container
-docker compose restart ics-web
+docker compose restart server
 
 # 4. Clear browser cache and reload page
 ```
@@ -282,7 +281,7 @@ Add the exact origin (including `http://`) to `ALLOWED_ORIGINS` in `.env`, then 
 # Add the origin shown in the error message
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 
-docker compose restart ics-web
+docker compose restart server
 ```
 
 **Multiple IPs:**
@@ -323,7 +322,7 @@ sudo ufw allow 3000/tcp
 **3. Verify Docker container is running:**
 ```bash
 docker compose ps
-# Should show ics-web as "running"
+# Should show server as "running"
 ```
 
 ---
@@ -355,7 +354,7 @@ curl http://192.168.1.100:3000/api/health
 # Update CORS to include LAN IP
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 
-docker compose restart ics-web
+docker compose restart server
 ```
 
 ---
@@ -525,7 +524,6 @@ ALLOWED_ORIGINS=https://theater.example.com,https://www.theater.example.com
 
 ## Related Documentation
 
-- [Production Deployment](./production.md) - Custom domain and HTTPS setup
 - [Docker Setup](./docker.md) - Container management
 - [../../getting-started/configuration.md](../../getting-started/configuration.md) - Environment variables
 - [Network Troubleshooting](../../troubleshooting/networking.md) - Network issues

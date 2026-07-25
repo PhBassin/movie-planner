@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Solutions to common issues and debugging guides for Allo-Scrapper.
+Solutions to common issues and debugging guides for Movie Planner.
 
 ## 📑 Common Issues
 
@@ -113,17 +113,17 @@ Scraping failures and debugging.
 docker compose ps
 
 # Logs for specific service
-docker compose logs ics-web
-docker compose logs ics-db
+docker compose logs server
+docker compose logs db
 
 # Follow logs
-docker compose logs -f ics-web
+docker compose logs -f server
 ```
 
 ### Database Access
 ```bash
 # Connect to database
-docker compose exec ics-db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d ics
 
 # Check tables
 \dt
@@ -164,17 +164,15 @@ curl -N -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/scraper/prog
 If you can't find a solution here:
 
 1. **Check logs**: `docker compose logs <service>`
-2. **Search issues**: [GitHub Issues](https://github.com/yourusername/allo-scrapper/issues)
+2. **Search issues**: [GitHub Issues](https://github.com/yourusername/movie-planner/issues)
 3. **Create issue**: Use the bug report template
-4. **Community**: [GitHub Discussions](https://github.com/yourusername/allo-scrapper/discussions)
+4. **Community**: [GitHub Discussions](https://github.com/yourusername/movie-planner/discussions)
 
 ---
 
 ## Related Documentation
 
-- [Production Deployment](../guides/deployment/production.md) - Production setup
 - [Docker Setup](../guides/deployment/docker.md) - Docker configuration
-- [Monitoring](../guides/deployment/monitoring.md) - Observability tools
 - [Database Reference](../reference/database/) - Database documentation
 
 ---

@@ -1,6 +1,6 @@
 # 🎨 Admin Panel User Guide
 
-Complete guide to using the Allo-Scrapper admin panel for white-label branding and user management.
+Complete guide to using the Movie Planner admin panel for white-label branding and user management.
 
 **Last updated:** March 18, 2026 | Status: Current ✅
 
@@ -40,16 +40,19 @@ The admin panel provides comprehensive control over:
 
 ## Accessing the Admin Panel
 
-### Step 1: Login
+### Step 1: Sign in
 
-1. Navigate to the application homepage
-2. Click "Login" in the top-right corner
-3. Enter credentials:
-   - **Default username**: `admin`
-   - **Default password**: `admin`
-4. Click "Login"
+1. Navigate to the application homepage.
+2. Click "Login" in the top-right corner.
+3. Enter the bootstrap admin credentials:
+   - **Username:** `admin`
+   - **Password:** the random password the server logged **once** to stdout on
+     first startup of a fresh database. There is no static default password —
+     if you have lost it, reset the database volume or use the admin
+     password-reset path.
+4. Click "Login".
 
-⚠️ **Security Alert**: Change the default admin password immediately after first login!
+⚠️ **Security:** change the admin password immediately after first sign-in.
 
 ### Step 2: Access Admin Panel
 
@@ -89,7 +92,7 @@ Configure core branding elements.
 - **Purpose**: Displayed in header, page title, browser tab, footer
 - **Format**: Plain text (e.g., "My Theater Portal")
 - **Placeholders**: Available in footer as `{site_name}`
-- **Example**: Changing "Allo-Scrapper" to "CinéParis" updates all references site-wide
+- **Example**: Changing "Movie Planner" to "CinéParis" updates all references site-wide
 
 #### Logo Upload
 - **Purpose**: Replaces default 🎬 emoji in header
@@ -260,7 +263,7 @@ Configure email template branding for system-generated emails.
 
 #### Email From Name
 - **Purpose**: Sender name in email "From" field
-- **Default**: `"Allo-Scrapper"`
+- **Default**: `"Movie Planner"`
 - **Example**: `"My Theater Portal"`
 
 #### Email From Address
@@ -440,7 +443,7 @@ Migrations follow the format: `NNN_description.sql`
 
 ```bash
 # Via Docker
-docker compose restart ics-web
+docker compose restart server
 
 # Migrations auto-apply on startup if AUTO_MIGRATE=true (default)
 ```
@@ -448,7 +451,7 @@ docker compose restart ics-web
 **Manual Migration** (if auto-migrate disabled):
 
 ```bash
-docker compose exec ics-web npm run migrate
+docker compose exec server npm run migrate
 ```
 
 ---
@@ -511,7 +514,7 @@ docker compose exec ics-web npm run migrate
 
 **Steps**:
 1. Click "Export Configuration" button at bottom of admin panel
-2. JSON file downloads automatically: `allo-scrapper-settings-YYYY-MM-DD.json`
+2. JSON file downloads automatically: `movie-planner-settings-YYYY-MM-DD.json`
 3. Store file securely
 
 **Export Contents**:
@@ -556,7 +559,7 @@ docker compose exec ics-web npm run migrate
 
 ### Reset to Defaults
 
-**Purpose**: Restore original Allo-Scrapper branding.
+**Purpose**: Restore original Movie Planner branding.
 
 **Steps**:
 1. Click "Reset to Defaults" button
@@ -564,7 +567,7 @@ docker compose exec ics-web npm run migrate
 3. All settings reset to defaults
 
 **Default Values**:
-- Site name: "Allo-Scrapper"
+- Site name: "Movie Planner"
 - Colors: Yellow primary (#FECC00), dark gray secondary (#1F2937)
 - Fonts: System fonts
 - Logo/favicon: Removed
@@ -941,7 +944,7 @@ Role assignment is done from the **Users** tab, not the Roles tab:
 1. **Database password reset** (requires database access):
    ```bash
    # Connect to database
-   docker compose exec ics-db psql -U postgres -d ics
+   docker compose exec db psql -U postgres -d ics
 
    # Reset admin password to 'newpassword'
    # (Generate hash with: bcrypt.hash('newpassword', 10))
@@ -951,7 +954,7 @@ Role assignment is done from the **Users** tab, not the Roles tab:
 2. **Create new admin via database**:
    ```bash
    # Connect to database
-   docker compose exec ics-db psql -U postgres -d ics
+   docker compose exec db psql -U postgres -d ics
 
    # Create new admin
    INSERT INTO users (username, password_hash, role)
@@ -968,15 +971,15 @@ Role assignment is done from the **Users** tab, not the Roles tab:
 
 - **API Reference**: [API Overview](../../reference/api/README.md) - Complete API documentation
 - **Settings API**: [Settings API](../../reference/api/settings.md) - Settings endpoints
-- **Users API**: [Users API](../../reference/api/users.md) - User management endpoints
+- **Users API**: Users API - User management endpoints
 - **Installation Guide**: [Installation](../../getting-started/installation.md) - Environment and configuration
 - **Database Schema**: [Database Reference](../../reference/database/) - Data models
 - **Troubleshooting**: [Common Issues](../../troubleshooting/common-issues.md) - Common issues
 
 ### Support
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/PhBassin/allo-scrapper/issues)
-- **Discussions**: [Ask questions and share ideas](https://github.com/PhBassin/allo-scrapper/discussions)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/PhBassin/movie-planner/issues)
+- **Discussions**: [Ask questions and share ideas](https://github.com/PhBassin/movie-planner/discussions)
 
 ---
 
@@ -984,9 +987,8 @@ Role assignment is done from the **Users** tab, not the Roles tab:
 
 - [Quick Start](../../getting-started/quick-start.md) - Get started quickly
 - [Settings API](../../reference/api/settings.md) - Settings API reference
-- [Users API](../../reference/api/users.md) - Users API reference
+- Users API - Users API reference
 - [Contributing](../development/contributing.md) - Development guidelines
-- [Production Deployment](../deployment/production.md) - Production deployment guide
 
 ---
 

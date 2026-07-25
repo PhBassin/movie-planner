@@ -1,84 +1,80 @@
-# Allo-Scrapper Documentation
+# Movie Planner Documentation
 
-Welcome to the Allo-Scrapper documentation. This guide will help you get started, deploy, develop, and maintain your theater showtimes aggregator.
+Welcome to the Movie Planner documentation. This guide covers local setup,
+development, administration, and the technical reference for the theater
+showtimes aggregator.
 
-## 📚 Documentation Structure
+> **Provenance:** Movie Planner is a permanently diverged project derived from
+> an inherited cinema codebase. See [ADR 0008](./adr/0008-fork-monolith-single-db.md)
+> and the [archived inherited changelog](./history/) for context.
 
-Our documentation is organized following the [Divio Documentation System](https://documentation.divio.com/):
+## Documentation Structure
 
-### 🚀 [Getting Started](./getting-started/)
-New to Allo-Scrapper? Start here for quick setup and configuration guides.
+The documentation follows the [Divio Documentation System](https://documentation.divio.com/).
 
-- [Quick Start](./getting-started/quick-start.md) - Get up and running in 5 minutes
-- [Installation](./getting-started/installation.md) - Detailed installation instructions
-- [Configuration](./getting-started/configuration.md) - Environment variables and settings
+### Getting Started
 
-### 📖 [Guides](./guides/)
-Step-by-step tutorials and how-to guides for common tasks.
+- [Quick Start](./getting-started/quick-start.md) — get running with Docker in minutes
+- [Installation](./getting-started/installation.md) — detailed local setup
+- [Configuration](./getting-started/configuration.md) — environment variables
 
-**Browse all guides** → [Guides Hub](./guides/)
+### Guides
 
-#### Deployment
-- [Production Deployment](./guides/deployment/production.md) - Deploy to production
-- [Docker Setup](./guides/deployment/docker.md) - Docker configuration and profiles
-- [Backup & Restore](./guides/deployment/backup-restore.md) - Database backup workflows
-- [Monitoring](./guides/deployment/monitoring.md) - Observability stack setup
-- [Networking](./guides/deployment/networking.md) - Network configuration and SSL
+**[Development](./guides/development/)** — local dev, testing, contributing, CI
+- [Setup](./guides/development/setup.md) — local development environment (Node 24)
+- [Testing](./guides/development/testing.md) — unit, integration, E2E
+- [Contributing](./guides/development/contributing.md) — workflow and Conventional Commits
+- [CI/CD](./guides/development/cicd.md) — GitHub Actions and release process
 
-#### Development
-- [Development Setup](./guides/development/setup.md) - Local development environment
-- [Testing](./guides/development/testing.md) - Unit, integration, and E2E tests
-- [Contributing](./guides/development/contributing.md) - Contributing guidelines
-- [CI/CD](./guides/development/cicd.md) - Continuous integration and deployment
+**[Administration](./guides/administration/)** — admin panel and white-label
+- [Admin Panel](./guides/administration/admin-panel.md)
+- [White-Label Configuration](./guides/administration/white-label.md)
+- [User Management](./guides/administration/user-management.md)
 
-#### Administration
-- [Admin Panel](./guides/administration/admin-panel.md) - Admin panel user guide
-- [White-Label Configuration](./guides/administration/white-label.md) - Customize branding
-- [User Management](./guides/administration/user-management.md) - Manage users and roles
+**[Deployment (local only)](./guides/deployment/)** — Docker and networking for local dev
+- [Docker Setup](./guides/deployment/docker.md) — `compose.yaml` and `compose.infra.yaml`
+- [Networking](./guides/deployment/networking.md) — local ports and proxies
 
-### 📋 [Reference](./reference/)
-Technical reference documentation for APIs, database schema, and architecture.
+> Production/VPS deployment, GHCR publication, monitoring, scaling, and SSH
+> backup/restore are no longer supported. See the
+> [independence cleanup plan](./plans/independence-cleanup.md).
 
-- [**API Reference**](./reference/api/) - Complete REST API documentation
-- [**Database**](./reference/database/) - Schema and migrations
-- [**Scripts**](./reference/scripts/) - Automation scripts reference
-- [**Architecture**](./reference/architecture/) - System design and diagrams
+### Reference
 
-### 🔧 [Troubleshooting](./troubleshooting/)
-Solutions to common issues and debugging guides.
+- [**API**](./reference/api/) — REST API reference
+- [**Database**](./reference/database/) — schema and migrations
+- [**Architecture**](./reference/architecture/) — system design
+- [**Scripts**](./reference/scripts/) — local backup/restore and maintenance utilities
+- [Roles & Permissions](./reference/roles-and-permissions.md)
+- [Performance](./reference/performance.md)
 
-- [Common Issues](./troubleshooting/common-issues.md) - Frequently encountered problems
-- [Database Issues](./troubleshooting/database.md) - PostgreSQL troubleshooting
-- [Docker Issues](./troubleshooting/docker.md) - Container and networking problems
-- [Networking Issues](./troubleshooting/networking.md) - Connection and SSL issues
-- [Scraper Issues](./troubleshooting/scraper.md) - Scraping failures and debugging
+### Troubleshooting
 
-### 📦 [Project](./project/)
-Project meta-documentation, changelog, and planning documents.
+- [Common Issues](./troubleshooting/common-issues.md)
+- [Database](./troubleshooting/database.md)
+- [Docker](./troubleshooting/docker.md)
+- [Networking](./troubleshooting/networking.md)
+- [Scraper](./troubleshooting/scraper.md)
 
-- [Changelog](./project/changelog.md) - Version history and release notes
-- [Security](./project/security.md) - Security policies and reporting
-- [AI Agent Instructions](./project/agents.md) - Guidelines for AI coding agents
-- [White-Label Roadmap](./project/white-label-plan.md) - Feature implementation plan
+### Domain & Decisions
 
----
+- [CONTEXT.md](../CONTEXT.md) — domain glossary (entities, FSMs, wire-format types)
+- [ADR index](./adr/) — architecture decision records
+- [White-Label implementation plan](./project/white-label-plan.md) — historical design notes
+- [Independence cleanup plan](./plans/independence-cleanup.md) — Movie Planner baseline epic
 
 ## Quick Links
 
 - **First time here?** → [Getting Started](./getting-started/)
-- **Deploying to production?** → [Production Deployment](./guides/deployment/production.md)
 - **Looking for API docs?** → [API Reference](./reference/api/)
 - **Something not working?** → [Troubleshooting](./troubleshooting/)
 - **Want to contribute?** → [Contributing Guide](./guides/development/contributing.md)
 
----
-
 ## Need Help?
 
-- **Issues & Bug Reports**: [GitHub Issues](https://github.com/yourusername/allo-scrapper/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/allo-scrapper/discussions)
-- **Security Issues**: See [Security Policy](./project/security.md)
+- **Issues & Bug Reports**: [GitHub Issues](https://github.com/PhBassin/movie-planner/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/PhBassin/movie-planner/discussions)
 
 ---
 
-[← Back to Main README](../README.md)
+[← Back to README](../README.md)

@@ -2,7 +2,7 @@
 
 **Last updated:** March 18, 2026 | Status: Current ✅
 
-Complete PostgreSQL schema reference for the Allo-Scrapper database.
+Complete PostgreSQL schema reference for the Movie Planner database.
 
 ## Overview
 
@@ -466,7 +466,7 @@ White-label branding configuration (singleton table - always 1 row).
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | `INTEGER` | PRIMARY KEY, DEFAULT 1 | Always 1 (singleton) |
-| `site_name` | `TEXT` | NOT NULL, DEFAULT 'Allo-Scrapper' | Site name shown in UI |
+| `site_name` | `TEXT` | NOT NULL, DEFAULT 'Movie Planner' | Site name shown in UI |
 | `logo_base64` | `TEXT` | | Base64-encoded logo image |
 | `favicon_base64` | `TEXT` | | Base64-encoded favicon |
 | `color_primary` | `TEXT` | NOT NULL, DEFAULT '#FECC00' | Primary brand color (hex) |
@@ -482,7 +482,7 @@ White-label branding configuration (singleton table - always 1 row).
 | `font_secondary` | `TEXT` | NOT NULL, DEFAULT 'Roboto' | Secondary font (Google Fonts) |
 | `footer_text` | `TEXT` | DEFAULT '...' | Footer disclaimer text |
 | `footer_links` | `JSONB` | DEFAULT '[]' | JSON array of footer links |
-| `email_from_name` | `TEXT` | DEFAULT 'Allo-Scrapper' | Email sender name |
+| `email_from_name` | `TEXT` | DEFAULT 'Movie Planner' | Email sender name |
 | `email_from_address` | `TEXT` | DEFAULT 'no-reply@...' | Email sender address |
 | `updated_at` | `TIMESTAMPTZ` | DEFAULT CURRENT_TIMESTAMP | Last update time |
 | `updated_by` | `INTEGER` | FK → `users(id)` | User who made last update |

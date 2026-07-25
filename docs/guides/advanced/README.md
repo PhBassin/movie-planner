@@ -14,12 +14,9 @@ Choose a guide based on your current challenge:
 
 | Goal | Guide | Read Time |
 |------|-------|-----------|
-| **Scale scraper to multiple instances** | [Production Scaling](./production-scaling.md) | 25 min |
 | **Tune scraper for rate limiting / 429 errors** | [Rate Limiting Tuning](./scraper-rate-limiting.md) | 20 min |
 | **Add support for a new theater source** | [Custom Parser Development](./custom-parser-development.md) | 30 min |
 | **Manage users, roles, and permissions** | [Admin Operations](./admin-operations.md) | 25 min |
-| **Deploy to Kubernetes** | [Production Scaling - Kubernetes section](./production-scaling.md#kubernetes-scaling) | 10 min |
-| **Set up monitoring and alerts** | [Production Scaling - Monitoring section](./production-scaling.md#monitoring--alerting) | 15 min |
 
 ---
 
@@ -127,8 +124,6 @@ Choose a guide based on your current challenge:
 ## Reading Paths by Role
 
 ### Site Reliability Engineer / DevOps
-1. [Production Scaling](./production-scaling.md) – Master queue, orchestration, monitoring
-2. [Monitoring & Alerting](./production-scaling.md#monitoring--alerting) – Set up observability
 3. [Admin Operations - Disaster Recovery](./admin-operations.md#disaster-recovery) – Emergency procedures
 
 **Time commitment**: ~45 minutes
@@ -136,20 +131,17 @@ Choose a guide based on your current challenge:
 ### Content/Theater Manager
 1. [Custom Parser Development](./custom-parser-development.md) – Add new theater sources
 2. [Scraper Rate Limiting](./scraper-rate-limiting.md) – Troubleshoot 429 errors
-3. [Production Scaling - Job Orchestration](./production-scaling.md#job-orchestration) – Understand job types
 
 **Time commitment**: ~60 minutes
 
 ### System Administrator / Security Officer
 1. [Admin Operations](./admin-operations.md) – Complete RBAC guide
 2. [Admin Operations - Audit & Compliance](./admin-operations.md#audit--compliance) – Set up audit trails
-3. [Production Scaling - Monitoring](./production-scaling.md#monitoring--alerting) – Health checks & alerts
 
 **Time commitment**: ~55 minutes
 
 ### Software Engineer (Adding Features)
 1. [Custom Parser Development](./custom-parser-development.md) – Understand extensibility
-2. [Production Scaling - Job Orchestration](./production-scaling.md#job-orchestration) – Job lifecycle
 3. [Admin Operations - RBAC Design Patterns](./admin-operations.md#rbac-design-patterns) – Permission modeling
 
 **Time commitment**: ~70 minutes
@@ -158,7 +150,7 @@ Choose a guide based on your current challenge:
 
 ## Related Documentation
 
-- **[Getting Started](../getting-started/)** – Initial setup and deployment
+- **[Getting Started](../../getting-started/)** – Initial setup and deployment
 - **[Deployment Guides](../deployment/)** – Docker, Kubernetes, monitoring
 - **[Reference Docs](../../reference/)** – Complete API reference, schema details
 - **[Troubleshooting](../../troubleshooting/)** – Common issues and solutions
@@ -191,9 +183,9 @@ A: Yes. See [Disaster Recovery](./admin-operations.md#disaster-recovery) for res
 ## Contributing
 
 Found an issue or have a suggestion? Open a GitHub issue with the `documentation` label:
-- [Report a bug](https://github.com/phbassin/allo-scrapper/issues/new?labels=bug)
-- [Request a feature](https://github.com/phbassin/allo-scrapper/issues/new?labels=enhancement)
-- [Improve docs](https://github.com/phbassin/allo-scrapper/issues/new?labels=documentation)
+- [Report a bug](https://github.com/phbassin/movie-planner/issues/new?labels=bug)
+- [Request a feature](https://github.com/phbassin/movie-planner/issues/new?labels=enhancement)
+- [Improve docs](https://github.com/phbassin/movie-planner/issues/new?labels=documentation)
 
 ---
 

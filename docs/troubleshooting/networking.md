@@ -1,10 +1,9 @@
 # 🌐 Networking Troubleshooting
 
-Network configuration, SSL, and connectivity troubleshooting for Allo-Scrapper.
+Network configuration, SSL, and connectivity troubleshooting for Movie Planner.
 
 **Related Documentation:**
 - [Networking Guide](../guides/deployment/networking.md) - Network setup
-- [Production Deployment](../guides/deployment/production.md) - Production configuration
 - [Common Issues](./common-issues.md) - General troubleshooting
 
 ---
@@ -47,7 +46,7 @@ echo "CORS_ORIGIN=http://localhost:5173" >> .env
 echo "CORS_ORIGIN=https://app.example.com,https://www.example.com" >> .env
 
 # Restart server
-docker compose restart ics-web
+docker compose restart server
 ```
 
 **Default:** `CORS_ORIGIN=http://localhost:5173` (Vite dev server)
@@ -116,8 +115,8 @@ fetch('http://localhost:3000/api/...', {
 
 ```bash
 # ✅ CORRECT - service names
-POSTGRES_HOST=ics-db
-REDIS_URL=redis://ics-redis:6379
+POSTGRES_HOST=db
+REDIS_URL=redis://redis:6379
 
 # ❌ WRONG - localhost (doesn't work between containers)
 POSTGRES_HOST=localhost
@@ -142,24 +141,24 @@ Error: connect ECONNREFUSED 127.0.0.1:5432
 
 ```bash
 # Fix environment variables
-POSTGRES_HOST=ics-db      # Not localhost
-REDIS_URL=redis://ics-redis:6379
+POSTGRES_HOST=db      # Not localhost
+REDIS_URL=redis://redis:6379
 
 # Restart services
-docker compose restart ics-web
+docker compose restart server
 ```
 
 **Test connectivity:**
 
 ```bash
-# From ics-web container, ping database
-docker compose exec ics-web ping ics-db
+# From server container, ping database
+docker compose exec server ping db
 
 # Check DNS resolution
-docker compose exec ics-web nslookup ics-db
+docker compose exec server nslookup db
 
 # Test database connection
-docker compose exec ics-web psql -h ics-db -U postgres -d ics -c "SELECT 1;"
+docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
 ```
 
 ---
@@ -170,7 +169,7 @@ docker compose exec ics-web psql -h ics-db -U postgres -d ics -c "SELECT 1;"
 
 ```yaml
 services:
-  ics-web:
+  server:
     ports:
       - "3000:3000"  # host:container
       #   ↑    ↑
@@ -185,17 +184,17 @@ services:
 curl http://localhost:3000/api/health
 
 # From another container
-curl http://ics-web:3000/api/health
+curl http://server:3000/api/health
 ```
 
 **Common mistake:**
 
 ```bash
 # ❌ WRONG - trying to use host port from container
-POSTGRES_HOST=ics-db:5432  # Don't specify port, use default
+POSTGRES_HOST=db:5432  # Don't specify port, use default
 
 # ✅ CORRECT
-POSTGRES_HOST=ics-db  # Uses PostgreSQL default port 5432
+POSTGRES_HOST=db  # Uses PostgreSQL default port 5432
 ```
 
 ---
@@ -224,7 +223,7 @@ server {
     ssl_certificate_key /etc/ssl/private/key.pem;
 
     location / {
-        proxy_pass http://ics-web:3000;
+        proxy_pass http://server:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -330,7 +329,7 @@ curl -N http://localhost:3000/api/scraper/progress
 
 ```nginx
 location /api/scraper/progress {
-    proxy_pass http://ics-web:3000;
+    proxy_pass http://server:3000;
     proxy_set_header Connection '';
     proxy_http_version 1.1;
     proxy_buffering off;
@@ -362,7 +361,7 @@ SCRAPE_THEATER_DELAY_MS=3000  # Default: 3 seconds
 SCRAPE_MOVIE_DELAY_MS=500  # Default: 500ms
 
 # Restart to apply
-docker compose restart ics-web
+docker compose restart server
 ```
 
 **If AlloCiné rate limits you:**
@@ -372,7 +371,7 @@ docker compose restart ics-web
 ```bash
 echo "SCRAPE_THEATER_DELAY_MS=5000" >> .env  # 5 seconds between theaters
 echo "SCRAPE_MOVIE_DELAY_MS=1000" >> .env   # 1 second between movies
-docker compose restart ics-web
+docker compose restart server
 ```
 
 2. **Scrape fewer theaters at once** (use API to scrape specific theaters)
@@ -380,7 +379,7 @@ docker compose restart ics-web
 3. **Monitor for 403/429 errors in logs:**
 
 ```bash
-docker compose logs ics-web | grep "Failed to fetch"
+docker compose logs server | grep "Failed to fetch"
 ```
 
 ---
@@ -421,8 +420,8 @@ Retry-After: 60
 
 ```bash
 # Each service can resolve other service names
-docker compose exec ics-web ping ics-db
-docker compose exec ics-web nslookup ics-redis
+docker compose exec server ping db
+docker compose exec server nslookup redis
 
 # Expected: Resolves to container IP
 ```
@@ -431,7 +430,7 @@ docker compose exec ics-web nslookup ics-redis
 
 ```yaml
 services:
-  ics-web:
+  server:
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -453,7 +452,7 @@ getaddrinfo ENOTFOUND www.allocine.fr
 
 ```bash
 # Test DNS from container
-docker compose exec ics-web nslookup www.allocine.fr
+docker compose exec server nslookup www.allocine.fr
 
 # If fails, check Docker DNS config
 # Or add custom DNS servers (see above)
@@ -500,19 +499,19 @@ curl -N http://localhost:3000/api/scraper/progress
 
 ```bash
 # Ping between containers
-docker compose exec ics-web ping ics-db
+docker compose exec server ping db
 
 # Check DNS resolution
-docker compose exec ics-web nslookup ics-db
+docker compose exec server nslookup db
 
 # Check listening ports
-docker compose exec ics-web netstat -tulpn
+docker compose exec server netstat -tulpn
 
 # Check network interfaces
-docker compose exec ics-web ip addr
+docker compose exec server ip addr
 
 # Inspect network
-docker network inspect allo-scrapper_default
+docker network inspect movie-planner_default
 ```
 
 ### Test CORS
@@ -534,10 +533,10 @@ curl http://localhost:3000/api/theaters \
 
 ```bash
 # Monitor requests (from container logs)
-docker compose logs -f ics-web | grep "GET\|POST\|PUT\|DELETE"
+docker compose logs -f server | grep "GET\|POST\|PUT\|DELETE"
 
 # View all connections
-docker compose exec ics-web netstat -an | grep ESTABLISHED
+docker compose exec server netstat -an | grep ESTABLISHED
 ```
 
 ---
@@ -555,11 +554,11 @@ HOST=0.0.0.0  # Listen on all interfaces (Docker default)
 PORT=3000     # Internal port
 
 # Database connection (use service name)
-POSTGRES_HOST=ics-db
+POSTGRES_HOST=db
 POSTGRES_PORT=5432
 
 # Redis connection (use service name)
-REDIS_URL=redis://ics-redis:6379
+REDIS_URL=redis://redis:6379
 ```
 
 ### Network Mode
@@ -570,7 +569,7 @@ REDIS_URL=redis://ics-redis:6379
 
 ```yaml
 services:
-  ics-web:
+  server:
     network_mode: host  # Use host networking
 ```
 
@@ -581,7 +580,6 @@ services:
 ## Related Documentation
 
 - [Networking Guide](../guides/deployment/networking.md) - Reverse proxy setup
-- [Production Deployment](../guides/deployment/production.md) - Production configuration
 - [Docker Troubleshooting](./docker.md) - Docker issues
 - [Common Issues](./common-issues.md) - General troubleshooting
 

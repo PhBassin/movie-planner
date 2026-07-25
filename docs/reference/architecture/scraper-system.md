@@ -38,9 +38,9 @@ The scraper system fetches theater showtimes from AlloCiné and stores them in P
 The scraper runs as a Redis-backed microservice, always included in `docker-compose.yaml`. There is no in-process mode — all scrape jobs are dispatched via Redis pub/sub.
 
 ```
-Express API (ics-web)
+Express API (server)
  └─> Redis Publisher (scrape:jobs)
-      └─> Redis Consumer (ics-scraper)
+      └─> Redis Consumer (scraper)
            └─> PostgreSQL (direct insert)
            └─> Redis Publisher (progress events)
                 └─> Express API (SSE streaming)
@@ -48,7 +48,7 @@ Express API (ics-web)
 
 **Benefits of the microservice architecture:**
 - Isolates scraping workload from API server
-- Enables horizontal scaling (multiple scraper workers via `--scale ics-scraper=N`)
+- Enables horizontal scaling (multiple scraper workers via `--scale scraper=N`)
 - Independent fault isolation (scraper failures don't affect API availability)
 - Better observability (per-service metrics, distributed tracing)
 
@@ -346,7 +346,7 @@ POST /api/scraper/trigger
         ↓
 ┌───────────────────────────────────┐
 │  Scraper Microservice             │
-│  (ics-scraper container)          │
+│  (scraper container)          │
 │                                   │
 │  For each theater:                 │
 │    - Fetch theater page (HTML)    │

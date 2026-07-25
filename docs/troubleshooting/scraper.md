@@ -1,6 +1,6 @@
 # 🎯 Scraper Troubleshooting
 
-Scraping failures, parser errors, and debugging guide for Allo-Scrapper.
+Scraping failures, parser errors, and debugging guide for Movie Planner.
 
 **Related Documentation:**
 - [Scraper Configuration](../reference/scraper.md) - Scraper setup
@@ -41,7 +41,7 @@ TimeoutError: page.goto: Timeout 60000ms exceeded
 
 ```bash
 # Check network connectivity
-docker compose exec ics-web ping www.allocine.fr
+docker compose exec server ping www.allocine.fr
 
 # Check if AlloCiné is accessible
 curl -I https://www.allocine.fr/
@@ -76,10 +76,10 @@ echo "SCRAPE_THEATER_DELAY_MS=5000" >> .env  # 5 seconds
 echo "SCRAPE_MOVIE_DELAY_MS=1000" >> .env    # 1 second
 
 # Restart scraper
-docker compose restart ics-web
+docker compose restart server
 
 # Monitor logs for rate limiting
-docker compose logs -f ics-web | grep "Failed to fetch"
+docker compose logs -f server | grep "Failed to fetch"
 ```
 
 **⚠️ No automatic retry on 403** - scraper skips theater and continues.
@@ -106,7 +106,7 @@ Failed to fetch showtimes JSON for C0072 on 2026-03-05: 404 Not Found
 curl https://www.allocine.fr/seance/salle_gen_csalle=C0072.html
 
 # Check theater in database
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT theater_id, name, url FROM theaters WHERE theater_id='C0072';"
 
 # Remove invalid theater
@@ -144,7 +144,7 @@ echo "SCRAPE_THEATER_DELAY_MS=10000" >> .env  # 10 seconds
 echo "SCRAPE_MOVIE_DELAY_MS=2000" >> .env     # 2 seconds
 
 # Restart server
-docker compose restart ics-web
+docker compose restart server
 
 # Retry scrape after cooldown period
 curl -X POST http://localhost:3000/api/scraper/trigger \
@@ -263,7 +263,7 @@ Rating out of range (0-5): 6.7
 **Check affected movies:**
 
 ```bash
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT title, duration_minutes, press_rating, audience_rating 
    FROM movies 
    WHERE duration_minutes IS NULL 
@@ -519,10 +519,10 @@ function connectSSE() {
 
 ```bash
 # View pending jobs
-docker compose exec ics-redis redis-cli LRANGE scraper:jobs 0 -1
+docker compose exec redis redis-cli LRANGE scraper:jobs 0 -1
 
 # Clear queue (if corrupted)
-docker compose exec ics-redis redis-cli DEL scraper:jobs
+docker compose exec redis redis-cli DEL scraper:jobs
 ```
 
 ---
@@ -560,20 +560,20 @@ Error: connect ECONNREFUSED 127.0.0.1:6379
 
 ```bash
 # Check Redis status
-docker compose ps ics-redis
+docker compose ps redis
 
 # Check environment variable
 cat .env | grep REDIS_URL
 
 # Should be:
-REDIS_URL=redis://ics-redis:6379  # Not localhost!
+REDIS_URL=redis://redis:6379  # Not localhost!
 
 # Test connection
-docker compose exec ics-redis redis-cli ping
+docker compose exec redis redis-cli ping
 # Expected: PONG
 
 # Restart scraper microservice
-docker compose restart ics-scraper
+docker compose restart scraper
 ```
 
 **⚠️ No automatic reconnection** - scraper must be restarted.
@@ -621,8 +621,8 @@ await closeBrowser();  // Closes shared browser instance
 **Check logs:**
 
 ```bash
-docker compose logs ics-web | grep -i playwright
-docker compose logs ics-web | grep -i chromium
+docker compose logs server | grep -i playwright
+docker compose logs server | grep -i chromium
 ```
 
 ---
@@ -638,10 +638,10 @@ docker compose logs ics-web | grep -i chromium
 
 ```bash
 # Container memory usage
-docker stats ics-web
+docker stats server
 
 # Check if OOM killed
-docker inspect ics-web --format='{{.State.OOMKilled}}'
+docker inspect server --format='{{.State.OOMKilled}}'
 ```
 
 **Solution:**
@@ -649,7 +649,7 @@ docker inspect ics-web --format='{{.State.OOMKilled}}'
 ```bash
 # Add memory limits to docker-compose.yaml
 services:
-  ics-web:
+  server:
     deploy:
       resources:
         limits:
@@ -674,7 +674,7 @@ services:
 
 ```bash
 # Check running Chromium processes
-docker compose exec ics-web ps aux | grep chromium
+docker compose exec server ps aux | grep chromium
 ```
 
 ---
@@ -723,13 +723,13 @@ curl -N http://localhost:3000/api/scraper/progress 2>&1 | \
 
 ```bash
 # In-process mode (default)
-docker compose logs -f ics-web | grep -i scrap
+docker compose logs -f server | grep -i scrap
 
 # Microservice mode
-docker compose logs -f ics-scraper
+docker compose logs -f scraper
 
 # Filter for errors
-docker compose logs ics-web | grep -E "(Error|Failed|Warning)"
+docker compose logs server | grep -E "(Error|Failed|Warning)"
 ```
 
 ---
@@ -758,7 +758,7 @@ curl http://localhost:3000/api/reports \
   -H "Authorization: Bearer <token>"
 
 # Database query for scrape history
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT id, theater_id, scraped_at, status, movies_count, showtimes_count 
    FROM scrape_reports 
    ORDER BY scraped_at DESC 
@@ -771,15 +771,15 @@ docker compose exec ics-db psql -U postgres -d ics -c \
 
 ```bash
 # Check theaters
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT theater_id, name, address FROM theaters;"
 
 # Check movies
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT id, title, duration_minutes FROM movies LIMIT 10;"
 
 # Check showtimes
-docker compose exec ics-db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d ics -c \
   "SELECT s.id, c.name, f.title, s.showtime_datetime 
    FROM showtimes s 
    JOIN theaters c ON s.theater_id = c.theater_id 
@@ -876,7 +876,7 @@ SCRAPE_THEATER_DELAY_MS=3000
 SCRAPE_MOVIE_DELAY_MS=500
 
 # Redis connection (for microservice mode)
-REDIS_URL=redis://ics-redis:6379
+REDIS_URL=redis://redis:6379
 ```
 
 > **Note:** As of v4.x, the scraper microservice is always included in `docker-compose.yaml` — the `USE_REDIS_SCRAPER` flag has been removed. Scraping always dispatches via Redis.
@@ -890,10 +890,10 @@ REDIS_URL=redis://ics-redis:6379
 nano .env
 
 # Restart scraper microservice (all scraping uses Redis)
-docker compose restart ics-web
+docker compose restart server
 
 # Restart scraper microservice
-docker compose restart ics-scraper
+docker compose restart scraper
 ```
 
 ---

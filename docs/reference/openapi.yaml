@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Allo-Scrapper REST API
+  title: Movie Planner REST API
   description: |
     Theater showtime aggregator API for scraping and managing theater data.
     
@@ -12,8 +12,8 @@ info:
     - Scraper endpoints: 10 requests/minute
   version: 3.0.0
   contact:
-    name: Allo-Scrapper Project
-    url: https://github.com/phbassin/allo-scrapper
+    name: Movie Planner Project
+    url: https://github.com/phbassin/movie-planner
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -258,7 +258,7 @@ components:
           example: 1
         app_name:
           type: string
-          example: Allo-Scrapper
+          example: Movie Planner
         app_logo_url:
           type: string
           example: data:image/png;base64,...
@@ -270,7 +270,7 @@ components:
           example: "#00cc99"
         footer_text:
           type: string
-          example: "© 2025 Allo-Scrapper"
+          example: "© 2025 Movie Planner"
 
     # Role
     Role:
