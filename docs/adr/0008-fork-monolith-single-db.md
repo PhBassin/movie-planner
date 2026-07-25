@@ -2,6 +2,15 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-23
+- **Resolution note (2026-07-25):** The mechanical cleanup foreseen in sub-decision 3
+  has been executed under issue #3 (PRs 1–5). Active code, configuration, automation,
+  and runtime output now use the canonical `Movie Planner` / `movie-planner` /
+  `movie_planner` / `@movie-planner` identity; the inherited `allo-scrapper` strings
+  survive only in this ADR, the LICENSE attribution, the README provenance note, the
+  archived `docs/history/allo-scrapper-changelog.md`, and the `allo-scrapper-import`
+  boundary tag. The CI identity/hostname guard (`.github/scripts/identity-guard.sh`,
+  run from `.github/workflows/ci.yml`) enforces that boundary going forward. This
+  note records the resolution; the original decision and rationale below are unchanged.
 
 ## Context
 
