@@ -1,0 +1,62 @@
+name: CodeQL
+
+# Semantic security analysis (issue #3 hardening).
+#
+# Scans the TypeScript workspaces and the GitHub Actions workflows themselves.
+# The JS/TS extractor parses source directly, but we still run an
+# `npm install --legacy-peer-deps` (matching CI) so cross-file import edges
+# resolve against the real dependency graph.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '27 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - actions
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Install dependencies
+        if: matrix.language == 'javascript-typescript'
+        run: |
+          rm -f package-lock.json
+          npm install --legacy-peer-deps
+          npm run build --workspace=@movie-planner/scraper-protocol
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
