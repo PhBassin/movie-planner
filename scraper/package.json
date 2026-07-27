@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx --env-file-if-exists=.env watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "prebuild": "npm run build --workspace=@movie-planner/scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",

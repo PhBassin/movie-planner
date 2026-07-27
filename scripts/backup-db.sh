@@ -2,7 +2,7 @@
 # Backup PostgreSQL database for Movie Planner
 # Usage: ./scripts/backup-db.sh
 
-set -e
+set -euo pipefail
 
 BACKUP_DIR="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -16,15 +16,22 @@ echo "🔄 Creating database backup..."
 mkdir -p "$BACKUP_DIR"
 
 # Check if database container is running
-if ! docker compose ps db | grep -q "Up"; then
+if ! docker compose ps --services --filter status=running | grep -qx db; then
     echo "❌ Error: Database container is not running"
     echo "   Start it with: docker compose up -d db"
     exit 1
 fi
 
-# Backup database
+# Backup database.
+# --clean --if-exists makes the dump replayable over an existing schema, which
+# is what restore-db.sh does. Without it the restore collides with every
+# existing object and silently restores nothing.
 echo "📦 Dumping database to ${BACKUP_FILE}..."
-docker compose exec -T db pg_dump -U "$DB_USER" "$DB_NAME" > "$BACKUP_FILE"
+if ! docker compose exec -T db pg_dump -U "$DB_USER" --clean --if-exists "$DB_NAME" > "$BACKUP_FILE"; then
+    echo "❌ Error: pg_dump failed; removing the incomplete dump"
+    rm -f "$BACKUP_FILE"
+    exit 1
+fi
 
 # Compress backup
 echo "🗜️  Compressing backup..."

@@ -32,6 +32,10 @@ file under `./backups/`.
 The script reads `POSTGRES_*` values from `.env` (or the compose service when
 invoked via `docker compose exec`).
 
+Dumps are taken with `pg_dump --clean --if-exists`, so they can be replayed over
+an existing schema. A dump without those statements only restores into an empty
+database.
+
 ### `restore-db.sh`
 
 Restores the local database from a backup file.
@@ -39,6 +43,15 @@ Restores the local database from a backup file.
 ```bash
 ./scripts/restore-db.sh backups/movie_planner_2026-07-25.sql.gz
 ```
+
+The restore is atomic and fails loudly:
+
+- `server`, `scraper`, and `scraper-cron` are stopped first so the restore can
+  take its locks, and restarted afterwards whatever the outcome.
+- A safety backup (`movie_planner_before_restore_*.sql.gz`) is written first.
+- The dump is applied in a single transaction with `ON_ERROR_STOP`. If any
+  statement fails, the whole restore rolls back, the database is left untouched,
+  and the script exits non-zero.
 
 ### `list-backups.sh`
 
