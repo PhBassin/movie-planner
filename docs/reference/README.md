@@ -53,13 +53,11 @@ Complete RBAC (Role-Based Access Control) system reference.
 Automation scripts reference and usage.
 
 **Contents:**
-- Backup scripts (`backup-db.sh`, `backup-production.sh`)
-- Restore scripts (`restore-db.sh`, `restore-production.sh`)
-- Utility scripts (`list-backups.sh`)
+- Local backup and restore (`backup-db.sh`, `restore-db.sh`, `list-backups.sh`)
+- Development helpers (`integration-test.sh`, `cleanup-merged-branches.sh`, `migrate-env.sh`)
 - Script parameters and options
-- Scheduling and automation
 
-**Best for:** DevOps, automation, backup administration
+**Best for:** Local development and database maintenance
 
 ---
 

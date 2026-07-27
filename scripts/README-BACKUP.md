@@ -19,7 +19,7 @@ Backup and restore utilities for local development of Movie Planner.
 ✅ **Safety Backups** - Automatic backup before restore  
 ✅ **Compression** - gzip compression saves ~90% space  
 ✅ **No Auto-deletion** - All backups kept indefinitely  
-✅ **Error Handling** - Comprehensive checks and error messages  
+✅ **Atomic Restore** - All-or-nothing, non-zero exit on failure  
 
 ---
 
@@ -39,6 +39,9 @@ Create a compressed backup of the local PostgreSQL database (`movie_planner`).
 - Compressed with gzip
 - Displays file size and total backups count
 
+Dumps use `pg_dump --clean --if-exists` so they can be replayed over an existing
+schema.
+
 ---
 
 ### `restore-db.sh`
@@ -52,9 +55,11 @@ Restore the local database from a backup file.
 
 **Features:**
 - Creates safety backup (`movie_planner_before_restore_*.sql.gz`) before restore
-- Stops server service during restore
+- Stops `server`, `scraper`, and `scraper-cron` during the restore, then restarts them
 - Supports `.sql` and `.sql.gz` files
 - Interactive confirmation prompt
+- Applies the dump in a single transaction with `ON_ERROR_STOP`: any failure
+  rolls the database back to its previous state and exits non-zero
 
 ---
 
@@ -91,8 +96,8 @@ If you need to create or restore backups manually via Docker Compose:
 
 ```bash
 # Dump database
-docker compose exec -T db pg_dump -U postgres movie_planner | gzip > ./backups/manual_$(date +%Y%m%d_%H%M%S).sql.gz
+docker compose exec -T db pg_dump -U postgres --clean --if-exists movie_planner | gzip > ./backups/manual_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # Restore database
-gunzip -c ./backups/manual_20260724_180000.sql.gz | docker compose exec -T db psql -U postgres movie_planner
+gunzip -c ./backups/manual_20260724_180000.sql.gz | docker compose exec -T db psql -U postgres -v ON_ERROR_STOP=1 --single-transaction movie_planner
 ```
