@@ -1,0 +1,33 @@
+name: Dependency Review
+
+# Blocks PRs that introduce vulnerable or disallowed dependencies
+# (issue #3 hardening). Complements dependabot.yml by enforcing policy at
+# merge time rather than at upgrade time. Requires a committed package-lock.json
+# in the PR diff for npm diffing.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Review changed dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
