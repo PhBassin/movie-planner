@@ -3,7 +3,8 @@ import { registry, scrapeJobsTotal, scrapeDurationSeconds, moviesScrapedTotal, s
 
 import { runScraper, addTheaterAndScrape } from './scraper/index.js';
 import type { ProgressPublisher } from './scraper/scrape-run.js';
-import { getBusConsumer, disconnectBus, type RedisBusConsumer } from './redis/client.js';
+import { getBusConsumer, disconnectBus } from './redis/client.js';
+import type { BusConsumer } from '@movie-planner/scraper-protocol';
 import type { ScrapeJob, ScrapeJobScrape, ScrapeJobAddTheater, ScheduleChangeEvent } from '@movie-planner/scraper-protocol';
 import { db } from './db/client.js';
 import { createScrapeReport, updateScrapeReport } from './db/report-queries.js';
@@ -133,7 +134,7 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
 // Oneshot mode: pop one job and exit
 // ---------------------------------------------------------------------------
 
-async function runOneshot(bus: RedisBusConsumer): Promise<void> {
+async function runOneshot(bus: BusConsumer): Promise<void> {
   logger.info('[scraper] Mode: oneshot');
 
   try {
@@ -144,7 +145,7 @@ async function runOneshot(bus: RedisBusConsumer): Promise<void> {
     }
 
     logger.info(`[scraper] Processing job: reportId=${job.reportId}`);
-    await executeJob(job, bus.progressPublisher);
+    await executeJob(job, { emit: (event) => bus.publishProgress(event) });
   } finally {
     await disconnectBus();
     await db.end();
@@ -155,7 +156,7 @@ async function runOneshot(bus: RedisBusConsumer): Promise<void> {
 // Consumer mode: long-running queue consumer
 // ---------------------------------------------------------------------------
 
-async function runConsumer(bus: RedisBusConsumer): Promise<void> {
+async function runConsumer(bus: BusConsumer): Promise<void> {
   logger.info('[scraper] Mode: consumer (long-running)');
 
   // Graceful shutdown
@@ -176,7 +177,7 @@ async function runConsumer(bus: RedisBusConsumer): Promise<void> {
   });
 
   await bus.consumeJobs(async (job) => {
-    await executeJob(job, bus.progressPublisher);
+    await executeJob(job, { emit: (event) => bus.publishProgress(event) });
   });
 }
 
@@ -184,7 +185,7 @@ async function runConsumer(bus: RedisBusConsumer): Promise<void> {
 // Cron mode: scheduled scraping with dynamic reload
 // ---------------------------------------------------------------------------
 
-async function runCron(bus: RedisBusConsumer): Promise<void> {
+async function runCron(bus: BusConsumer): Promise<void> {
   const cronModule = await import('node-cron');
   const cron = cronModule.default;
 
@@ -213,7 +214,7 @@ async function runCron(bus: RedisBusConsumer): Promise<void> {
       return;
     }
 
-    const publisher = bus.progressPublisher;
+    const publisher: ProgressPublisher = { emit: (event) => bus.publishProgress(event) };
 
     try {
       const summary = await runScraper(publisher);
@@ -353,7 +354,7 @@ async function runCron(bus: RedisBusConsumer): Promise<void> {
 // Direct mode: run once immediately and exit
 // ---------------------------------------------------------------------------
 
-async function runDirect(bus: RedisBusConsumer): Promise<void> {
+async function runDirect(bus: BusConsumer): Promise<void> {
   logger.info('[scraper] Mode: direct (immediate one-time run)');
 
   let reportId: number;
@@ -365,7 +366,7 @@ async function runDirect(bus: RedisBusConsumer): Promise<void> {
   }
 
   try {
-    const publisher = bus.progressPublisher;
+    const publisher: ProgressPublisher = { emit: (event) => bus.publishProgress(event) };
     const summary = await runScraper(publisher);
 
     if (reportId !== -1) {
@@ -406,7 +407,7 @@ async function main(): Promise<void> {
 
   // One bus consumer drives every mode — queued jobs, progress publishing,
   // and schedule-change subscription all flow through this port.
-  const bus = getBusConsumer() as RedisBusConsumer;
+  const bus = getBusConsumer();
 
   switch (RUN_MODE) {
     case 'oneshot':

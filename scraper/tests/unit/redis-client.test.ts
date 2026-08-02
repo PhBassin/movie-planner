@@ -111,10 +111,9 @@ describe('RedisJobConsumer', () => {
     expect(job).toEqual(payload);
   });
 
-  it('popOne returns null on unparseable payload', async () => {
+  it('throws on an unparseable payload', async () => {
     mockLpop.mockResolvedValueOnce('not-json');
-    const job = await consumer.popOne();
-    expect(job).toBeNull();
+    await expect(consumer.popOne()).rejects.toThrow(SyntaxError);
   });
 });
 

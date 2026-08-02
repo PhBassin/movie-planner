@@ -115,12 +115,7 @@ export class RedisJobConsumer {
   async popOne(): Promise<ScrapeJob | null> {
     const raw = await this.client.lpop('scrape:jobs');
     if (!raw) return null;
-    try {
-      return JSON.parse(raw) as ScrapeJob;
-    } catch (err) {
-      logger.error('[RedisJobConsumer] Failed to parse popped job', { raw, err });
-      return null;
-    }
+    return JSON.parse(raw) as ScrapeJob;
   }
 
   stop(): void {
