@@ -20,15 +20,14 @@ cp .env.example .env
 npm run dev          # docker compose up --build
 ```
 
-First startup takes about a minute. The compose file builds the server and
-scraper images locally and starts:
+First startup takes about a minute. The compose file builds one application
+image locally and starts:
 
 - `db` — PostgreSQL on port 5432
 - `redis` — Redis
-- `server` — Express API on port 3000
+- `web` — Express API and SPA host on port 3000
 - `client` — Vite dev server on port 5173
-- `scraper` — scraper consumer
-- `scraper-cron` — scraper cron (idle unless `ENABLE_SCRAPE_CRON=true`)
+- `worker` — Redis consumer
 
 ## Access
 

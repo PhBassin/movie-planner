@@ -1,7 +1,8 @@
 # Docker Setup
 
-Movie Planner ships two local development compose files. Both build the
-server and scraper images locally — there is no registry publication.
+Movie Planner ships two local development compose files. The default compose
+file builds one application image and runs it as separate `web` and `worker`
+roles; there is no registry publication.
 
 **Related:**
 - [Setup guide](../development/setup.md) — host-app prerequisites
@@ -14,21 +15,20 @@ server and scraper images locally — there is no registry publication.
 
 | File | Path | What runs in Docker |
 |------|------|---------------------|
-| `compose.yaml` | Default, fully Dockerized | Postgres, Redis, server, client (Vite), scraper consumer, scraper cron |
+| `compose.yaml` | Default, fully Dockerized | Postgres, Redis, web, client (Vite), worker |
 | `compose.infra.yaml` | Host-application (Node 24) | Postgres and Redis only |
 
-Compose services use short names (`db`, `redis`, `server`, `client`, `scraper`,
-`scraper-cron`) without fixed `container_name` values. Compose supplies the
+Compose services use short names (`db`, `redis`, `web`, `client`, `worker`)
+without fixed `container_name` values. Compose supplies the
 `movie-planner` resource prefix.
 
 ---
 
 ## Build vs. image
 
-Both compose files build the server/scraper images from local Dockerfiles:
+The default compose file builds the shared application image from:
 
-- `Dockerfile` — server + client production bundle (used by the `server` service)
-- `Dockerfile.scraper` — scraper runtime (used by `scraper` and `scraper-cron`)
+- `Dockerfile` — server, worker, and client production bundle (used by `web` and `worker`)
 
 There is no `image:` pull from `ghcr.io` or any external registry. To rebuild
 after a Dockerfile or dependency change:
@@ -62,12 +62,12 @@ npm run dev
 ## Health checks
 
 Every service has a healthcheck. `docker compose ps` shows the state; the
-server, db, redis, scraper, and scraper-cron services use small Node HTTP
+web, db, redis, and worker services use small Node HTTP
 probes against `/api/health` or `/metrics`.
 
 ```bash
 docker compose ps
-docker compose logs server
+docker compose logs web worker
 ```
 
 ---

@@ -65,8 +65,8 @@ cp .env.example .env
 | `POSTGRES_PASSWORD` | yes | Any non-empty value. |
 | `POSTGRES_DB` | no | Defaults to `movie_planner` (the canonical name). |
 | `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:3000`. |
-| `SCRAPE_CRON_SCHEDULE` | no | Cron expression for the scraper-cron service. |
-| `ENABLE_SCRAPE_CRON` | no | `true` enables external scheduled scraping (cron service only). |
+| `SCRAPE_CRON_SCHEDULE` | no | Cron expression used when the worker runs in cron mode. |
+| `ENABLE_SCRAPE_CRON` | no | `true` enables external scheduled scraping (worker cron mode only). |
 
 ---
 
@@ -82,14 +82,14 @@ npm run dev:logs     # tail logs
 npm run dev:down     # stop
 ```
 
-Services: `db`, `redis`, `server`, `client`, `scraper`, `scraper-cron`.
+Services: `db`, `redis`, `web`, `client`, `worker`.
 The server auto-applies the consolidated baseline (`docker/init.sql`) on first
 startup of a fresh database, then runs any pending migrations under
 `migrations/`. No external image or volume is required.
 
 ### Path B — Host application: `compose.infra.yaml`
 
-Runs only PostgreSQL and Redis in Docker; the client, server, and scraper run
+Runs only PostgreSQL and Redis in Docker; the client, web, and worker run
 on the host under Node 24.
 
 ```bash
@@ -100,9 +100,17 @@ npm run dev:infra     # docker compose -f compose.infra.yaml up -d (Postgres + R
 npm run server:db:init
 
 # In separate terminals:
-npm run server:dev    # http://localhost:3000
-npm run client:dev    # http://localhost:5173
-npm run scraper:dev   # consumer + cron
+npm run server:dev       # web API on http://localhost:3000
+npm run client:dev       # UI on http://localhost:5173
+npm run scraper:consumer # worker consumer
+```
+
+Type-check each workspace before running the full suite:
+
+```bash
+(cd server && npx tsc --noEmit)
+(cd scraper && npx tsc --noEmit)
+(cd client && npx tsc -b)
 ```
 
 > The legacy `--legacy-peer-deps` flag is required because of known peer-dep

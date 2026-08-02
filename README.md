@@ -113,7 +113,7 @@ npm run dev          # docker compose up --build
 
 ### Option B — Host application on Node 24
 
-Runs PostgreSQL and Redis in Docker; the client, server, and scraper run on the
+Runs PostgreSQL and Redis in Docker; the client, web, and worker run on the
 host under Node 24.
 
 ```bash
@@ -126,9 +126,9 @@ npm install --legacy-peer-deps
 npm run dev:infra     # starts Postgres + Redis in Docker
 
 # In separate terminals:
-npm run server:dev    # API on http://localhost:3000
-npm run client:dev    # UI on http://localhost:5173
-npm run scraper:dev   # scraper microservice (consumer + cron)
+npm run server:dev       # web API on http://localhost:3000
+npm run client:dev       # UI on http://localhost:5173
+npm run scraper:consumer # worker role
 ```
 
 ### First admin password
