@@ -10,7 +10,7 @@ export class ScraperService {
   constructor(private db: DB) {}
 
   /**
-   * Triggers a new scrape job by publishing it to the Redis queue.
+   * Triggers a new scrape job by enqueuing it on the bus.
    * Validates the theaterId if provided.
    */
   async triggerScrape(options: { theaterId?: string; movieId?: number } = {}) {
@@ -32,7 +32,7 @@ export class ScraperService {
     // completed/failed events and immediately dismiss the progress panel.
     progressTracker.reset();
 
-    const queueDepth = await getRedisClient().publishJob({
+    const queueDepth = await getRedisClient().enqueueJob({
       type: 'scrape',
       reportId,
       triggerType: 'manual',
@@ -62,7 +62,7 @@ export class ScraperService {
       date: a.date,
     }));
 
-    const queueDepth = await getRedisClient().publishJob({
+    const queueDepth = await getRedisClient().enqueueJob({
       type: 'scrape',
       reportId,
       triggerType: 'manual',

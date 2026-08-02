@@ -30,24 +30,19 @@ describe('RedisClient', () => {
     client = new RedisClient('redis://test');
   });
 
-  it('should publish a job', async () => {
-    await client.publishJob({ type: 'scrape', reportId: 1, triggerType: 'manual' });
+  it('should enqueue a job', async () => {
+    await client.enqueueJob({ type: 'scrape', reportId: 1, triggerType: 'manual' });
     expect(mockRedisInstance.rpush).toHaveBeenCalledWith('scrape:jobs', expect.any(String));
   });
 
-  it('should publish add_theater job', async () => {
-    await client.publishAddTheaterJob(42, 'http://test');
+  it('should enqueue an add_theater job', async () => {
+    await client.enqueueAddTheaterJob(42, 'http://test');
     expect(mockRedisInstance.rpush).toHaveBeenCalledWith('scrape:jobs', expect.any(String));
   });
 
   it('should get queue depth', async () => {
     await client.getQueueDepth();
     expect(mockRedisInstance.llen).toHaveBeenCalledWith('scrape:jobs');
-  });
-
-  it('should publish progress', async () => {
-    await client.publishProgress({ type: 'start', total: 1 });
-    expect(mockRedisInstance.publish).toHaveBeenCalledWith('scrape:progress', expect.any(String));
   });
 
   it('should subscribe to progress and handle messages', async () => {

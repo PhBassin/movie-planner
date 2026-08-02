@@ -26,7 +26,8 @@ vi.mock('ioredis', () => ({
   default: MockRedis,
 }));
 
-import { RedisProgressPublisher, RedisJobConsumer } from '../../src/redis/client.js';
+import { RedisProgressPublisher, RedisJobConsumer, RedisBusConsumer } from '../../src/redis/client.js';
+import type { BusConsumer } from '@movie-planner/scraper-protocol';
 
 describe('RedisProgressPublisher', () => {
   let publisher: RedisProgressPublisher;
@@ -94,5 +95,58 @@ describe('RedisJobConsumer', () => {
     await consumer.start(handler);
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('popOne returns null when queue is empty', async () => {
+    mockLpop.mockResolvedValueOnce(null);
+    const job = await consumer.popOne();
+    expect(job).toBeNull();
+    expect(mockLpop).toHaveBeenCalledWith('scrape:jobs');
+  });
+
+  it('popOne returns the parsed job when queue has one', async () => {
+    const payload = { type: 'scrape', triggerType: 'manual', reportId: 7 };
+    mockLpop.mockResolvedValueOnce(JSON.stringify(payload));
+    const job = await consumer.popOne();
+    expect(job).toEqual(payload);
+  });
+
+  it('throws on an unparseable payload', async () => {
+    mockLpop.mockResolvedValueOnce('not-json');
+    await expect(consumer.popOne()).rejects.toThrow(SyntaxError);
+  });
+});
+
+describe('RedisBusConsumer', () => {
+  let bus: RedisBusConsumer;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bus = new RedisBusConsumer('redis://localhost:6379');
+  });
+
+  it('implements the BusConsumer port', () => {
+    // Compile-time satisfaction; runtime identity check here.
+    const port: BusConsumer = bus;
+    expect(port).toBe(bus);
+  });
+
+  it('publishProgress delegates to the wrapped publisher', async () => {
+    const event = { type: 'started' as const, total_theaters: 1, total_dates: 1 };
+    await bus.publishProgress(event);
+    expect(mockPublish).toHaveBeenCalledWith('scrape:progress', JSON.stringify(event));
+  });
+
+  it('popOneJob delegates to the wrapped consumer', async () => {
+    mockLpop.mockResolvedValueOnce(null);
+    const job = await bus.popOneJob();
+    expect(job).toBeNull();
+    expect(mockLpop).toHaveBeenCalledWith('scrape:jobs');
+  });
+
+  it('disconnect tears down all three sub-clients', async () => {
+    await bus.disconnect();
+    // publisher + consumer + subscriber each quit once → 3 calls
+    expect(mockQuit).toHaveBeenCalledTimes(3);
   });
 });

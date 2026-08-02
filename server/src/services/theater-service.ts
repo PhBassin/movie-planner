@@ -119,9 +119,9 @@ export class TheaterService {
     // Insert theater into DB with minimal info
     const theater = await addTheater(this.db, { id: theaterId, name: theaterId, url: cleanedUrl });
 
-    // Publish add_theater job to Redis
+    // Enqueue add_theater job on the bus
     const reportId = await createScrapeReport(this.db, 'manual');
-    await getRedisClient().publishAddTheaterJob(reportId, cleanedUrl);
+    await getRedisClient().enqueueAddTheaterJob(reportId, cleanedUrl);
     logger.info(`🎬 add_theater job queued for ${cleanedUrl} (reportId=${reportId})`);
 
     return theater;

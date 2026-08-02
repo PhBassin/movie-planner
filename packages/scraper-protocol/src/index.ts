@@ -1,6 +1,7 @@
 import type { ScrapeJob, ScrapeJobScrape, ScrapeJobAddTheater } from './jobs.js';
 import { serializeJob, parseJob } from './jobs.js';
 import type { ProgressEvent, ScheduleChangeEvent, ScrapeSummary } from './events.js';
+import type { BusProducer, BusConsumer } from './bus.js';
 
 export type {
   ScrapeJob,
@@ -9,6 +10,8 @@ export type {
   ProgressEvent,
   ScheduleChangeEvent,
   ScrapeSummary,
+  BusProducer,
+  BusConsumer,
 };
 
 export { serializeJob, parseJob };

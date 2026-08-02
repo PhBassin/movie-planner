@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockRunScraper = vi.fn();
 const mockAddTheaterAndScrape = vi.fn();
 const mockUpdateScrapeReport = vi.fn().mockResolvedValue(undefined);
-const mockGetRedisPublisher = vi.fn().mockReturnValue({ emit: vi.fn() });
+const mockEmit = vi.fn();
 const mockScrapeJobsTotal = { inc: vi.fn() };
 const mockScrapeDurationSeconds = { startTimer: vi.fn().mockReturnValue(vi.fn()) };
 const mockMoviesScrapedTotal = { inc: vi.fn() };
@@ -22,9 +22,16 @@ vi.mock('../../src/db/report-queries.js', () => ({
 }));
 
 vi.mock('../../src/redis/client.js', () => ({
-  getRedisPublisher: mockGetRedisPublisher,
-  getRedisConsumer: vi.fn().mockReturnValue({ start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }),
-  disconnectRedis: vi.fn(),
+  getBusConsumer: vi.fn().mockReturnValue({
+    progressPublisher: { emit: mockEmit },
+    publishProgress: mockEmit,
+    consumeJobs: vi.fn(),
+    stopConsuming: vi.fn(),
+    popOneJob: vi.fn(),
+    subscribeScheduleChange: vi.fn(),
+    disconnect: vi.fn(),
+  }),
+  disconnectBus: vi.fn(),
 }));
 
 vi.mock('../../src/db/client.js', () => ({
@@ -56,6 +63,8 @@ vi.mock('../../src/utils/metrics.js', () => ({
 // We'll import the module to exercise its exports, and inspect which
 // scraper function gets called.
 
+const mockProgress = { emit: mockEmit };
+
 describe('executeJob dispatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,7 +89,7 @@ describe('executeJob dispatcher', () => {
       triggerType: 'manual',
       reportId: 42,
       options: { mode: 'from_today_limited' },
-    });
+    }, mockProgress);
 
     expect(mockRunScraper).toHaveBeenCalledOnce();
     expect(mockAddTheaterAndScrape).not.toHaveBeenCalled();
@@ -100,7 +109,7 @@ describe('executeJob dispatcher', () => {
       triggerType: 'manual',
       reportId: 43,
       url: 'https://www.allocine.fr/seance/salle_gen_csalle=C0072.html',
-    });
+    }, mockProgress);
 
     expect(mockAddTheaterAndScrape).toHaveBeenCalledOnce();
     expect(mockRunScraper).not.toHaveBeenCalled();
@@ -122,7 +131,7 @@ describe('executeJob dispatcher', () => {
     await executeJob({
       triggerType: 'cron',
       reportId: 44,
-    } as any);
+    } as any, mockProgress);
 
     expect(mockRunScraper).toHaveBeenCalledOnce();
     expect(mockAddTheaterAndScrape).not.toHaveBeenCalled();
@@ -139,7 +148,7 @@ describe('executeJob dispatcher', () => {
       triggerType: 'manual',
       reportId: 45,
       url: 'bad-url',
-    })).resolves.toBeUndefined();
+    }, mockProgress)).resolves.toBeUndefined();
 
     // Should have updated report to failed
     expect(mockUpdateScrapeReport).toHaveBeenCalledWith(

@@ -31,8 +31,8 @@ describe('ScraperService', () => {
     });
 
     it('should trigger scrape successfully', async () => {
-      const mockPublish = vi.fn().mockResolvedValue(1);
-      vi.mocked(redisClient.getRedisClient).mockReturnValue({ publishJob: mockPublish } as any);
+      const mockEnqueue = vi.fn().mockResolvedValue(1);
+      vi.mocked(redisClient.getRedisClient).mockReturnValue({ enqueueJob: mockEnqueue } as any);
       vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(42 as any);
       vi.mocked(theaterQueries.getTheaters).mockResolvedValue([{ id: 'C1' }] as any);
 
@@ -40,7 +40,7 @@ describe('ScraperService', () => {
 
       expect(result.reportId).toBe(42);
       expect(progressTracker.reset).toHaveBeenCalled();
-      expect(mockPublish).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
         type: 'scrape',
         reportId: 42,
         options: { theaterId: 'C1', movieId: 123 }
@@ -66,8 +66,8 @@ describe('ScraperService', () => {
 
   describe('triggerResume', () => {
     it('should trigger resume scrape successfully with pending attempts', async () => {
-      const mockPublish = vi.fn().mockResolvedValue(1);
-      vi.mocked(redisClient.getRedisClient).mockReturnValue({ publishJob: mockPublish } as any);
+      const mockEnqueue = vi.fn().mockResolvedValue(1);
+      vi.mocked(redisClient.getRedisClient).mockReturnValue({ enqueueJob: mockEnqueue } as any);
       vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(43 as any);
 
       const pendingAttempts = [
@@ -80,7 +80,7 @@ describe('ScraperService', () => {
       expect(result.reportId).toBe(43);
       expect(progressTracker.reset).toHaveBeenCalled();
       expect(reportQueries.createScrapeReport).toHaveBeenCalledWith(mockDb, 'manual', 123);
-      expect(mockPublish).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
         type: 'scrape',
         reportId: 43,
         triggerType: 'manual',
@@ -95,14 +95,14 @@ describe('ScraperService', () => {
     });
 
     it('should handle empty pending attempts list', async () => {
-      const mockPublish = vi.fn().mockResolvedValue(1);
-      vi.mocked(redisClient.getRedisClient).mockReturnValue({ publishJob: mockPublish } as any);
+      const mockEnqueue = vi.fn().mockResolvedValue(1);
+      vi.mocked(redisClient.getRedisClient).mockReturnValue({ enqueueJob: mockEnqueue } as any);
       vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(44 as any);
 
       const result = await scraperService.triggerResume(123, []);
 
       expect(result.reportId).toBe(44);
-      expect(mockPublish).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockEnqueue).toHaveBeenCalledWith(expect.objectContaining({
         options: {
           resumeMode: true,
           pendingAttempts: [],

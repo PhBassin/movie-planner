@@ -2,9 +2,8 @@ import Redis from 'ioredis';
 import type {
   ProgressEvent,
   ScrapeJob,
-  ScrapeJobScrape,
-  ScrapeJobAddTheater,
   ScheduleChangeEvent,
+  BusConsumer,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
 
@@ -15,17 +14,28 @@ import { logger } from '../utils/logger.js';
 
 export type {
   ScrapeJob,
-  ScrapeJobScrape,
-  ScrapeJobAddTheater,
   ScheduleChangeEvent,
+  BusConsumer,
 } from '@movie-planner/scraper-protocol';
 
 // ---------------------------------------------------------------------------
-// RedisProgressPublisher – implements ProgressPublisher interface
+// Internal Redis-backed building blocks.
+//
+// These classes are the concrete Redis implementation of each bus arm. They
+// are exported for testing but the worker role does not use them directly —
+// it goes through `RedisBusConsumer` (below), which composes them and
+// implements the `BusConsumer` port. A future Postgres backend (#24/#25)
+// provides its own `BusConsumer` implementation and these classes retire.
 // ---------------------------------------------------------------------------
 
+/**
+ * Publishes progress events to the `scrape:progress` Redis pub/sub channel.
+ * `emit` satisfies the scraper's internal `ProgressPublisher` contract
+ * (see `src/scraper/scrape-run.ts`) — distinct from the bus-level
+ * `BusConsumer.publishProgress`, which `RedisBusConsumer` exposes.
+ */
 export class RedisProgressPublisher {
-  private client: Redis;
+  protected readonly client: Redis;
 
   constructor(redisUrl: string) {
     this.client = new Redis(redisUrl, { lazyConnect: false });
@@ -41,22 +51,23 @@ export class RedisProgressPublisher {
   }
 }
 
-// ---------------------------------------------------------------------------
-// RedisJobConsumer – blocks on scrape:jobs list, processes one job at a time
-// ---------------------------------------------------------------------------
-
+/**
+ * Consumes jobs from the `scrape:jobs` Redis list. The `consumer` role uses
+ * `start` (a blocking BLPOP loop); the `oneshot` role uses `popOne`
+ * (non-blocking LPOP).
+ */
 export class RedisJobConsumer {
-  private client: Redis;
+  private readonly client: Redis;
   private running = false;
 
   constructor(redisUrl: string) {
-    // Use a separate connection for blocking operations
+    // Dedicated connection for blocking operations.
     this.client = new Redis(redisUrl, { lazyConnect: false });
   }
 
   /**
-   * Start consuming jobs from the scrape:jobs queue.
-   * Calls handler for each job. Blocks waiting for jobs (BLPOP).
+   * Blocking consume loop. Calls `handler` for each job popped. Loops on a
+   * 5-second BLPOP so a `stop()` call can drain cleanly between pops.
    */
   async start(handler: (job: ScrapeJob) => Promise<void>): Promise<void> {
     this.running = true;
@@ -64,10 +75,10 @@ export class RedisJobConsumer {
 
     while (this.running) {
       try {
-        // Block for up to 5 seconds, then loop to allow clean shutdown
+        // Block for up to 5 seconds, then loop to allow clean shutdown.
         const result = await this.client.blpop('scrape:jobs', 5);
 
-        if (!result) continue; // Timeout, loop again
+        if (!result) continue; // Timeout, loop again.
 
         const [_key, raw] = result;
         let job: ScrapeJob;
@@ -86,15 +97,25 @@ export class RedisJobConsumer {
           logger.error('[RedisJobConsumer] Job handler failed', { err });
         }
       } catch (err: any) {
-        // If connection closed cleanly during shutdown, stop
+        // If connection closed cleanly during shutdown, stop.
         if (!this.running) break;
         logger.error('[RedisJobConsumer] Error polling queue', { err });
-        // Brief pause to avoid tight loop on persistent errors
+        // Brief pause to avoid tight loop on persistent errors.
         await new Promise(r => setTimeout(r, 1000));
       }
     }
 
     logger.info('[RedisJobConsumer] Stopped.');
+  }
+
+  /**
+   * Pop one job without blocking. Returns `null` when the queue is empty.
+   * Used by `oneshot` mode.
+   */
+  async popOne(): Promise<ScrapeJob | null> {
+    const raw = await this.client.lpop('scrape:jobs');
+    if (!raw) return null;
+    return JSON.parse(raw) as ScrapeJob;
   }
 
   stop(): void {
@@ -107,12 +128,9 @@ export class RedisJobConsumer {
   }
 }
 
-// ---------------------------------------------------------------------------
-// RedisScheduleSubscriber – listens for schedule change events
-// ---------------------------------------------------------------------------
-
+/** Listens for schedule-change events on the `scraper:schedule:changed` channel. */
 class RedisScheduleSubscriber {
-  private client: Redis;
+  private readonly client: Redis;
 
   constructor(redisUrl: string) {
     this.client = new Redis(redisUrl, { lazyConnect: false });
@@ -140,44 +158,72 @@ class RedisScheduleSubscriber {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton helpers
+// RedisBusConsumer — the Redis implementation of the BusConsumer port.
+//
+// Composes the three internal Redis clients behind the bus contract so the
+// worker role depends on `BusConsumer`, not on Redis. `progressPublisher` is
+// exposed for the scraper's internal `ProgressPublisher` contract (the
+// scrape-run/strategies call `emit`); everything else goes through the port.
 // ---------------------------------------------------------------------------
 
-let _publisher: RedisProgressPublisher | null = null;
-let _consumer: RedisJobConsumer | null = null;
-let _subscriber: RedisScheduleSubscriber | null = null;
+export class RedisBusConsumer implements BusConsumer {
+  readonly progressPublisher: RedisProgressPublisher;
+  private readonly consumer: RedisJobConsumer;
+  private readonly subscriber: RedisScheduleSubscriber;
 
-export function getRedisPublisher(): RedisProgressPublisher {
-  if (!_publisher) {
-    const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
-    _publisher = new RedisProgressPublisher(url);
+  constructor(redisUrl: string) {
+    this.progressPublisher = new RedisProgressPublisher(redisUrl);
+    this.consumer = new RedisJobConsumer(redisUrl);
+    this.subscriber = new RedisScheduleSubscriber(redisUrl);
   }
-  return _publisher;
+
+  async publishProgress(event: ProgressEvent): Promise<void> {
+    await this.progressPublisher.emit(event);
+  }
+
+  async consumeJobs(handler: (job: ScrapeJob) => Promise<void>): Promise<void> {
+    await this.consumer.start(handler);
+  }
+
+  stopConsuming(): void {
+    this.consumer.stop();
+  }
+
+  async popOneJob(): Promise<ScrapeJob | null> {
+    return this.consumer.popOne();
+  }
+
+  async subscribeScheduleChange(handler: (event: ScheduleChangeEvent) => void): Promise<void> {
+    await this.subscriber.subscribe('scraper:schedule:changed', handler);
+  }
+
+  async disconnect(): Promise<void> {
+    await Promise.all([
+      this.progressPublisher.disconnect(),
+      this.consumer.disconnect(),
+      this.subscriber.disconnect(),
+    ]);
+  }
 }
 
-export function getRedisConsumer(): RedisJobConsumer {
+// ---------------------------------------------------------------------------
+// Singleton — initialised lazily so tests can mock ioredis before importing.
+// Returns the BusConsumer port so callers depend on the contract, not the
+// concrete Redis backend.
+// ---------------------------------------------------------------------------
+
+let _consumer: RedisBusConsumer | null = null;
+
+export function getBusConsumer(): BusConsumer {
   if (!_consumer) {
     const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
-    _consumer = new RedisJobConsumer(url);
+    _consumer = new RedisBusConsumer(url);
   }
   return _consumer;
 }
 
-export function getRedisSubscriber(): RedisScheduleSubscriber {
-  if (!_subscriber) {
-    const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
-    _subscriber = new RedisScheduleSubscriber(url);
-  }
-  return _subscriber;
-}
-
-export async function disconnectRedis(): Promise<void> {
-  await Promise.all([
-    _publisher?.disconnect(),
-    _consumer?.disconnect(),
-    _subscriber?.disconnect(),
-  ]);
-  _publisher = null;
+/** Tear down the singleton bus consumer (graceful shutdown). */
+export async function disconnectBus(): Promise<void> {
+  await _consumer?.disconnect();
   _consumer = null;
-  _subscriber = null;
 }
