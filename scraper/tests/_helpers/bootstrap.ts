@@ -62,15 +62,20 @@ export function bootstrapDbMock() {
 // Redis mock
 // ---------------------------------------------------------------------------
 
-/** Redis publisher/consumer mock. */
+/** Redis bus consumer mock (matches the BusConsumer port surface). */
 export function bootstrapRedisMock() {
   return {
-    getRedisPublisher: vi
+    getBusConsumer: vi
       .fn()
-      .mockReturnValue({ emit: vi.fn() }),
-    getRedisConsumer: vi
-      .fn()
-      .mockReturnValue({ start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }),
-    disconnectRedis: vi.fn(),
+      .mockReturnValue({
+        progressPublisher: { emit: vi.fn() },
+        publishProgress: vi.fn(),
+        consumeJobs: vi.fn(),
+        stopConsuming: vi.fn(),
+        popOneJob: vi.fn(),
+        subscribeScheduleChange: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    disconnectBus: vi.fn(),
   };
 }

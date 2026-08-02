@@ -62,16 +62,16 @@ describe('TheaterService', () => {
       await expect(theaterService.addTheaterViaUrl('http://valid')).rejects.toThrow('Could not extract theater ID');
     });
 
-    it('should add theater and publish job on success', async () => {
-      const mockPublish = vi.fn().mockResolvedValue(1);
-      vi.mocked(redisClient.getRedisClient).mockReturnValue({ publishAddTheaterJob: mockPublish } as any);
+    it('should add theater and enqueue job on success', async () => {
+      const mockEnqueue = vi.fn().mockResolvedValue(1);
+      vi.mocked(redisClient.getRedisClient).mockReturnValue({ enqueueAddTheaterJob: mockEnqueue } as any);
       vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(42 as any);
       vi.mocked(theaterQueries.addTheater).mockResolvedValue({ id: 'C0013' } as any);
 
       const result = await theaterService.addTheaterViaUrl('http://valid');
 
       expect(result.id).toBe('C0013');
-      expect(mockPublish).toHaveBeenCalledWith(42, 'https://cleaned-url');
+      expect(mockEnqueue).toHaveBeenCalledWith(42, 'https://cleaned-url');
     });
   });
 

@@ -50,13 +50,13 @@ describe('RedisClient', () => {
     await client.disconnect();
   });
 
-  // ---- publishJob -----------------------------------------------------------
+  // ---- enqueueJob -----------------------------------------------------------
 
-  describe('publishJob', () => {
+  describe('enqueueJob', () => {
     test('should push job to scrape:jobs queue', async () => {
       const job = { reportId: 42, triggerType: 'manual' as const, options: {} };
 
-      await client.publishJob(job);
+      await client.enqueueJob(job);
 
       expect(mockMethods.rpush).toHaveBeenCalledWith(
         'scrape:jobs',
@@ -68,7 +68,7 @@ describe('RedisClient', () => {
       mockMethods.rpush.mockResolvedValue(3);
       const job = { reportId: 1, triggerType: 'manual' as const, options: {} };
 
-      const len = await client.publishJob(job);
+      const len = await client.enqueueJob(job);
 
       expect(len).toBe(3);
     });
@@ -92,21 +92,6 @@ describe('RedisClient', () => {
       const depth = await client.getQueueDepth();
 
       expect(depth).toBe(0);
-    });
-  });
-
-  // ---- publishProgress -----------------------------------------------------
-
-  describe('publishProgress', () => {
-    test('should publish event to scrape:progress channel', async () => {
-      const event = { type: 'started' as const, total_theaters: 3, total_dates: 7 };
-
-      await client.publishProgress(event);
-
-      expect(mockMethods.publish).toHaveBeenCalledWith(
-        'scrape:progress',
-        JSON.stringify(event)
-      );
     });
   });
 

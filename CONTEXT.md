@@ -306,6 +306,15 @@ A fire-and-forget pub/sub notification on the Redis `scraper:schedule:changed` c
 
 **ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
 
+### Bus port (`BusProducer`, `BusConsumer`)
+
+The interface seam between the `web` and `worker` roles over the three channels above (`scrape:jobs` queue, `scrape:progress` and `scraper:schedule:changed` pub/sub). Today both roles are separate images wired through Redis; ADR 0009 consolidates them into one image with two roles backed by Postgres (`FOR UPDATE SKIP LOCKED` queue, `LISTEN/NOTIFY` pub/sub). The port is what makes that swap a drop-in: role code depends on the interface, the backend is the swappable part.
+
+- **`BusProducer`** (web side): enqueue jobs, query depth, subscribe to progress for SSE fan-out, publish schedule-change notices.
+- **`BusConsumer`** (worker side): consume/pop jobs, publish progress, subscribe to schedule changes, plus a `disconnect()` lifecycle hook on both.
+
+**Canonical home is `packages/scraper-protocol/src/bus.ts`** (issue #21). The Redis implementations live in each role — `server/src/services/redis-client.ts` (`RedisClient implements BusProducer`) and `scraper/src/redis/client.ts` (`RedisBusConsumer implements BusConsumer`). `member:notices` is a documented peer channel (ADR 0005) with no callers in code yet; it joins the port when it gains an implementation.
+
 ### RateLimitConfig
 
 The configured thresholds that govern the server's per-endpoint HTTP rate-limit middleware. Lives at `server/src/services/rate-limit-source.ts` as the **flat runtime shape** consumed by the limiter: per-endpoint `*_Max` caps and `*_WindowMs` windows for general, auth, register, protected, scraper, public, and health routes. Resolution order (DB row in `rate_limit_configs` → env vars (e.g. `RATE_LIMIT_GENERAL_MAX`) → built-in defaults) lives in one place. The source is initialized once at boot (`loadFromDb(db)`) and the middleware subscribes to invalidation events so its limiter delegates are rebuilt whenever the DB row changes — either from the 60-second poller (`services/rate-limit-refresher.ts`) or the admin write path.

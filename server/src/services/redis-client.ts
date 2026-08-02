@@ -4,6 +4,7 @@ import type {
   ScrapeJob,
   ScrapeJobAddTheater,
   ScheduleChangeEvent,
+  BusProducer,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
 
@@ -14,16 +15,17 @@ import { logger } from '../utils/logger.js';
 
 export type {
   ScrapeJob,
-  ScrapeJobScrape,
-  ScrapeJobAddTheater,
   ScheduleChangeEvent,
 } from '@movie-planner/scraper-protocol';
 
 // ---------------------------------------------------------------------------
-// RedisClient
+// RedisClient — the Redis implementation of the BusProducer port (web role).
+// The port itself (BusProducer) lives in @movie-planner/scraper-protocol; this
+// class is the concrete backend. The worker side's progress publisher lives in
+// the scraper image — the server never publishes progress.
 // ---------------------------------------------------------------------------
 
-export class RedisClient {
+export class RedisClient implements BusProducer {
   private publisher: Redis;
   private subscriber: Redis;
 
@@ -33,35 +35,30 @@ export class RedisClient {
   }
 
   // --------------------------------------------------------------------------
-  // Job queue (scrape:jobs)  – backend → scraper
+  // Job queue (scrape:jobs)  – web → worker
   // --------------------------------------------------------------------------
 
-  /** Push a scrape job onto the queue. Returns the new queue length. */
-  async publishJob(job: ScrapeJob): Promise<number> {
+  /** Enqueue a scrape job. Returns the new queue depth. */
+  async enqueueJob(job: ScrapeJob): Promise<number> {
     return this.publisher.rpush('scrape:jobs', JSON.stringify(job));
   }
 
-  /** Push an add_theater job onto the queue. Returns the new queue length. */
-  async publishAddTheaterJob(reportId: number, url: string): Promise<number> {
+  /** Enqueue an `add_theater` job. Returns the new queue depth. */
+  async enqueueAddTheaterJob(reportId: number, url: string): Promise<number> {
     const job: ScrapeJobAddTheater = { type: 'add_theater', triggerType: 'manual', reportId, url };
     return this.publisher.rpush('scrape:jobs', JSON.stringify(job));
   }
 
-  /** Return the current depth of the scrape:jobs queue. */
+  /** Current depth of the scrape:jobs queue. */
   async getQueueDepth(): Promise<number> {
     return this.publisher.llen('scrape:jobs');
   }
 
   // --------------------------------------------------------------------------
-  // Progress events (scrape:progress)  – scraper → backend → SSE clients
+  // Progress events (scrape:progress)  – worker → web → SSE clients
   // --------------------------------------------------------------------------
 
-  /** Publish a progress event (called by scraper service). */
-  async publishProgress(event: ProgressEvent): Promise<void> {
-    await this.publisher.publish('scrape:progress', JSON.stringify(event));
-  }
-
-  /** Subscribe to real-time progress events from the scraper. */
+  /** Subscribe to real-time progress events emitted by the worker. */
   async subscribeToProgress(handler: (event: ProgressEvent) => void): Promise<void> {
     await this.subscriber.subscribe('scrape:progress');
 
@@ -77,10 +74,13 @@ export class RedisClient {
   }
 
   // --------------------------------------------------------------------------
-  // Schedule change events (scraper:schedule:changed) – server → scraper
+  // Schedule change events (scraper:schedule:changed) – web → worker
   // --------------------------------------------------------------------------
 
-  /** Publish a schedule change event to notify the scraper of CRUD operations. */
+  /**
+   * Publish a schedule-change notice so the worker reloads its cron registrations.
+   * (Called via the BusProducer port from routes/scraper-schedules.ts.)
+   */
   // fallow-ignore-next-line unused-class-member
   async publishScheduleChange(event: ScheduleChangeEvent): Promise<void> {
     await this.publisher.publish('scraper:schedule:changed', JSON.stringify(event));
@@ -96,12 +96,14 @@ export class RedisClient {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton – initialised lazily so tests can mock ioredis before importing
+// Singleton – initialised lazily so tests can mock ioredis before importing.
+// Returns the BusProducer port so callers depend on the contract, not the
+// concrete Redis backend.
 // ---------------------------------------------------------------------------
 
 let _instance: RedisClient | null = null;
 
-export function getRedisClient(): RedisClient {
+export function getRedisClient(): BusProducer {
   if (!_instance) {
     const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
     _instance = new RedisClient(url);
