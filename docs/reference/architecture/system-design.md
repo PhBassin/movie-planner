@@ -104,7 +104,7 @@ Monitoring Stack (Optional):
 | `db` | PostgreSQL 15 | 5432 | Database |
 | `redis` | Redis 7 | 6379 | Job queue (mandatory) |
 | `scraper` | Node.js 24 | - | Scraper microservice (consumer) |
-| `scraper-cron` | Node.js 24 | - | Scheduled scraper (idle unless `ENABLE_SCRAPE_CRON=true`) |
+| `worker` | Node.js 24 | - | Redis consumer and optional scheduled scraper (`RUN_MODE=cron`) |
 
 The bundled Grafana / Loki / Tempo / Prometheus-server stack was removed in
 issue #3 (PR 4). Prometheus instrumentation remains in-app via `prom-client`

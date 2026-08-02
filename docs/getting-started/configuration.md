@@ -91,8 +91,8 @@ Never commit this value.
 | `SCRAPE_MOVIE_DELAY_MS` | `500` | Delay between movies. |
 | `SCRAPER_CONCURRENCY` | `2` | Parallelism within a scrape run. |
 | `SCRAPE_DELAY_MS` | `1000` | Generic scrape delay. |
-| `SCRAPE_CRON_SCHEDULE` | `0 8 * * 3` | Cron for the scraper-cron service. Build expressions at [crontab.guru](https://crontab.guru/). |
-| `ENABLE_SCRAPE_CRON` | `false` | Set `true` to enable external scheduled scraping in the scraper-cron service. |
+| `SCRAPE_CRON_SCHEDULE` | `0 8 * * 3` | Cron used when the worker runs in cron mode. Build expressions at [crontab.guru](https://crontab.guru/). |
+| `ENABLE_SCRAPE_CRON` | `false` | Set `true` to enable external scheduled scraping in worker cron mode. |
 
 ### Redis
 

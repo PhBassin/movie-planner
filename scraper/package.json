@@ -1,7 +1,7 @@
 {
   "name": "@movie-planner/scraper",
   "version": "0.0.0-development",
-  "description": "Standalone scraper microservice for Movie Planner",
+  "description": "Movie Planner worker role",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -15,7 +15,7 @@
   },
   "keywords": [
     "scraper",
-    "microservice",
+    "worker",
     "redis"
   ],
   "author": "",
