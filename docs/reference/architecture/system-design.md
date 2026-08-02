@@ -100,10 +100,9 @@ Monitoring Stack (Optional):
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
-| `server` | Node.js 20 | 3000 | Express API + React frontend |
+| `web` | Node.js 24 | 3000 | Express API + React frontend |
 | `db` | PostgreSQL 15 | 5432 | Database |
 | `redis` | Redis 7 | 6379 | Job queue (mandatory) |
-| `scraper` | Node.js 24 | - | Scraper microservice (consumer) |
 | `worker` | Node.js 24 | - | Redis consumer and optional scheduled scraper (`RUN_MODE=cron`) |
 
 The bundled Grafana / Loki / Tempo / Prometheus-server stack was removed in

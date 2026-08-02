@@ -66,7 +66,7 @@ cp .env.example .env
 | `POSTGRES_DB` | no | Defaults to `movie_planner` (the canonical name). |
 | `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:3000`. |
 | `SCRAPE_CRON_SCHEDULE` | no | Cron expression used when the worker runs in cron mode. |
-| `ENABLE_SCRAPE_CRON` | no | `true` enables external scheduled scraping (cron service only). |
+| `ENABLE_SCRAPE_CRON` | no | `true` enables external scheduled scraping (worker cron mode only). |
 
 ---
 

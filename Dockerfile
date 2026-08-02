@@ -30,7 +30,7 @@ COPY packages/ ./packages/
 RUN npm run build --workspace=@movie-planner/scraper-protocol && \
     cd server && npx tsc -p tsconfig.json && cd /app && \
     rm -rf node_modules/.cache && \
-    find ./server/dist \( -name "*.map" -o -name "*.d.ts.map" \) -delete
+    find ./server/dist -name "*.map" -delete
 
 FROM node:24-slim AS worker-builder
 WORKDIR /app
@@ -41,7 +41,7 @@ COPY packages/ ./packages/
 RUN npm run build --workspace=@movie-planner/scraper-protocol && \
     cd scraper && npx tsc -p tsconfig.json && cd /app && \
     rm -rf node_modules/.cache && \
-    find ./scraper/dist \( -name "*.map" -o -name "*.d.ts" -o -name "*.d.ts.map" \) -delete
+    find ./scraper/dist \( -name "*.map" -o -name "*.d.ts" \) -delete
 
 FROM node:24-slim AS production
 RUN apt-get update && \
