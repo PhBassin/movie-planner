@@ -81,7 +81,6 @@ export class RedisClient implements BusProducer {
    * Publish a schedule-change notice so the worker reloads its cron registrations.
    * (Called via the BusProducer port from routes/scraper-schedules.ts.)
    */
-  // fallow-ignore-next-line unused-class-member
   async publishScheduleChange(event: ScheduleChangeEvent): Promise<void> {
     await this.publisher.publish('scraper:schedule:changed', JSON.stringify(event));
   }
