@@ -425,6 +425,8 @@ CREATE TABLE scrape_jobs (
   enqueued_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_scrape_jobs_enqueued_at ON scrape_jobs(enqueued_at);
+
 -- ============================================================================
 -- Authentication: refresh tokens
 -- ============================================================================

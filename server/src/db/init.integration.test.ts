@@ -208,6 +208,15 @@ describe.runIf(Boolean(TEST_URL))(
         `SELECT 1 FROM pg_tables WHERE tablename = 'scrape_jobs'`
       );
       expect(table.rows).toHaveLength(1);
+
+      const indexes = await db.query<{ indexname: string }>(`
+        SELECT indexname FROM pg_indexes
+        WHERE tablename = 'scrape_jobs'
+          AND indexname = 'idx_scrape_jobs_enqueued_at'
+      `);
+      expect(indexes.rows).toHaveLength(1);
+
+      await expect(runMigrations(db)).resolves.toBeUndefined();
     });
 
     it('bootstraps a secure initial administrator when none exists', async () => {

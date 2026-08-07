@@ -67,4 +67,20 @@ describe.runIf(Boolean(TEST_URL))('Postgres queue consumer integration', () => {
     await expect(restarted.popOne()).resolves.toMatchObject({ reportId: 11 });
     await expect(restarted.popOne()).resolves.toBeNull();
   });
+
+  it('does not retry a job after it has been claimed', async () => {
+    await setupPool.query(
+      `INSERT INTO scrape_jobs (payload) VALUES ($1::jsonb)`,
+      [JSON.stringify({ type: 'scrape', reportId: 12, triggerType: 'manual' })],
+    );
+
+    const first = new PgJobConsumer(TEST_URL, 0);
+    consumers.push(first);
+    await expect(first.popOne()).resolves.toMatchObject({ reportId: 12 });
+    await first.disconnect();
+
+    const restarted = new PgJobConsumer(TEST_URL, 0);
+    consumers.push(restarted);
+    await expect(restarted.popOne()).resolves.toBeNull();
+  });
 });

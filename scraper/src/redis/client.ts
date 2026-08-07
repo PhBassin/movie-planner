@@ -170,12 +170,12 @@ class RedisScheduleSubscriber {
 
 export class RedisBusConsumer implements BusConsumer {
   readonly progressPublisher: RedisProgressPublisher;
-  private readonly consumer: RedisJobConsumer;
+  private readonly consumer: RedisJobConsumer | null;
   private readonly subscriber: RedisScheduleSubscriber;
 
-  constructor(redisUrl: string) {
+  constructor(redisUrl: string, includeJobQueue = true) {
     this.progressPublisher = new RedisProgressPublisher(redisUrl);
-    this.consumer = new RedisJobConsumer(redisUrl);
+    this.consumer = includeJobQueue ? new RedisJobConsumer(redisUrl) : null;
     this.subscriber = new RedisScheduleSubscriber(redisUrl);
   }
 
@@ -184,14 +184,16 @@ export class RedisBusConsumer implements BusConsumer {
   }
 
   async consumeJobs(handler: (job: ScrapeJob) => Promise<void>): Promise<void> {
+    if (!this.consumer) throw new Error('Redis job queue is disabled');
     await this.consumer.start(handler);
   }
 
   stopConsuming(): void {
-    this.consumer.stop();
+    this.consumer?.stop();
   }
 
   async popOneJob(): Promise<ScrapeJob | null> {
+    if (!this.consumer) throw new Error('Redis job queue is disabled');
     return this.consumer.popOne();
   }
 
@@ -202,7 +204,7 @@ export class RedisBusConsumer implements BusConsumer {
   async disconnect(): Promise<void> {
     await Promise.all([
       this.progressPublisher.disconnect(),
-      this.consumer.disconnect(),
+      this.consumer?.disconnect(),
       this.subscriber.disconnect(),
     ]);
   }
@@ -221,7 +223,7 @@ export function getBusConsumer(): BusConsumer {
     const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
     _consumer = new PostgresBusConsumer(
       new PgJobConsumer(),
-      new RedisBusConsumer(url),
+      new RedisBusConsumer(url, false),
     );
   }
   return _consumer;

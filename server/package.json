@@ -6,6 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "pretest": "npm run build --workspace=@movie-planner/scraper-protocol",
+    "pretest:run": "npm run build --workspace=@movie-planner/scraper-protocol",
     "prebuild": "npm run build --workspace=@movie-planner/scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",

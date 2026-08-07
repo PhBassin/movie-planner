@@ -6,7 +6,7 @@ const TEST_URL = process.env.PG_QUEUE_TEST_URL ?? process.env.PG_INIT_TEST_URL;
 
 describe.runIf(Boolean(TEST_URL))('Postgres queue producer integration', () => {
   let setupPool: pg.Pool;
-  let queue: PgJobQueue;
+  const queues: PgJobQueue[] = [];
 
   beforeAll(async () => {
     setupPool = new pg.Pool({ connectionString: TEST_URL });
@@ -21,15 +21,16 @@ describe.runIf(Boolean(TEST_URL))('Postgres queue producer integration', () => {
 
   beforeEach(async () => {
     await setupPool.query('TRUNCATE scrape_jobs RESTART IDENTITY');
-    queue = new PgJobQueue(TEST_URL);
+    queues.push(new PgJobQueue(TEST_URL));
   });
 
   afterAll(async () => {
-    await queue?.close();
+    for (const queue of queues) await queue.close();
     await setupPool?.end();
   });
 
   it('round-trips scrape and add_theater jobs and reports depth', async () => {
+    const queue = queues.at(-1)!;
     await expect(queue.enqueue({ type: 'scrape', reportId: 1, triggerType: 'manual' }))
       .resolves.toBe(1);
     await expect(queue.enqueueAddTheater(2, 'https://example.test/theater'))

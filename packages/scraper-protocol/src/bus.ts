@@ -25,10 +25,10 @@ export interface BusTransaction {
  * source of truth for the schedules table; this is a reload nudge).
  */
 export interface BusProducer {
-  /** Enqueue a scrape job. Returns the new queue depth. */
+  /** Enqueue a scrape job. Returns a queue-depth snapshot. */
   enqueueJob(job: ScrapeJob, transaction?: BusTransaction): Promise<number>;
 
-  /** Enqueue an `add_theater` job. Returns the new queue depth. */
+  /** Enqueue an `add_theater` job. Returns a queue-depth snapshot. */
   enqueueAddTheaterJob(reportId: number, url: string, transaction?: BusTransaction): Promise<number>;
 
   /** Current depth of the job queue. */

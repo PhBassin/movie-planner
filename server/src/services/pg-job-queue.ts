@@ -43,19 +43,21 @@ export class PgJobQueue {
     );
   }
 
-  /** Insert a scrape job and return the resulting queue depth. */
+  /** Insert a scrape job and return a queue-depth snapshot. */
   async enqueue(job: ScrapeJob, transaction?: BusTransaction): Promise<number> {
-    const executor = transaction ?? this.pool;
-    await executor.query(INSERT_JOB, [JSON.stringify(job)]);
-    const result = await executor.query<{ count: string }>(COUNT_JOBS);
-    return parseStrictInt(result.rows[0]?.count);
+    return this.enqueueSerialized(JSON.stringify(job), transaction);
   }
 
-  /** Insert an `add_theater` job and return the resulting queue depth. */
+  /** Insert an `add_theater` job and return a queue-depth snapshot. */
   async enqueueAddTheater(reportId: number, url: string, transaction?: BusTransaction): Promise<number> {
     const job: ScrapeJobAddTheater = { type: 'add_theater', triggerType: 'manual', reportId, url };
+    return this.enqueueSerialized(JSON.stringify(job), transaction);
+  }
+
+  /** Return the queue-depth snapshot visible to the enqueue transaction. */
+  private async enqueueSerialized(payload: string, transaction?: BusTransaction): Promise<number> {
     const executor = transaction ?? this.pool;
-    await executor.query(INSERT_JOB, [JSON.stringify(job)]);
+    await executor.query(INSERT_JOB, [payload]);
     const result = await executor.query<{ count: string }>(COUNT_JOBS);
     return parseStrictInt(result.rows[0]?.count);
   }

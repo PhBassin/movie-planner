@@ -21,4 +21,7 @@ CREATE TABLE IF NOT EXISTS scrape_jobs (
   enqueued_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_scrape_jobs_enqueued_at
+  ON scrape_jobs (enqueued_at);
+
 COMMIT;
