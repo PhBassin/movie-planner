@@ -40,8 +40,14 @@ The application migration runner (`server/src/db/migrations.ts`) applies pending
 2. Verifies SHA-256 checksums of already-applied files (warns on mismatch).
 3. Applies pending `.sql` files in lexical order, recording each with its checksum.
 
-The `migrations/` directory starts **empty** — the historical numbered
-migrations were folded into the baseline. New schema changes begin at `001_*`.
+The `migrations/` directory contains only forward changes — the historical
+numbered migrations were folded into the baseline. New schema changes begin at
+`001_*`.
+
+The first forward migration, `001_scrape_jobs_queue.sql`, adds the
+Postgres-backed `scrape_jobs` queue and its `enqueued_at` index. It is safe to
+run against the fresh baseline because both the table and index creation are
+idempotent.
 
 ### Adding a migration
 

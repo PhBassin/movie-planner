@@ -5,7 +5,7 @@ import type { AuthRequest } from '../middleware/auth.js';
 import { requireAuth } from '../middleware/auth.js';
 import { protectedLimiter } from '../middleware/rate-limit.js';
 import { ScraperService } from '../services/scraper-service.js';
-import { getRedisClient } from '../services/redis-client.js';
+import { getBusProducer } from '../services/bus-producer.js';
 import { ValidationError } from '../utils/errors.js';
 import {
   getAllSchedules,
@@ -133,7 +133,7 @@ router.post(
         target_theaters,
       }, userId);
 
-      await getRedisClient().publishScheduleChange({
+      await getBusProducer().publishScheduleChange({
         action: 'created',
         scheduleId: created.id,
         schedule: created,
@@ -168,7 +168,7 @@ router.put(
         target_theaters,
       }, userId);
 
-      await getRedisClient().publishScheduleChange({
+      await getBusProducer().publishScheduleChange({
         action: 'updated',
         scheduleId: schedule.id,
         schedule: updated ?? undefined,
@@ -192,7 +192,7 @@ router.delete(
     withSchedule(db, async (_req, res, _next, schedule) => {
       await deleteSchedule(db, schedule.id);
 
-      await getRedisClient().publishScheduleChange({
+      await getBusProducer().publishScheduleChange({
         action: 'deleted',
         scheduleId: schedule.id,
       });

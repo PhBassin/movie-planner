@@ -1,6 +1,10 @@
 import type { ScrapeJob } from './jobs.js';
 import type { ProgressEvent, ScheduleChangeEvent } from './events.js';
 
+export interface BusTransaction {
+  query<T = Record<string, unknown>>(text: string, params?: any[]): Promise<{ rows: T[] }>;
+}
+
 // ---------------------------------------------------------------------------
 // Bus port — the cross-process contract between the `web` and `worker` roles.
 //
@@ -21,11 +25,11 @@ import type { ProgressEvent, ScheduleChangeEvent } from './events.js';
  * source of truth for the schedules table; this is a reload nudge).
  */
 export interface BusProducer {
-  /** Enqueue a scrape job. Returns the new queue depth. */
-  enqueueJob(job: ScrapeJob): Promise<number>;
+  /** Enqueue a scrape job. Returns a queue-depth snapshot. */
+  enqueueJob(job: ScrapeJob, transaction?: BusTransaction): Promise<number>;
 
-  /** Enqueue an `add_theater` job. Returns the new queue depth. */
-  enqueueAddTheaterJob(reportId: number, url: string): Promise<number>;
+  /** Enqueue an `add_theater` job. Returns a queue-depth snapshot. */
+  enqueueAddTheaterJob(reportId: number, url: string, transaction?: BusTransaction): Promise<number>;
 
   /** Current depth of the job queue. */
   getQueueDepth(): Promise<number>;

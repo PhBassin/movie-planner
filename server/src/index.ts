@@ -28,11 +28,11 @@ async function startServer() {
     await initializeDatabase();
 
     // Subscribe to Redis progress events and forward to SSE clients
-    const { getRedisClient } = await import('./services/redis-client.js');
+    const { getBusProducer } = await import('./services/bus-producer.js');
     const { progressTracker } = await import('./services/progress-tracker.js');
 
-    const redisClient = getRedisClient();
-    await redisClient.subscribeToProgress((event) => {
+    const busProducer = getBusProducer();
+    await busProducer.subscribeToProgress((event) => {
       progressTracker.emit(event);
     });
 
@@ -63,8 +63,8 @@ async function startServer() {
       logger.info('\n⏹️  Shutting down gracefully...');
 
       // Disconnect Redis
-      const { getRedisClient: getClient } = await import('./services/redis-client.js');
-      await getClient().disconnect().catch(() => {});
+      const { getBusProducer: getProducer } = await import('./services/bus-producer.js');
+      await getProducer().disconnect().catch(() => {});
 
       // Close server
       server.close(() => {

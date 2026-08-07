@@ -77,6 +77,7 @@ describe.runIf(Boolean(TEST_URL))(
         'users', 'roles', 'permissions', 'role_permissions',
         'app_settings', 'rate_limit_configs', 'rate_limit_audit_log',
         'scrape_schedules', 'scrape_reports', 'scrape_attempts',
+        'scrape_jobs',
         'refresh_tokens', 'permission_category_labels', 'schema_migrations',
       ]) {
         expect(tables, `missing table ${expected}`).toContain(expected);
@@ -192,10 +193,30 @@ describe.runIf(Boolean(TEST_URL))(
       expect(parseStrictInt(result.rows[0].count)).toBe(0);
     });
 
-    it('migration runner succeeds with no pending files', async () => {
+    it('migration runner applies pending 001 migration and records it', async () => {
       await expect(runMigrations(db)).resolves.toBeUndefined();
-      const result = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM schema_migrations`);
-      expect(parseStrictInt(result.rows[0].count)).toBe(0);
+      const result = await db.query<{ version: string; count: string }>(`
+        SELECT version, COUNT(*)::text AS count FROM schema_migrations GROUP BY version
+      `);
+      // The scrape_jobs queue migration is the first recorded migration.
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].version).toBe('001_scrape_jobs_queue.sql');
+
+      // The queue table is present (created by the baseline; the migration is
+      // idempotent so re-applying it over the baseline is a no-op).
+      const table = await db.query(
+        `SELECT 1 FROM pg_tables WHERE tablename = 'scrape_jobs'`
+      );
+      expect(table.rows).toHaveLength(1);
+
+      const indexes = await db.query<{ indexname: string }>(`
+        SELECT indexname FROM pg_indexes
+        WHERE tablename = 'scrape_jobs'
+          AND indexname = 'idx_scrape_jobs_enqueued_at'
+      `);
+      expect(indexes.rows).toHaveLength(1);
+
+      await expect(runMigrations(db)).resolves.toBeUndefined();
     });
 
     it('bootstraps a secure initial administrator when none exists', async () => {

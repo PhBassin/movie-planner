@@ -13,6 +13,7 @@ The database uses **PostgreSQL 15** with the following tables:
 - **showtimes** - Individual screening times
 - **weekly_programs** - Weekly movie schedules per theater
 - **scrape_reports** - Scraping job execution logs
+- **scrape_jobs** - Postgres-backed scrape queue
 - **users** - Authentication and user management
 - **roles** - Role definitions for RBAC system
 - **permissions** - Permission definitions for RBAC system
@@ -323,6 +324,31 @@ FROM scrape_reports
 WHERE errors IS NOT NULL
   AND jsonb_array_length(errors) > 0;
 ```
+
+---
+
+### scrape_jobs
+
+Stores pending scrape jobs for the worker role. A worker atomically claims the
+oldest row with `FOR UPDATE SKIP LOCKED` and deletes it before handling, so
+terminal handler failures are not retried.
+
+**Columns:**
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `BIGSERIAL` | PRIMARY KEY | FIFO queue sequence |
+| `payload` | `JSONB` | NOT NULL | Serialized `ScrapeJob` discriminated union |
+| `enqueued_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT `NOW()` | Enqueue timestamp |
+
+**Indexes:**
+
+| Index | Columns | Purpose |
+|-------|---------|---------|
+| `idx_scrape_jobs_enqueued_at` | `enqueued_at` | Queue age and operational inspection |
+
+The primary key supports FIFO claim order by `id`. The queue is written by the
+`BusProducer` and consumed by the worker-side `BusConsumer`.
 
 ---
 
@@ -730,6 +756,7 @@ LIMIT 20;
 | 008 | 4.0.0 | 2026-03-13 | Implement RBAC system (roles, permissions, role_permissions) |
 | 009 | 4.0.1 | 2026-03-13 | Add roles:read permission |
 | 010 | 4.0.2 | 2026-03-13 | Remove phantom permissions cleanup |
+| 001 | current | 2026-08-07 | Add Postgres-backed scrape job queue |
 
 See [Database Migrations Guide](./migrations.md) for detailed migration documentation.
 

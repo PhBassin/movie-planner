@@ -6,6 +6,8 @@ import type {
   BusConsumer,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
+import { PgJobConsumer } from '../bus/pg-job-consumer.js';
+import { PostgresBusConsumer } from '../bus/postgres-consumer.js';
 
 // ---------------------------------------------------------------------------
 // Types — re-exported from @movie-planner/scraper-protocol so existing
@@ -168,12 +170,12 @@ class RedisScheduleSubscriber {
 
 export class RedisBusConsumer implements BusConsumer {
   readonly progressPublisher: RedisProgressPublisher;
-  private readonly consumer: RedisJobConsumer;
+  private readonly consumer: RedisJobConsumer | null;
   private readonly subscriber: RedisScheduleSubscriber;
 
-  constructor(redisUrl: string) {
+  constructor(redisUrl: string, includeJobQueue = true) {
     this.progressPublisher = new RedisProgressPublisher(redisUrl);
-    this.consumer = new RedisJobConsumer(redisUrl);
+    this.consumer = includeJobQueue ? new RedisJobConsumer(redisUrl) : null;
     this.subscriber = new RedisScheduleSubscriber(redisUrl);
   }
 
@@ -182,14 +184,16 @@ export class RedisBusConsumer implements BusConsumer {
   }
 
   async consumeJobs(handler: (job: ScrapeJob) => Promise<void>): Promise<void> {
+    if (!this.consumer) throw new Error('Redis job queue is disabled');
     await this.consumer.start(handler);
   }
 
   stopConsuming(): void {
-    this.consumer.stop();
+    this.consumer?.stop();
   }
 
   async popOneJob(): Promise<ScrapeJob | null> {
+    if (!this.consumer) throw new Error('Redis job queue is disabled');
     return this.consumer.popOne();
   }
 
@@ -200,7 +204,7 @@ export class RedisBusConsumer implements BusConsumer {
   async disconnect(): Promise<void> {
     await Promise.all([
       this.progressPublisher.disconnect(),
-      this.consumer.disconnect(),
+      this.consumer?.disconnect(),
       this.subscriber.disconnect(),
     ]);
   }
@@ -212,12 +216,15 @@ export class RedisBusConsumer implements BusConsumer {
 // concrete Redis backend.
 // ---------------------------------------------------------------------------
 
-let _consumer: RedisBusConsumer | null = null;
+let _consumer: BusConsumer | null = null;
 
 export function getBusConsumer(): BusConsumer {
   if (!_consumer) {
     const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
-    _consumer = new RedisBusConsumer(url);
+    _consumer = new PostgresBusConsumer(
+      new PgJobConsumer(),
+      new RedisBusConsumer(url, false),
+    );
   }
   return _consumer;
 }
