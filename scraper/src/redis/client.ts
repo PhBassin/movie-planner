@@ -6,6 +6,8 @@ import type {
   BusConsumer,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
+import { PgJobConsumer } from '../bus/pg-job-consumer.js';
+import { PostgresBusConsumer } from '../bus/postgres-consumer.js';
 
 // ---------------------------------------------------------------------------
 // Types — re-exported from @movie-planner/scraper-protocol so existing
@@ -212,12 +214,15 @@ export class RedisBusConsumer implements BusConsumer {
 // concrete Redis backend.
 // ---------------------------------------------------------------------------
 
-let _consumer: RedisBusConsumer | null = null;
+let _consumer: BusConsumer | null = null;
 
 export function getBusConsumer(): BusConsumer {
   if (!_consumer) {
     const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
-    _consumer = new RedisBusConsumer(url);
+    _consumer = new PostgresBusConsumer(
+      new PgJobConsumer(),
+      new RedisBusConsumer(url),
+    );
   }
   return _consumer;
 }

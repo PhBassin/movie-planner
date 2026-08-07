@@ -286,9 +286,9 @@ A Resume always produces a **new** ScrapeReport with `parent_report_id` set to t
 
 ### ScrapeJob
 
-A unit of work submitted by the server over the Redis `scrape:jobs` list for the scraper microservice to execute. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
+A unit of work submitted by the server through the `BusProducer` to the Postgres `scrape_jobs` queue for the worker role to execute. The worker atomically claims the oldest row with `FOR UPDATE SKIP LOCKED`; the row is deleted at claim time, preserving the Redis list's terminal-failure/no-retry behavior. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
 
-**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). Both `server/src/services/redis-client.ts` and `scraper/src/redis/client.ts` re-export the type and the `serializeJob` / `parseJob` helpers from the protocol package; the previous duplicate declarations are gone. `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
+**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). `server/src/services/redis-client.ts` and `scraper/src/redis/client.ts` retain the Redis pub/sub compatibility implementations during the incremental migration; the queue implementation is `server/src/services/pg-job-queue.ts` and `scraper/src/bus/pg-job-consumer.ts`. The previous duplicate declarations are gone. `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
 
 The `ScrapeJobScrape.options` shape now has a single canonical declaration that includes `resumeMode` and `pendingAttempts` for the Resume case. Both sides of the wire agree, and the scraper's local `ScrapeOptions` (`scraper/src/scraper/index.ts:140`) is now a scraper-internal type that no longer needs to redeclare wire fields.
 
@@ -308,12 +308,12 @@ A fire-and-forget pub/sub notification on the Redis `scraper:schedule:changed` c
 
 ### Bus port (`BusProducer`, `BusConsumer`)
 
-The interface seam between the `web` and `worker` roles over the three channels above (`scrape:jobs` queue, `scrape:progress` and `scraper:schedule:changed` pub/sub). Today both roles are separate images wired through Redis; ADR 0009 consolidates them into one image with two roles backed by Postgres (`FOR UPDATE SKIP LOCKED` queue, `LISTEN/NOTIFY` pub/sub). The port is what makes that swap a drop-in: role code depends on the interface, the backend is the swappable part.
+The interface seam between the `web` and `worker` roles over the queue and two pub/sub channels above. The `scrape_jobs` Postgres queue is now consumed with `FOR UPDATE SKIP LOCKED`; progress and schedule-change pub/sub remain Redis until issue #25 moves them to `LISTEN/NOTIFY`. ADR 0009's port is what makes this incremental swap a drop-in: role code depends on the interface, the backend is the swappable part.
 
 - **`BusProducer`** (web side): enqueue jobs, query depth, subscribe to progress for SSE fan-out, publish schedule-change notices.
 - **`BusConsumer`** (worker side): consume/pop jobs, publish progress, subscribe to schedule changes, plus a `disconnect()` lifecycle hook on both.
 
-**Canonical home is `packages/scraper-protocol/src/bus.ts`** (issue #21). The Redis implementations live in each role — `server/src/services/redis-client.ts` (`RedisClient implements BusProducer`) and `scraper/src/redis/client.ts` (`RedisBusConsumer implements BusConsumer`). `member:notices` is a documented peer channel (ADR 0005) with no callers in code yet; it joins the port when it gains an implementation.
+**Canonical home is `packages/scraper-protocol/src/bus.ts`** (issue #21). The active implementations are composed backends: `server/src/services/bus-producer.ts` (`PostgresBusProducer`, Postgres queue + Redis pub/sub) and `scraper/src/bus/postgres-consumer.ts` (`PostgresBusConsumer`, Postgres queue + Redis pub/sub). `RedisClient` and `RedisBusConsumer` remain the temporary pub/sub delegates until issue #25. `member:notices` is a documented peer channel (ADR 0005) with no callers in code yet; it joins the port when it gains an implementation.
 
 ### RateLimitConfig
 

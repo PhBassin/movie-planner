@@ -2,7 +2,7 @@ import { getShowtimesByTheaterAndWeek } from '../db/showtime-queries.js';
 import { createScrapeReport } from '../db/report-queries.js';
 import { getTheaters, addTheater, updateTheaterConfig, deleteTheater } from '../db/theater-queries.js';
 import { extractTheaterIdFromUrl, cleanTheaterUrl, isValidAllocineUrl } from '../utils/url.js';
-import { getRedisClient } from './redis-client.js';
+import { getBusProducer } from './bus-producer.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import type { DB } from '../db/index.js';
@@ -116,12 +116,17 @@ export class TheaterService {
 
     const cleanedUrl = cleanTheaterUrl(url);
 
-    // Insert theater into DB with minimal info
-    const theater = await addTheater(this.db, { id: theaterId, name: theaterId, url: cleanedUrl });
-
-    // Enqueue add_theater job on the bus
-    const reportId = await createScrapeReport(this.db, 'manual');
-    await getRedisClient().enqueueAddTheaterJob(reportId, cleanedUrl);
+    const { theater, reportId } = await this.db.transaction(async (transaction) => {
+      // Keep the catalog write, report, and queue insert atomic.
+      const theater = await addTheater(transaction as typeof this.db, {
+        id: theaterId,
+        name: theaterId,
+        url: cleanedUrl,
+      });
+      const reportId = await createScrapeReport(transaction as typeof this.db, 'manual');
+      await getBusProducer().enqueueAddTheaterJob(reportId, cleanedUrl, transaction);
+      return { theater, reportId };
+    });
     logger.info(`🎬 add_theater job queued for ${cleanedUrl} (reportId=${reportId})`);
 
     return theater;

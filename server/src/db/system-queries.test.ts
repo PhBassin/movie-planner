@@ -105,6 +105,7 @@ describe('System Queries', () => {
             { version: '023_rename_cinema_to_theater_and_film_to_movie.sql' },
             { version: '024_add_refresh_tokens.sql' },
             { version: '025_drop_screen_count.sql' },
+            { version: '001_scrape_jobs_queue.sql' },
           ],
         }),
       } as unknown as DB;
@@ -114,9 +115,9 @@ describe('System Queries', () => {
       expect(result).toEqual([]);
     });
 
-    it('should return no pending migrations when the baseline dir is empty', async () => {
-      // After the consolidated baseline, migrations/ starts empty: any recorded
-      // applied versions are historical and there are no files left to apply.
+    it('should return the queue migration when historical baseline versions are applied', async () => {
+      // Historical baseline versions are not files anymore; the new queue
+      // migration is the first file applied after that baseline.
       const mockDb: DB = {
         query: vi.fn().mockResolvedValue({
           rows: [
@@ -128,7 +129,9 @@ describe('System Queries', () => {
 
       const result = await getPendingMigrations(mockDb);
 
-      expect(result).toEqual([]);
+      expect(result).toEqual([
+        { version: '001_scrape_jobs_queue.sql', status: 'pending' },
+      ]);
     });
 
     it('should order pending migrations by version', async () => {
@@ -148,15 +151,16 @@ describe('System Queries', () => {
       }
     });
 
-    it('should handle empty database (no migrations applied) with an empty baseline dir', async () => {
+    it('should return the queue migration for an empty database', async () => {
       const mockDb: DB = {
         query: vi.fn().mockResolvedValue({ rows: [] }),
       } as unknown as DB;
 
       const result = await getPendingMigrations(mockDb);
 
-      // Consolidated baseline: migrations/ is empty, so nothing is pending.
-      expect(result).toEqual([]);
+      expect(result).toEqual([
+        { version: '001_scrape_jobs_queue.sql', status: 'pending' },
+      ]);
     });
   });
 

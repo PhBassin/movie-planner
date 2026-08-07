@@ -58,8 +58,8 @@ vi.mock('../middleware/permission.js', () => ({
 }));
 
 // Mock Redis client for schedule publishing
-vi.mock('../services/redis-client.js', () => ({
-  getRedisClient: () => ({
+vi.mock('../services/bus-producer.js', () => ({
+  getBusProducer: () => ({
     publishScheduleChange: mockPublishScheduleChange,
   }),
 }));
