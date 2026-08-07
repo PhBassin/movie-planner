@@ -35,7 +35,6 @@
     "server:db:init": "npm run db:init --workspace=@movie-planner/server",
     "scraper:dev": "npm run dev --workspace=@movie-planner/scraper",
     "scraper:consumer": "RUN_MODE=consumer npm run dev --workspace=@movie-planner/scraper",
-    "scraper:cron": "RUN_MODE=cron ENABLE_SCRAPE_CRON=true npm run dev --workspace=@movie-planner/scraper",
     "scraper:build": "npm run build --workspace=@movie-planner/scraper",
     "scraper:start": "npm start --workspace=@movie-planner/scraper",
     "web:start": "npm start --workspace=@movie-planner/server",

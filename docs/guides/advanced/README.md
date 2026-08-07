@@ -27,7 +27,7 @@ Choose a guide based on your current challenge:
 **When to read**: After deploying a working instance, ready to scale.
 
 **Topics covered**:
-- **RUN_MODE Architecture** – Choose between oneshot (Kubernetes Jobs), consumer (Deployment), cron (Scheduled), or direct (local dev)
+- **RUN_MODE Architecture** – Choose between oneshot (Kubernetes Jobs), consumer (worker: queue consumer + cron scheduler), or direct (local dev)
 - **Queue Management** – Redis FIFO structure, queue depth monitoring, backpressure handling
 - **Multi-Instance Deployment** – Docker Compose scaling, Kubernetes Deployments with HPA, auto-scaling based on queue depth
 - **Job Orchestration** – Job types (scrape, add_theater), job lifecycle, retry strategies
