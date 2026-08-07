@@ -108,4 +108,17 @@ describe('PgJobQueue', () => {
       expect(mockPool.end).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('uses the application Postgres environment when no URL is passed', async () => {
+    process.env.POSTGRES_PORT = '5433';
+    const envQueue = new PgJobQueue();
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] });
+
+    await expect(envQueue.enqueue({ type: 'scrape', reportId: 9, triggerType: 'manual' }))
+      .resolves.toBe(1);
+
+    delete process.env.POSTGRES_PORT;
+  });
 });
