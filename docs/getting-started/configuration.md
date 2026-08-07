@@ -85,14 +85,13 @@ Never commit this value.
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `SCRAPE_MODE` | `from_today_limited` (consumer) / `weekly` (cron, host-app) | Scraping strategy. |
+| `SCRAPE_MODE` | `from_today_limited` (consumer) / `weekly` (host-app) | Scraping strategy. |
 | `SCRAPE_DAYS` | `7` | Number of days to scrape per run. |
 | `SCRAPE_THEATER_DELAY_MS` | `3000` | Delay between theaters. |
 | `SCRAPE_MOVIE_DELAY_MS` | `500` | Delay between movies. |
 | `SCRAPER_CONCURRENCY` | `2` | Parallelism within a scrape run. |
 | `SCRAPE_DELAY_MS` | `1000` | Generic scrape delay. |
-| `SCRAPE_CRON_SCHEDULE` | `0 8 * * 3` | Cron used when the worker runs in cron mode. Build expressions at [crontab.guru](https://crontab.guru/). |
-| `ENABLE_SCRAPE_CRON` | `false` | Set `true` to enable external scheduled scraping in worker cron mode. |
+| `ENABLE_SCRAPE_CRON` | `false` | Set `true` to let the worker fire scheduled scrapes. The worker always registers schedules from the database; this gates whether they execute. |
 
 ### Redis
 
@@ -128,8 +127,9 @@ In development over plain HTTP, set `COOKIE_SECURE=false` (already set in
 ### Scraper is idle
 
 External scheduled scraping is gated by `ENABLE_SCRAPE_CRON=true`. The
-consumer service (always running in `compose.yaml`) handles on-demand
-scrapes regardless.
+worker (always running in `compose.yaml`) registers schedules from the
+database and fires them when this is set; it also handles on-demand scrapes
+from the queue regardless.
 
 ---
 

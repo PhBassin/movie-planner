@@ -235,7 +235,7 @@ An external website that publishes showtime data and from which one or more Thea
 ## Scraping
 
 **Two origins of a scrape.** Scraping in movie-planner has exactly two origins, and they belong to different actors:
-1. **Operational scraping — owned by Staff.** The scheduled/periodic runs (the `schedules`), full re-scrapes, Resume of incomplete runs, and all monitoring. This is what "scrapping is managed by the admin" means.
+1. **Operational scraping — owned by Staff.** The scheduled/periodic runs (the `scrape_schedules` rows), full re-scrapes, Resume of incomplete runs, and all monitoring. This is what "scrapping is managed by the admin" means.
 2. **Add-triggered one-shot — owned by a Member via a TheaterSubmission.** When a Member submits a new Theater URL, an immediate `add_theater` ScrapeJob fires with no Staff involvement (subject only to dedup and the per-Member throttle). This is the one exception to "Staff own scraping," and it exists so that adding a cinema is never blocked on an admin being available.
 
 Both origins produce the same artifacts downstream (ScrapeReport, ScrapeAttempts, ProgressEvents); they differ only in who originates them and whether they recur.
@@ -300,11 +300,13 @@ A discrete event published by the scraper onto the Redis `scrape:progress` pub/s
 
 ### ScheduleChangeEvent
 
-A fire-and-forget pub/sub notification on the Redis `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the schedules table; the scraper subscribes and re-evaluates its in-process cron jobs in response.
+A fire-and-forget pub/sub notification on the Redis `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `scrape_schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the `scrape_schedules` table; the scraper subscribes and re-evaluates its in-process cron jobs in response.
 
 **Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The previous scraper-side declaration at `scraper/src/redis/client.ts:9` and server-side declaration at `server/src/services/redis-client.ts:15` are now re-exports from the protocol package.
 
-**ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
+**ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `scrape_schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
+
+**CronSchedule is the scheduler-facing projection, not a new entity.** Per ADR 0009 (decision 3) scheduling folds into the worker role; `CronSchedule` (`scraper/src/scheduler/cron-scheduler.ts`) is the narrow `{ id, name, cronExpression }` shape the worker's `CronScheduler` registers and fires — a projection of a `Schedule` row produced via `toCronSchedule`, not a separate persisted concept. The DB row stays canonical; the projection is volatile, rebuilt on every reload.
 
 ### Bus port (`BusProducer`, `BusConsumer`)
 
