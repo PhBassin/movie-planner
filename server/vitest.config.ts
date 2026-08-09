@@ -41,6 +41,9 @@ export default defineConfig({
         'src/middleware/**',
         'src/services/cron.ts',
         'src/services/progress-tracker.ts',
+        // Covered through injected clients; environment-specific pg.Client
+        // construction is not exercised by unit tests.
+        'src/services/postgres-notification-bus.ts',
         'src/services/scrape-manager.ts',
         'src/services/scraper/movie-parser.ts',
         'src/services/scraper/http-client.ts',

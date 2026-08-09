@@ -57,6 +57,7 @@ export class PostgresNotificationBus implements NotificationBus {
         await this.connect();
       } catch (error) {
         logger.error('[PostgresNotificationBus] Initial listener connection failed', error);
+        this.scheduleReconnect();
       }
     }
     if (!this.client) return;
