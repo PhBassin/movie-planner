@@ -10,6 +10,9 @@ const mockRedisInstance = {
   subscribe: vi.fn().mockResolvedValue(undefined),
   on: vi.fn(),
   quit: vi.fn().mockResolvedValue('OK'),
+  notificationPublish: vi.fn().mockResolvedValue(undefined),
+  notificationSubscribe: vi.fn().mockResolvedValue(undefined),
+  notificationDisconnect: vi.fn().mockResolvedValue(undefined),
 };
 
 vi.mock('ioredis', () => {
@@ -27,7 +30,11 @@ describe('RedisClient', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    client = new RedisClient('redis://test');
+    client = new RedisClient('redis://test', {
+      publish: mockRedisInstance.notificationPublish,
+      subscribe: mockRedisInstance.notificationSubscribe,
+      disconnect: mockRedisInstance.notificationDisconnect,
+    });
   });
 
   it('should publish a job', async () => {
@@ -47,7 +54,7 @@ describe('RedisClient', () => {
 
   it('should publish progress', async () => {
     await client.publishProgress({ type: 'start', total: 1 });
-    expect(mockRedisInstance.publish).toHaveBeenCalledWith('scrape:progress', expect.any(String));
+    expect(mockRedisInstance.notificationPublish).toHaveBeenCalledWith('scrape:progress', expect.any(String));
   });
 
   it('should subscribe to progress and handle messages', async () => {
@@ -55,25 +62,20 @@ describe('RedisClient', () => {
     
     await client.subscribeToProgress(handler);
     
-    // Simulate message
-    const messageCallback = mockRedisInstance.on.mock.calls.find((call: any) => call[0] === 'message')[1];
+    const messageCallback = mockRedisInstance.notificationSubscribe.mock.calls[0][1];
     
     // Correct channel
-    messageCallback('scrape:progress', JSON.stringify({ type: 'done' }));
+    messageCallback(JSON.stringify({ type: 'done' }));
     expect(handler).toHaveBeenCalledWith({ type: 'done' });
     
     // Wrong channel
-    messageCallback('other:channel', '{}');
-    expect(handler).toHaveBeenCalledTimes(1);
-    
-    // Invalid JSON
-    messageCallback('scrape:progress', 'invalid');
+    messageCallback('invalid');
     expect(logger.error).toHaveBeenCalled();
   });
 
   it('should disconnect', async () => {
     await client.disconnect();
-    expect(mockRedisInstance.quit).toHaveBeenCalledTimes(2);
+    expect(mockRedisInstance.quit).toHaveBeenCalledOnce();
   });
 
   describe('getRedisClient singleton', () => {

@@ -5,8 +5,11 @@ import type {
   ScrapeJobScrape,
   ScrapeJobAddTheater,
   ScheduleChangeEvent,
+  NotificationBus,
+  NotificationChannel,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
+import { PostgresNotificationBus } from './postgres-notification-bus.js';
 
 // ---------------------------------------------------------------------------
 // Types — re-exported from @movie-planner/scraper-protocol so existing
@@ -25,19 +28,19 @@ export type {
 // ---------------------------------------------------------------------------
 
 export class RedisProgressPublisher {
-  private client: Redis;
+  private notifications: NotificationBus;
 
-  constructor(redisUrl: string) {
-    this.client = new Redis(redisUrl, { lazyConnect: false });
+  constructor(redisUrl: string, notifications: NotificationBus = new PostgresNotificationBus()) {
+    this.notifications = notifications;
   }
 
   /** Publish a progress event to the scrape:progress pub/sub channel. */
   async emit(event: ProgressEvent): Promise<void> {
-    await this.client.publish('scrape:progress', JSON.stringify(event));
+    await this.notifications.publish('scrape:progress', JSON.stringify(event));
   }
 
   async disconnect(): Promise<void> {
-    await this.client.quit();
+    await this.notifications.disconnect();
   }
 }
 
@@ -112,17 +115,14 @@ export class RedisJobConsumer {
 // ---------------------------------------------------------------------------
 
 class RedisScheduleSubscriber {
-  private client: Redis;
+  private notifications: NotificationBus;
 
-  constructor(redisUrl: string) {
-    this.client = new Redis(redisUrl, { lazyConnect: false });
+  constructor(redisUrl: string, notifications: NotificationBus = new PostgresNotificationBus()) {
+    this.notifications = notifications;
   }
 
-  async subscribe(channel: string, handler: (event: ScheduleChangeEvent) => void): Promise<void> {
-    await this.client.subscribe(channel);
-
-    this.client.on('message', (ch: string, message: string) => {
-      if (ch !== channel) return;
+  async subscribe(channel: NotificationChannel, handler: (event: ScheduleChangeEvent) => void): Promise<void> {
+    await this.notifications.subscribe(channel, (message) => {
       try {
         const event: ScheduleChangeEvent = JSON.parse(message);
         handler(event);
@@ -135,7 +135,7 @@ class RedisScheduleSubscriber {
   }
 
   async disconnect(): Promise<void> {
-    await this.client.quit();
+    await this.notifications.disconnect();
   }
 }
 

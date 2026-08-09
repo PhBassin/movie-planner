@@ -4,8 +4,10 @@ import type {
   ScrapeJob,
   ScrapeJobAddTheater,
   ScheduleChangeEvent,
+  NotificationBus,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
+import { PostgresNotificationBus } from './postgres-notification-bus.js';
 
 // ---------------------------------------------------------------------------
 // Types — re-exported from @movie-planner/scraper-protocol so existing
@@ -25,11 +27,11 @@ export type {
 
 export class RedisClient {
   private publisher: Redis;
-  private subscriber: Redis;
+  private readonly notifications: NotificationBus;
 
-  constructor(redisUrl: string) {
+  constructor(redisUrl: string, notifications: NotificationBus = new PostgresNotificationBus()) {
     this.publisher = new Redis(redisUrl, { lazyConnect: false });
-    this.subscriber = new Redis(redisUrl, { lazyConnect: false });
+    this.notifications = notifications;
   }
 
   // --------------------------------------------------------------------------
@@ -58,15 +60,12 @@ export class RedisClient {
 
   /** Publish a progress event (called by scraper service). */
   async publishProgress(event: ProgressEvent): Promise<void> {
-    await this.publisher.publish('scrape:progress', JSON.stringify(event));
+    await this.notifications.publish('scrape:progress', JSON.stringify(event));
   }
 
   /** Subscribe to real-time progress events from the scraper. */
   async subscribeToProgress(handler: (event: ProgressEvent) => void): Promise<void> {
-    await this.subscriber.subscribe('scrape:progress');
-
-    this.subscriber.on('message', (channel: string, message: string) => {
-      if (channel !== 'scrape:progress') return;
+    await this.notifications.subscribe('scrape:progress', (message) => {
       try {
         const event: ProgressEvent = JSON.parse(message);
         handler(event);
@@ -83,7 +82,7 @@ export class RedisClient {
   /** Publish a schedule change event to notify the scraper of CRUD operations. */
   // fallow-ignore-next-line unused-class-member
   async publishScheduleChange(event: ScheduleChangeEvent): Promise<void> {
-    await this.publisher.publish('scraper:schedule:changed', JSON.stringify(event));
+    await this.notifications.publish('scraper:schedule:changed', JSON.stringify(event));
   }
 
   // --------------------------------------------------------------------------
@@ -91,7 +90,7 @@ export class RedisClient {
   // --------------------------------------------------------------------------
 
   async disconnect(): Promise<void> {
-    await Promise.all([this.publisher.quit(), this.subscriber.quit()]);
+    await Promise.all([this.publisher.quit(), this.notifications.disconnect()]);
   }
 }
 

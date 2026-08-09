@@ -40,7 +40,7 @@ async function startMetricsServer(): Promise<void> {
  * RUN_MODE controls how this container behaves:
  *  - "oneshot"  : Pop one job from Redis queue, execute it, then exit. (default)
  *  - "consumer" : Long-running process that polls Redis queue continuously.
- *  - "cron"     : Run scraper on a schedule (no Redis, uses CRON_SCHEDULE env).
+ *  - "cron"     : Run scraper on a schedule (uses PostgreSQL notifications).
  *  - "direct"   : Run scraper immediately once and exit (for local dev / manual use).
  */
 type RunMode = 'oneshot' | 'consumer' | 'cron' | 'direct';

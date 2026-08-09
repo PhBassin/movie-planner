@@ -36,7 +36,7 @@ async function startServer() {
       progressTracker.emit(event);
     });
 
-    logger.info('📡 Redis progress subscription active (scrape:progress)');
+    logger.info('📡 PostgreSQL progress subscription active (scrape:progress)');
 
     // Create Express app
     const app = createApp();

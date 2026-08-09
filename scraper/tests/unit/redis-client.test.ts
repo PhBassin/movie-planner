@@ -5,11 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // module hoisting resolves imports.
 // ---------------------------------------------------------------------------
 
-const { mockPublish, mockQuit, mockBlpop, mockLpop, MockRedis } = vi.hoisted(() => {
+const { mockPublish, mockQuit, mockBlpop, mockLpop, mockNotificationPublish, mockNotificationSubscribe, mockNotificationDisconnect, MockRedis } = vi.hoisted(() => {
   const mockPublish = vi.fn().mockResolvedValue(1);
   const mockQuit = vi.fn().mockResolvedValue('OK');
   const mockBlpop = vi.fn().mockResolvedValue(null);
   const mockLpop = vi.fn().mockResolvedValue(null);
+  const mockNotificationPublish = vi.fn().mockResolvedValue(undefined);
+  const mockNotificationSubscribe = vi.fn().mockResolvedValue(undefined);
+  const mockNotificationDisconnect = vi.fn().mockResolvedValue(undefined);
 
   class MockRedis {
     publish = mockPublish;
@@ -19,7 +22,7 @@ const { mockPublish, mockQuit, mockBlpop, mockLpop, MockRedis } = vi.hoisted(() 
     on = vi.fn();
   }
 
-  return { mockPublish, mockQuit, mockBlpop, mockLpop, MockRedis };
+  return { mockPublish, mockQuit, mockBlpop, mockLpop, mockNotificationPublish, mockNotificationSubscribe, mockNotificationDisconnect, MockRedis };
 });
 
 vi.mock('ioredis', () => ({
@@ -33,14 +36,18 @@ describe('RedisProgressPublisher', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    publisher = new RedisProgressPublisher('redis://localhost:6379');
+    publisher = new RedisProgressPublisher('redis://localhost:6379', {
+      publish: mockNotificationPublish,
+      subscribe: mockNotificationSubscribe,
+      disconnect: mockNotificationDisconnect,
+    });
   });
 
   it('publishes progress events to scrape:progress channel', async () => {
     const event = { type: 'started' as const, total_theaters: 3, total_dates: 7 };
     await publisher.emit(event);
 
-    expect(mockPublish).toHaveBeenCalledWith('scrape:progress', JSON.stringify(event));
+    expect(mockNotificationPublish).toHaveBeenCalledWith('scrape:progress', JSON.stringify(event));
   });
 
   it('publishes completed event with summary', async () => {
@@ -59,12 +66,12 @@ describe('RedisProgressPublisher', () => {
     };
     await publisher.emit(event);
 
-    expect(mockPublish).toHaveBeenCalledWith('scrape:progress', JSON.stringify(event));
+    expect(mockNotificationPublish).toHaveBeenCalledWith('scrape:progress', JSON.stringify(event));
   });
 
   it('disconnects cleanly', async () => {
     await publisher.disconnect();
-    expect(mockQuit).toHaveBeenCalledOnce();
+    expect(mockNotificationDisconnect).toHaveBeenCalledOnce();
   });
 });
 

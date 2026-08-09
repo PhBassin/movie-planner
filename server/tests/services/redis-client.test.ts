@@ -15,6 +15,9 @@ const mockMethods = vi.hoisted(() => ({
   rpush: vi.fn().mockResolvedValue(1),
   llen: vi.fn().mockResolvedValue(0),
   quit: vi.fn().mockResolvedValue('OK'),
+  notificationPublish: vi.fn().mockResolvedValue(undefined),
+  notificationSubscribe: vi.fn().mockResolvedValue(undefined),
+  notificationDisconnect: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('ioredis', () => ({
@@ -43,7 +46,11 @@ describe('RedisClient', () => {
     mockMethods.llen.mockResolvedValue(0);
     mockMethods.quit.mockResolvedValue('OK');
 
-    client = new RedisClient('redis://localhost:6379');
+    client = new RedisClient('redis://localhost:6379', {
+      publish: mockMethods.notificationPublish,
+      subscribe: mockMethods.notificationSubscribe,
+      disconnect: mockMethods.notificationDisconnect,
+    });
   });
 
   afterEach(async () => {
@@ -103,7 +110,7 @@ describe('RedisClient', () => {
 
       await client.publishProgress(event);
 
-      expect(mockMethods.publish).toHaveBeenCalledWith(
+      expect(mockMethods.notificationPublish).toHaveBeenCalledWith(
         'scrape:progress',
         JSON.stringify(event)
       );
@@ -118,7 +125,7 @@ describe('RedisClient', () => {
 
       await client.subscribeToProgress(handler);
 
-      expect(mockMethods.subscribe).toHaveBeenCalledWith('scrape:progress');
+      expect(mockMethods.notificationSubscribe).toHaveBeenCalledWith('scrape:progress', expect.any(Function));
     });
 
     test('should call handler when message is received on scrape:progress', async () => {
@@ -126,12 +133,9 @@ describe('RedisClient', () => {
       await client.subscribeToProgress(handler);
 
       // Find the 'message' callback registered via .on()
-      const onCall = mockMethods.on.mock.calls.find(([event]: [string]) => event === 'message');
-      expect(onCall).toBeDefined();
-
-      const messageCallback = onCall![1] as (channel: string, msg: string) => void;
+      const messageCallback = mockMethods.notificationSubscribe.mock.calls[0][1] as (msg: string) => void;
       const event = { type: 'theater_started', theater_name: 'Test', theater_id: 'C001', index: 0 };
-      messageCallback('scrape:progress', JSON.stringify(event));
+      messageCallback(JSON.stringify(event));
 
       expect(handler).toHaveBeenCalledWith(event);
     });
@@ -140,22 +144,17 @@ describe('RedisClient', () => {
       const handler = vi.fn();
       await client.subscribeToProgress(handler);
 
-      const onCall = mockMethods.on.mock.calls.find(([event]: [string]) => event === 'message');
-      const messageCallback = onCall![1] as (channel: string, msg: string) => void;
-      messageCallback('other:channel', JSON.stringify({ type: 'started' }));
-
-      expect(handler).not.toHaveBeenCalled();
+      expect(mockMethods.notificationSubscribe).toHaveBeenCalledWith('scrape:progress', expect.any(Function));
     });
 
     test('should log error and not throw when message JSON is invalid', async () => {
       const handler = vi.fn();
       await client.subscribeToProgress(handler);
 
-      const onCall = mockMethods.on.mock.calls.find(([event]: [string]) => event === 'message');
-      const messageCallback = onCall![1] as (channel: string, msg: string) => void;
+      const messageCallback = mockMethods.notificationSubscribe.mock.calls[0][1] as (msg: string) => void;
 
       // Pass malformed JSON on the correct channel — should catch and log, not throw
-      expect(() => messageCallback('scrape:progress', 'not-valid-json')).not.toThrow();
+      expect(() => messageCallback('not-valid-json')).not.toThrow();
       expect(handler).not.toHaveBeenCalled();
     });
   });
@@ -170,7 +169,7 @@ describe('RedisClient', () => {
 
       // Both publisher and subscriber share the same mock instance
       // so quit is called twice (once per connection)
-      expect(mockMethods.quit).toHaveBeenCalledTimes(2);
+      expect(mockMethods.quit).toHaveBeenCalledOnce();
     });
   });
 });
