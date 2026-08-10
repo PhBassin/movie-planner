@@ -8,13 +8,13 @@ export interface BusTransaction {
 // ---------------------------------------------------------------------------
 // Bus port — the cross-process contract between the `web` and `worker` roles.
 //
-// Today both roles are separate images (server, scraper) wired through Redis.
-// ADR 0009 consolidates them into one image with two roles backed by Postgres
-// (job queue via `FOR UPDATE SKIP LOCKED`, pub/sub via `LISTEN/NOTIFY`). This
-// port is the seam that makes that swap a drop-in: the role code depends on
-// the interface, not the backend. `member:notices` is a documented peer
-// channel (CONTEXT.md, ADR 0005) but has no callers in code yet; it joins the
-// port when it gains an implementation.
+// ADR 0009 consolidates the roles into one image backed by Postgres: the job
+// queue runs on the `scrape_jobs` table with `FOR UPDATE SKIP LOCKED` and the
+// pub/sub fan-outs run on `LISTEN/NOTIFY` (see `notifications.ts`). This port
+// is the seam that makes the backend a drop-in: role code depends on the
+// interface, not the concrete queue/transport. `member:notices` is a reserved
+// peer channel (CONTEXT.md, ADR 0005) with no callers in code yet; it joins
+// the port when it gains an implementation.
 // ---------------------------------------------------------------------------
 
 /**

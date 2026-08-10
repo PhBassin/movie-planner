@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { BusProducer } from '@movie-planner/scraper-protocol';
+import { NOTIFICATION_CHANNELS, type BusProducer, type NotificationBus } from '@movie-planner/scraper-protocol';
 
 const queue = vi.hoisted(() => ({
   enqueue: vi.fn().mockResolvedValue(1),
@@ -8,12 +8,9 @@ const queue = vi.hoisted(() => ({
   close: vi.fn().mockResolvedValue(undefined),
 }));
 
-const pubsub = vi.hoisted((): BusProducer => ({
-  enqueueJob: vi.fn().mockResolvedValue(0),
-  enqueueAddTheaterJob: vi.fn().mockResolvedValue(0),
-  getQueueDepth: vi.fn().mockResolvedValue(0),
-  subscribeToProgress: vi.fn().mockResolvedValue(undefined),
-  publishScheduleChange: vi.fn().mockResolvedValue(undefined),
+const notifications = vi.hoisted((): NotificationBus => ({
+  publish: vi.fn().mockResolvedValue(undefined),
+  subscribe: vi.fn().mockResolvedValue(undefined),
   disconnect: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -22,8 +19,12 @@ vi.mock('./pg-job-queue.js', () => ({
     return queue;
   },
 }));
-vi.mock('./redis-client.js', () => ({
-  getRedisClient: () => pubsub,
+vi.mock('./postgres-notification-bus.js', () => ({
+  PostgresNotificationBus: class MockPostgresNotificationBus implements NotificationBus {
+    publish = notifications.publish;
+    subscribe = notifications.subscribe;
+    disconnect = notifications.disconnect;
+  },
 }));
 
 import { PostgresBusProducer, getBusProducer, resetBusProducer } from './bus-producer.js';
@@ -35,7 +36,7 @@ describe('PostgresBusProducer', () => {
   });
 
   it('implements the BusProducer port and delegates queue operations', async () => {
-    const producer: BusProducer = new PostgresBusProducer(queue, pubsub);
+    const producer: BusProducer = new PostgresBusProducer(queue, notifications);
     const job = { type: 'scrape' as const, reportId: 1, triggerType: 'manual' as const };
 
     await producer.enqueueJob(job);
@@ -47,19 +48,50 @@ describe('PostgresBusProducer', () => {
     expect(queue.depth).toHaveBeenCalledOnce();
   });
 
-  it('delegates pub/sub and disconnects both backends', async () => {
-    const producer = new PostgresBusProducer(queue, pubsub);
+  it('subscribes to progress events and parses payloads for the handler', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
     const handler = vi.fn();
-    const event = { action: 'created' as const, scheduleId: 1 };
 
     await producer.subscribeToProgress(handler);
+
+    expect(notifications.subscribe).toHaveBeenCalledWith(
+      NOTIFICATION_CHANNELS.progress,
+      expect.any(Function),
+    );
+
+    const listener = vi.mocked(notifications.subscribe).mock.calls[0][1];
+    const event = { type: 'started' as const, total_theaters: 3, total_dates: 7 };
+    listener(JSON.stringify(event));
+    expect(handler).toHaveBeenCalledWith(event);
+  });
+
+  it('logs and swallows malformed progress payloads', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
+    await producer.subscribeToProgress(vi.fn());
+
+    const listener = vi.mocked(notifications.subscribe).mock.calls[0][1];
+    expect(() => listener('not-json')).not.toThrow();
+  });
+
+  it('publishes schedule changes serialized to the schedule-change channel', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
+    const event = { action: 'created' as const, scheduleId: 1 };
+
     await producer.publishScheduleChange(event);
+
+    expect(notifications.publish).toHaveBeenCalledWith(
+      NOTIFICATION_CHANNELS.scheduleChanged,
+      JSON.stringify(event),
+    );
+  });
+
+  it('disconnects both the queue and the notification backend', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
+
     await producer.disconnect();
 
-    expect(pubsub.subscribeToProgress).toHaveBeenCalledWith(handler);
-    expect(pubsub.publishScheduleChange).toHaveBeenCalledWith(event);
     expect(queue.close).toHaveBeenCalledOnce();
-    expect(pubsub.disconnect).toHaveBeenCalledOnce();
+    expect(notifications.disconnect).toHaveBeenCalledOnce();
   });
 
   it('lazily creates and caches the composed singleton', () => {

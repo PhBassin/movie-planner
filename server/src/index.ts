@@ -27,7 +27,7 @@ async function startServer() {
     logger.info('📦 Initializing database...');
     await initializeDatabase();
 
-    // Subscribe to Redis progress events and forward to SSE clients
+    // Subscribe to PostgreSQL progress notifications and forward to SSE clients
     const { getBusProducer } = await import('./services/bus-producer.js');
     const { progressTracker } = await import('./services/progress-tracker.js');
 
@@ -36,7 +36,7 @@ async function startServer() {
       progressTracker.emit(event);
     });
 
-    logger.info('📡 Redis progress subscription active (scrape:progress)');
+    logger.info('📡 PostgreSQL progress subscription active (scrape:progress)');
 
     // Create Express app
     const app = createApp();

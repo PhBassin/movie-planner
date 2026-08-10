@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { serializeJob, parseJob } from './index.js';
+import { serializeJob, parseJob, NOTIFICATION_CHANNELS } from './index.js';
 import type { ScrapeJobScrape, ScrapeJobAddTheater } from './index.js';
 
 describe('scraper-protocol', () => {
+  describe('NOTIFICATION_CHANNELS', () => {
+    it('names the three ephemeral LISTEN/NOTIFY channels', () => {
+      expect(NOTIFICATION_CHANNELS).toEqual({
+        progress: 'scrape:progress',
+        scheduleChanged: 'scraper:schedule:changed',
+        memberNotices: 'member:notices',
+      });
+    });
+  });
+
   describe('parseJob / serializeJob', () => {
     it('round-trips a ScrapeJobScrape with resumeMode and pendingAttempts', () => {
       const job: ScrapeJobScrape = {
