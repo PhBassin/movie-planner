@@ -2,8 +2,10 @@ import type { ScrapeJob, ScrapeJobScrape, ScrapeJobAddTheater } from './jobs.js'
 import { serializeJob, parseJob } from './jobs.js';
 import type { ProgressEvent, ScheduleChangeEvent, ScrapeSummary } from './events.js';
 import type { BusProducer, BusConsumer, BusTransaction } from './bus.js';
-import { NOTIFICATION_CHANNELS } from './notifications.js';
+import { NOTIFICATION_CHANNELS, parseNotificationPayload } from './notifications.js';
 import type { NotificationChannel, NotificationBus } from './notifications.js';
+import { pgConnectionConfig } from './pg-config.js';
+import type { PgConnectionConfig } from './pg-config.js';
 
 export type {
   ScrapeJob,
@@ -17,6 +19,7 @@ export type {
   BusTransaction,
   NotificationChannel,
   NotificationBus,
+  PgConnectionConfig,
 };
 
-export { serializeJob, parseJob, NOTIFICATION_CHANNELS };
+export { serializeJob, parseJob, NOTIFICATION_CHANNELS, parseNotificationPayload, pgConnectionConfig };

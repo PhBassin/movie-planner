@@ -43,3 +43,16 @@ export interface NotificationBus {
   /** Tear down all connections held by this backend (graceful shutdown). */
   disconnect(): Promise<void>;
 }
+
+/**
+ * Deserialize a notification payload into its typed event. Never throws: a
+ * payload that is not valid JSON yields `null` and the subscriber logs and
+ * drops it. Shared so the web and worker adapters parse identically.
+ */
+export function parseNotificationPayload<T>(payload: string): T | null {
+  try {
+    return JSON.parse(payload) as T;
+  } catch {
+    return null;
+  }
+}

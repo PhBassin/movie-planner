@@ -1,5 +1,6 @@
 import {
   NOTIFICATION_CHANNELS,
+  parseNotificationPayload,
   type BusProducer,
   type BusTransaction,
   type NotificationBus,
@@ -45,11 +46,12 @@ export class PostgresBusProducer implements BusProducer {
 
   subscribeToProgress(handler: (event: ProgressEvent) => void): Promise<void> {
     return this.notifications.subscribe(NOTIFICATION_CHANNELS.progress, (payload) => {
-      try {
-        handler(JSON.parse(payload) as ProgressEvent);
-      } catch (error) {
-        logger.error('[PostgresBusProducer] Failed to parse progress event:', error);
+      const event = parseNotificationPayload<ProgressEvent>(payload);
+      if (event === null) {
+        logger.warn('[PostgresBusProducer] Dropped unparsable progress notification');
+        return;
       }
+      handler(event);
     });
   }
 

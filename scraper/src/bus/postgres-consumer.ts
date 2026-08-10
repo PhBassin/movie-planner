@@ -1,5 +1,6 @@
 import {
   NOTIFICATION_CHANNELS,
+  parseNotificationPayload,
   type BusConsumer,
   type NotificationBus,
   type ProgressEvent,
@@ -53,11 +54,12 @@ export class PostgresBusConsumer implements BusConsumer {
 
   subscribeScheduleChange(handler: (event: ScheduleChangeEvent) => void): Promise<void> {
     return this.notifications.subscribe(NOTIFICATION_CHANNELS.scheduleChanged, (payload) => {
-      try {
-        handler(JSON.parse(payload) as ScheduleChangeEvent);
-      } catch (error) {
-        logger.error('[PostgresBusConsumer] Failed to parse schedule-change event:', error);
+      const event = parseNotificationPayload<ScheduleChangeEvent>(payload);
+      if (event === null) {
+        logger.warn('[PostgresBusConsumer] Dropped unparsable schedule-change notification');
+        return;
       }
+      handler(event);
     });
   }
 

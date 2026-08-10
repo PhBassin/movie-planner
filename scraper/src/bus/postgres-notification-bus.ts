@@ -1,11 +1,11 @@
 import pg from 'pg';
 import {
   NOTIFICATION_CHANNELS,
+  pgConnectionConfig,
   type NotificationBus,
   type NotificationChannel,
 } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
-import { parseStrictInt } from '../utils/number.js';
 
 // ---------------------------------------------------------------------------
 // PostgresNotificationBus — the PostgreSQL LISTEN/NOTIFY implementation of the
@@ -42,17 +42,7 @@ export type NotificationClientFactory = (connectionString?: string) => Notificat
 
 /** Build a client from the same env the app uses (DATABASE_URL wins). */
 export function defaultNotificationClientFactory(connectionString?: string): NotificationClient {
-  return new pg.Client(
-    connectionString
-      ? { connectionString }
-      : {
-          user: process.env.POSTGRES_USER || 'postgres',
-          password: process.env.POSTGRES_PASSWORD,
-          host: process.env.POSTGRES_HOST || 'localhost',
-          port: parseStrictInt(process.env.POSTGRES_PORT) || 5432,
-          database: process.env.POSTGRES_DB || 'movie_planner',
-        },
-  );
+  return new pg.Client(connectionString ? { connectionString } : pgConnectionConfig());
 }
 
 export class PostgresNotificationBus implements NotificationBus {
