@@ -97,7 +97,8 @@ export interface MoviePageData {
   screenwriters?: string[];
 }
 
-// Progress event types (published to Redis) — re-exported above from
-// @movie-planner/scraper-protocol so the canonical home is in one place.
+// Progress event types (published over the Postgres LISTEN/NOTIFY bus) —
+// re-exported above from @movie-planner/scraper-protocol so the canonical
+// home is in one place.
 
 // ScrapeSummary — re-exported above from @movie-planner/scraper-protocol.

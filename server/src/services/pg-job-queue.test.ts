@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ScrapeJob } from '@movie-planner/scraper-protocol';
 
 // ---------------------------------------------------------------------------
-// Mock `pg` so PgJobQueue owns a fake pool. Mirrors the ioredis-mock style used
-// by redis-client.test.ts — no real Postgres is contacted here; the
-// concurrency/restart behaviour is covered by the gated integration test.
+// Mock `pg` so PgJobQueue owns a fake pool. No real Postgres is contacted here;
+// the concurrency/restart behaviour is covered by the gated integration test.
 // ---------------------------------------------------------------------------
 
 const mockPool = vi.hoisted(() => ({

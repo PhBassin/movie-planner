@@ -94,7 +94,7 @@ This makes the link to Selection explicit: a *successful* TheaterSubmission term
 **What a TheaterSubmission is *not*:**
 - Not an **admin-gated request**. There is no approval queue and no waiting state imposed by Staff; the scrape fires on submission (subject only to dedup and throttle).
 - Not a **Selection**. A TheaterSubmission mutates the *shared catalog* and has a side-effect (a scrape); a Selection add is private and side-effect-free.
-- Not a **ScrapeJob**. The TheaterSubmission is the Member-originated act; the `add_theater` ScrapeJob is the work unit it produces on the Redis queue.
+- Not a **ScrapeJob**. The TheaterSubmission is the Member-originated act; the `add_theater` ScrapeJob is the work unit it produces on the Postgres queue.
 
 ### Appearance
 
@@ -240,7 +240,7 @@ An external website that publishes showtime data and from which one or more Thea
 
 Both origins produce the same artifacts downstream (ScrapeReport, ScrapeAttempts, ProgressEvents); they differ only in who originates them and whether they recur.
 
-The terms in this section name the recurring concepts of one end-to-end scrape run. A run is initiated by a ScrapeJob on the Redis queue, executed by the scraper microservice which emits ProgressEvents during the run, and tracked in the database via a ScrapeReport (the run-level record) holding many ScrapeAttempts (one per `(theater, date)` pair). One concept — Resume — lets a stopped/incomplete run be re-issued scoped to only its unfinished attempts. RateLimitConfig governs the API-side request throttling that protects AlloCiné responses from being overwhelmed.
+The terms in this section name the recurring concepts of one end-to-end scrape run. A run is initiated by a ScrapeJob on the Postgres queue, executed by the worker role which emits ProgressEvents during the run, and tracked in the database via a ScrapeReport (the run-level record) holding many ScrapeAttempts (one per `(theater, date)` pair). One concept — Resume — lets a stopped/incomplete run be re-issued scoped to only its unfinished attempts. RateLimitConfig governs the API-side request throttling that protects AlloCiné responses from being overwhelmed.
 
 ### ScrapeAttempt
 
@@ -286,9 +286,9 @@ A Resume always produces a **new** ScrapeReport with `parent_report_id` set to t
 
 ### ScrapeJob
 
-A unit of work submitted by the server through the `BusProducer` to the Postgres `scrape_jobs` queue for the worker role to execute. The worker atomically claims the oldest row with `FOR UPDATE SKIP LOCKED`; the row is deleted at claim time, preserving the Redis list's terminal-failure/no-retry behavior. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
+A unit of work submitted by the server through the `BusProducer` to the Postgres `scrape_jobs` queue for the worker role to execute. The worker atomically claims the oldest row with `FOR UPDATE SKIP LOCKED`; the row is deleted at claim time, so terminal failures are not retried. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
 
-**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). The queue implementation is `server/src/services/pg-job-queue.ts` and `scraper/src/bus/pg-job-consumer.ts`; the pub/sub fan-outs run on `LISTEN/NOTIFY` via `PostgresNotificationBus` (`server/src/services/postgres-notification-bus.ts`, `scraper/src/bus/postgres-notification-bus.ts`). `server/src/services/redis-client.ts` and `scraper/src/redis/client.ts` retain the retired Redis bus code until issue #26 deletes it. `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
+**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). The queue implementation is `server/src/services/pg-job-queue.ts` and `scraper/src/bus/pg-job-consumer.ts`; the pub/sub fan-outs run on `LISTEN/NOTIFY` via `PostgresNotificationBus` (`server/src/services/postgres-notification-bus.ts`, `scraper/src/bus/postgres-notification-bus.ts`). `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
 
 The `ScrapeJobScrape.options` shape now has a single canonical declaration that includes `resumeMode` and `pendingAttempts` for the Resume case. Both sides of the wire agree, and the scraper's local `ScrapeOptions` (`scraper/src/scraper/index.ts:140`) is now a scraper-internal type that no longer needs to redeclare wire fields.
 
@@ -302,7 +302,7 @@ A discrete event published by the scraper onto the PostgreSQL `scrape:progress` 
 
 A fire-and-forget `LISTEN/NOTIFY` notification on the PostgreSQL `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `scrape_schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the `scrape_schedules` table; the scraper subscribes and re-evaluates its in-process cron jobs in response. Delivery is ephemeral and is not a durable schedule-change log: a worker that misses a nudge re-syncs on its next reload.
 
-**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The previous scraper-side declaration at `scraper/src/redis/client.ts:9` and server-side declaration at `server/src/services/redis-client.ts:15` are now re-exports from the protocol package.
+**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). Wire-format event types are re-exported from the protocol package; transport implementations live under `server/src/services/` and `scraper/src/bus/`.
 
 **ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `scrape_schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
 

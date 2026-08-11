@@ -4,7 +4,7 @@ import { registry, scrapeJobsTotal, scrapeDurationSeconds, moviesScrapedTotal, s
 import { runScraper, addTheaterAndScrape } from './scraper/index.js';
 import type { ScrapeSummary } from './types/scraper.js';
 import type { ProgressPublisher } from './scraper/scrape-run.js';
-import { getBusConsumer, disconnectBus } from './redis/client.js';
+import { getBusConsumer, disconnectBus } from './bus/bus-consumer.js';
 import type { BusConsumer } from '@movie-planner/scraper-protocol';
 import type { ScrapeJob, ScrapeJobScrape, ScrapeJobAddTheater } from '@movie-planner/scraper-protocol';
 import { db } from './db/client.js';
@@ -43,7 +43,7 @@ async function startMetricsServer(): Promise<void> {
 
 /**
  * RUN_MODE controls how this container behaves:
- *  - "oneshot"  : Pop one job from Redis queue, execute it, then exit. (default)
+ *  - "oneshot"  : Pop one job from the Postgres queue, execute it, then exit. (default)
  *  - "consumer" : Long-running worker process — consumes the job queue AND
  *                 runs the cron scheduler (ADR 0009: scheduling folds into
  *                 the worker so the scraping domain stays in one process).

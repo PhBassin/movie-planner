@@ -116,11 +116,9 @@ fetch('http://localhost:3000/api/...', {
 ```bash
 # ✅ CORRECT - service names
 POSTGRES_HOST=db
-REDIS_URL=redis://redis:6379
 
 # ❌ WRONG - localhost (doesn't work between containers)
 POSTGRES_HOST=localhost
-REDIS_URL=redis://localhost:6379
 ```
 
 **Why:** Each container has its own network namespace. `localhost` refers to the container itself, not other containers.
@@ -142,7 +140,6 @@ Error: connect ECONNREFUSED 127.0.0.1:5432
 ```bash
 # Fix environment variables
 POSTGRES_HOST=db      # Not localhost
-REDIS_URL=redis://redis:6379
 
 # Restart services
 docker compose restart server
@@ -421,7 +418,7 @@ Retry-After: 60
 ```bash
 # Each service can resolve other service names
 docker compose exec server ping db
-docker compose exec server nslookup redis
+ docker compose exec server nslookup db
 
 # Expected: Resolves to container IP
 ```
@@ -557,8 +554,6 @@ PORT=3000     # Internal port
 POSTGRES_HOST=db
 POSTGRES_PORT=5432
 
-# Redis connection (use service name)
-REDIS_URL=redis://redis:6379
 ```
 
 ### Network Mode

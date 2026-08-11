@@ -57,7 +57,7 @@ vi.mock('../middleware/permission.js', () => ({
   requirePermission: () => (req: any, res: any, next: any) => next(),
 }));
 
-// Mock Redis client for schedule publishing
+// Mock bus producer for schedule publishing
 vi.mock('../services/bus-producer.js', () => ({
   getBusProducer: () => ({
     publishScheduleChange: mockPublishScheduleChange,
@@ -159,13 +159,13 @@ describe('Routes - Scraper', () => {
     });
 
     it('should handle generic service errors with 500', async () => {
-      mockTriggerScrape.mockRejectedValue(new Error('Redis connection failed'));
+      mockTriggerScrape.mockRejectedValue(new Error('Bus connection failed'));
       const app = await setupApp();
       
       const response = await request(app).post('/api/scraper/trigger').send({});
       
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Redis connection failed');
+      expect(response.body.error).toBe('Bus connection failed');
     });
   });
 

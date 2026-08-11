@@ -11,7 +11,7 @@ export type { NotificationClient, NotificationClientFactory };
 
 // ---------------------------------------------------------------------------
 // PostgresNotificationBus — the `web` role's LISTEN/NOTIFY backend (issue #25,
-// ADR 0009). It replaces the Redis pub/sub delegate in `PostgresBusProducer`:
+// ADR 0009). It provides the notification backend used by `PostgresBusProducer`:
 // progress fan-out and schedule-change nudges travel over Postgres, the single
 // stateful component. The connect/subscribe/publish/reconnect lifecycle lives
 // in the shared `BasePostgresNotificationBus`; this subclass binds the server

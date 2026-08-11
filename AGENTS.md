@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) + React SPA (`client`) + worker (`scraper`)**, PostgreSQL + Redis, fully Dockerized.
+Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) + React SPA (`client`) + worker (`scraper`)**, PostgreSQL-only, fully Dockerized.
 
 ## Critical conventions
 
@@ -33,13 +33,13 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 
 ## Dev environment
 
-- Full stack with hot reload: `npm run dev` (Docker compose: db + Redis + web + worker + client). `npm run dev:down` / `dev:logs`.
+- Full stack with hot reload: `npm run dev` (Docker compose: db + web + worker + client). `npm run dev:down` / `dev:logs`.
 - Server alone (no Docker): `npm run server:dev` (tsx watch). Needs a reachable Postgres + the env vars below.
 - **Required env** (server refuses to start without): `JWT_SECRET` (min 32 chars, `openssl rand -base64 64`) and `POSTGRES_PASSWORD`. DB name is `movie_planner`, user `postgres`. See `.env.example`.
 
 ## Architecture (non-obvious)
 
-- **The web role does NOT scrape.** Web publishes jobs to Redis queue `scrape:jobs`; the worker role consumes them, fetches the source site, and writes results **directly to PostgreSQL**. Progress flows back web-side via Redis pub/sub → SSE → client. **Redis is mandatory until the Postgres bus migration.**
+- **The web role does NOT scrape.** Web publishes jobs to the Postgres `scrape_jobs` queue; the worker role consumes them, fetches the source site, and writes results **directly to PostgreSQL**. Progress flows back web-side through PostgreSQL `LISTEN/NOTIFY` → SSE → client. PostgreSQL is the only stateful component.
 - Migrations: sequential numbered SQL in `migrations/`, idempotent, tracked in `schema_migrations` with SHA-256 checksums. Applied automatically at server startup when `AUTO_MIGRATE=true` (default). On fresh DB a random admin password is logged once. When adding one, use the next number and keep it idempotent (note: some numbers like 017/018 were duplicated historically — verify the real next free number).
 
 ## Security/code patterns to honor (from `.jules/sentinel.md`)

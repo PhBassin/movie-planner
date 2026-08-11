@@ -586,7 +586,7 @@ For **scaling to 50+ theaters**:
 
 3. **Monitor queue depth**
    ```bash
-   redis-cli LLEN scrape:jobs  # Should stay < 5
+   psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM scrape_jobs"  # Should stay < 5
    ```
 
 4. **Set up alerts**

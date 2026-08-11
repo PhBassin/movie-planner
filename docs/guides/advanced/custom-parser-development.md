@@ -109,7 +109,7 @@ Create a new file: `scraper/src/scraper/strategies/UGCScraperStrategy.ts`
 import { IScraperStrategy } from './IScraperStrategy.js';
 import type { DB } from '../../db/client.js';
 import type { Theater, TheaterConfig } from '../../types/scraper.js';
-import type { ProgressPublisher } from '../../redis/client.js';
+import type { ProgressPublisher } from '../scrape-run.js';
 
 export class UGCScraperStrategy implements IScraperStrategy {
   readonly sourceName = 'ugc';

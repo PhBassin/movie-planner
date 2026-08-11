@@ -27,22 +27,22 @@ Detailed architecture and design of the theater showtimes scraping system.
 
 ## Overview
 
-The scraper system fetches theater showtimes from AlloCiné and stores them in PostgreSQL. All scrape jobs are dispatched via Redis pub/sub to the standalone scraper microservice, which is always included in `docker-compose.yaml`.
+The scraper system fetches theater showtimes from AlloCiné and stores them in PostgreSQL. All scrape jobs are dispatched through the Postgres `scrape_jobs` queue to the isolated worker role.
 
-> **Historical note:** Prior to v4.x, the scraper supported an in-process mode (`USE_REDIS_SCRAPER=false`) where scraping ran inside the Express API server. This mode has been removed in favor of the microservice architecture.
+> **Historical note:** Prior to v4.x, the scraper supported an in-process mode where scraping ran inside the Express API server. This mode has been removed in favor of the isolated worker architecture.
 
 ---
 
 ## Scraper Architecture
 
-The scraper runs as a Redis-backed microservice, always included in `docker-compose.yaml`. There is no in-process mode — all scrape jobs are dispatched via Redis pub/sub.
+The scraper runs as the isolated worker role, always included in `compose.yaml`. There is no in-process mode — jobs are claimed from Postgres with `FOR UPDATE SKIP LOCKED`.
 
 ```
-Express API (server)
- └─> Redis Publisher (scrape:jobs)
-      └─> Redis Consumer (scraper)
+Express API (web)
+ └─> PostgreSQL scrape_jobs queue
+      └─> Worker claims with SKIP LOCKED
            └─> PostgreSQL (direct insert)
-           └─> Redis Publisher (progress events)
+           └─> PostgreSQL LISTEN/NOTIFY (progress events)
                 └─> Express API (SSE streaming)
 ```
 
@@ -64,7 +64,7 @@ Express API (server)
 - Load theater configurations from database
 - Identify the correct **Scraper Strategy** based on the theater's source (e.g., "allocine")
 - Iterate through theaters and dates, delegating to strategies
-- Coordinate progress reporting via Redis
+- Coordinate progress reporting via PostgreSQL `LISTEN/NOTIFY`
 - Handle errors and generate scrape summary
 
 **Key Functions**:
@@ -262,9 +262,9 @@ export async function getTheaterConfigs(db: DB): Promise<TheaterConfig[]>
 
 **File**: `server/src/services/progress-tracker.ts`
 
-**Purpose**: Stream real-time progress updates to frontend via Redis pub/sub.
+**Purpose**: Stream real-time progress updates to frontend via PostgreSQL `LISTEN/NOTIFY`.
 
-Progress events are published to a Redis channel by the scraper microservice and consumed by the API server, which forwards them to the frontend via SSE.
+Progress events are published to a PostgreSQL notification channel by the worker and consumed by the API server, which forwards them to the frontend via SSE.
 
 **Event Types**:
 ```typescript
@@ -280,11 +280,11 @@ type ProgressEvent =
 
 ---
 
-### 6. Redis Job Queue
+### 6. PostgreSQL Job Queue
 
 **Files**:
-- `server/src/services/redis-client.ts` - Job publisher (API server)
-- `scraper/src/redis/client.ts` - Job consumer (scraper microservice)
+- `server/src/services/pg-job-queue.ts` - Job publisher (web role)
+- `scraper/src/bus/pg-job-consumer.ts` - Job consumer (worker role)
 
 **Job Structure**:
 ```typescript
@@ -302,7 +302,7 @@ interface ScrapeJob {
 
 **Queue Flow**:
 ```
-API Server                    Redis                    Scraper
+Web Role                     PostgreSQL               Worker
     │                          │                          │
     ├─ Publish job ────────────>│                          │
     │                          │                          │
@@ -321,7 +321,7 @@ API Server                    Redis                    Scraper
 
 ## Data Flow
 
-All scrape jobs follow the same flow through Redis:
+All scrape jobs follow the same flow through PostgreSQL:
 
 ```
 User (Browser)
@@ -334,19 +334,19 @@ POST /api/scraper/trigger
 │  Express API Server               │
 │                                   │
 │  1. Create scrape report         │
-│  2. Publish job to Redis queue   │
-│  3. Subscribe to progress events │
+│  2. Publish job to Postgres queue│
+│  3. Subscribe to notifications  │
 └───────┬───────────────────────────┘
         │
         ↓
 ┌───────────────────────────────────┐
-│  Redis (scrape:jobs queue)        │
+│  PostgreSQL (scrape_jobs queue)   │
 └───────┬───────────────────────────┘
         │
         ↓
 ┌───────────────────────────────────┐
-│  Scraper Microservice             │
-│  (scraper container)          │
+│  Worker role                      │
+│  (worker process)             │
 │                                   │
 │  For each theater:                 │
 │    - Fetch theater page (HTML)    │
@@ -359,7 +359,7 @@ POST /api/scraper/trigger
 │        - Parse movie metadata      │
 │        - Upsert to PostgreSQL     │
 │      - Delay (rate limit)         │
-│    - Emit progress events via Redis│
+│    - Emit progress via NOTIFY     │
 └───────┬───────────────────────────┘
         │
         ↓
@@ -374,7 +374,7 @@ POST /api/scraper/trigger
 
 ---
 
-### Microservice Mode (Redis Queue)
+### Worker Mode (PostgreSQL Queue)
 
 ```
 User (Browser)
@@ -387,26 +387,26 @@ POST /api/scraper/trigger
 │  Express API Server               │
 │                                   │
 │  1. Create scrape_sessions record│
-│  2. Publish job to Redis queue   │
-│  3. Subscribe to progress channel│
+│  2. Publish job to Postgres queue│
+│  3. Subscribe to notification channel│
 │  4. Stream progress via SSE      │
 └───────┬───────────────────────────┘
         │
         ↓
 ┌───────────────────────────────────┐
-│  Redis                            │
-│  - Job queue: 'scrape:jobs'      │
+│  PostgreSQL                      │
+│  - Job queue: 'scrape_jobs'      │
 │  - Progress channel: 'scrape:progress' │
 └───────┬───────────────────────────┘
         │
         ↓
 ┌───────────────────────────────────┐
-│  Scraper Microservice             │
+│  Worker role                      │
 │  scraper/src/                     │
 │                                   │
-│  1. Poll Redis queue              │
+│  1. Claim Postgres queue rows     │
 │  2. Execute scraping logic        │
-│  3. Publish progress to Redis     │
+│  3. Publish progress via NOTIFY   │
 │  4. Write data to PostgreSQL      │
 └───────┬───────────────────────────┘
         │
@@ -565,9 +565,9 @@ See [Troubleshooting Scraper](../../troubleshooting/scraper.md) for detailed sol
 
 **Scenario: Scraper crashes during job execution**
 
-When a job is popped from the Redis queue and the scraper crashes before completion:
+When a job is claimed from the Postgres queue and the worker crashes before completion:
 
-1. **Job is removed from queue** - Redis LPOP removes the job atomically
+1. **Job is removed from queue** - the claim deletes the row atomically
 2. **No automatic retry** - The job is lost (by design for message queue simplicity)
 3. **Report status remains `running`** - The database `scrape_sessions` record stays in `running` state
 4. **Manual retry required** - Admin must trigger a new scrape via API or wait for next cron run
@@ -587,7 +587,7 @@ When a job is popped from the Redis queue and the scraper crashes before complet
 
 **Consumer mode resilience** (`RUN_MODE: consumer`):
 
-- Long-running scraper polls Redis continuously
+- Long-running worker polls Postgres continuously
 - If the job fails (exception), the error is logged and reported to DB
 - Consumer remains running and ready for the next job
 - Graceful shutdown on SIGTERM/SIGINT
@@ -631,7 +631,7 @@ for (const theater of theaters) {
 **Future**: Parallel scraping (not yet implemented)
 - Multiple theaters in parallel
 - Shared rate limiter across workers
-- Requires Redis-based coordination
+- Requires Postgres-based coordination
 
 ---
 

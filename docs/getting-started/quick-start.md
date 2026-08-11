@@ -24,10 +24,9 @@ First startup takes about a minute. The compose file builds one application
 image locally and starts:
 
 - `db` — PostgreSQL on port 5432
-- `redis` — Redis
 - `web` — Express API and SPA host on port 3000
 - `client` — Vite dev server on port 5173
-- `worker` — Redis consumer
+- `worker` — Postgres queue consumer
 
 ## Access
 

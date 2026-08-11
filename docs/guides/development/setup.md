@@ -30,7 +30,7 @@ Complete guide for setting up a local development environment for Movie Planner.
 | **Node.js** | 24.x | Required for the host-application path. `engines: >=24 <25`. |
 | **npm** | 10.x | Included with Node.js. |
 | **Git** | 2.x | |
-| **Docker** | 24.x | For the fully Dockerized path or for Postgres + Redis only. |
+| **Docker** | 24.x | For the fully Dockerized path or for Postgres-only infrastructure. |
 | **Docker Compose** | v2.x | Included with Docker Desktop. |
 
 System: Linux, macOS, or Windows/WSL2. 4 GB RAM minimum.
@@ -81,19 +81,19 @@ npm run dev:logs     # tail logs
 npm run dev:down     # stop
 ```
 
-Services: `db`, `redis`, `web`, `client`, `worker`.
+Services: `db`, `web`, `client`, `worker`.
 The server auto-applies the consolidated baseline (`docker/init.sql`) on first
 startup of a fresh database, then runs any pending migrations under
 `migrations/`. No external image or volume is required.
 
 ### Path B — Host application: `compose.infra.yaml`
 
-Runs only PostgreSQL and Redis in Docker; the client, web, and worker run
+Runs only PostgreSQL in Docker; the client, web, and worker run
 on the host under Node 24.
 
 ```bash
 npm install --legacy-peer-deps
-npm run dev:infra     # docker compose -f compose.infra.yaml up -d (Postgres + Redis)
+npm run dev:infra     # docker compose -f compose.infra.yaml up -d (Postgres)
 
 # Initialize the database from the consolidated baseline (first run only):
 npm run server:db:init

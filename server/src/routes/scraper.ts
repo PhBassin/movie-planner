@@ -44,7 +44,7 @@ function ensureScraperPermission(
   return true;
 }
 
-// POST /api/scraper/trigger - Start a manual scrape (delegates to Redis microservice)
+// POST /api/scraper/trigger - Start a manual scrape for the worker role
 router.post('/trigger', scraperLimiter, requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const scraperService = scraperServiceFromRequest(req);

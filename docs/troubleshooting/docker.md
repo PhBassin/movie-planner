@@ -85,11 +85,11 @@ docker compose exec server wget -qO- http://localhost:3000/api/health
 
 ### Service Dependencies Not Starting
 
-**Cause:** `depends_on: healthy` waiting for database/Redis health checks.
+**Cause:** `depends_on: healthy` waiting for the database health check.
 
 **Expected behavior:**
-- `server` waits for `db` and `redis` to be **healthy**
-- `scraper` waits for `db` and `redis` to be **healthy**
+- `web` waits for `db` to be **healthy**
+- `worker` waits for `db` to be **healthy**
 
 **Check dependency status:**
 
@@ -99,8 +99,7 @@ docker compose ps
 
 # Expected output:
 # db      healthy
-# redis   healthy
-# server     running (after deps healthy)
+# web     running (after db is healthy)
 ```
 
 **If dependencies stuck:**
@@ -109,11 +108,8 @@ docker compose ps
 # Check database health
 docker compose exec db pg_isready -U postgres
 
-# Check Redis health
-docker compose exec redis redis-cli ping
-
-# Restart dependencies
-docker compose restart db redis
+# Restart the database dependency
+docker compose restart db
 ```
 
 ---
@@ -125,7 +121,6 @@ docker compose restart db redis
 **Default ports used:**
 - `3000` - Web server (server)
 - `5432` - PostgreSQL (db)
-- `6379` - Redis (redis)
 - `3001` - Grafana (monitoring profile)
 - `9090` - Prometheus (monitoring profile)
 - `3100` - Loki (monitoring profile)
@@ -321,67 +316,7 @@ docker compose exec db pg_isready -U postgres
 
 ---
 
-### Redis Health Check
-
-**Configuration:**
-
-```yaml
-healthcheck:
-  test: ["CMD", "redis-cli", "ping"]
-  interval: 10s
-  timeout: 5s
-  retries: 5
-```
-
-**Manual test:**
-
-```bash
-docker compose exec redis redis-cli ping
-
-# Expected output:
-# PONG
-```
-
----
-
 ## Resource Constraints
-
-### Redis Memory Limit
-
-**Configuration:**
-
-```yaml
-redis:
-  command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
-```
-
-**Settings:**
-- **Memory limit:** 256 MB
-- **Eviction policy:** `allkeys-lru` (least recently used)
-- **Persistence:** AOF enabled
-
-**Impact when limit hit:**
-- Old keys evicted automatically
-- **Scraper queue jobs may be lost** if Redis evicts active jobs
-- No error thrown, silent data loss
-
-**Monitor Redis memory:**
-
-```bash
-# Check memory usage
-docker compose exec redis redis-cli INFO memory | grep used_memory_human
-
-# Check evicted keys count
-docker compose exec redis redis-cli INFO stats | grep evicted_keys
-```
-
-**Increase limit (if needed):**
-
-Edit `docker-compose.yaml`:
-
-```yaml
-command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
-```
 
 ---
 
@@ -442,11 +377,9 @@ docker inspect server --format='{{.State.OOMKilled}}'
 ```bash
 # ✅ CORRECT in Docker
 POSTGRES_HOST=db
-REDIS_URL=redis://redis:6379
 
 # ❌ WRONG in Docker
 POSTGRES_HOST=localhost
-REDIS_URL=redis://localhost:6379
 ```
 
 **Test connectivity:**

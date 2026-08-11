@@ -19,7 +19,7 @@ export interface ProgressListenerSink {
  * listener lifecycle against `sink` — and returns a disconnect cleanup the
  * caller wires to `req.on('close', ...)`. Extracted from `ScraperService` so
  * the dispatcher stays single-concept (C4 of epic #1232). The API does not
- * scrape: it fans `ProgressEvent`s from the Redis pub/sub bridge to SSE
+ * scrape: it fans `ProgressEvent`s from the Postgres notification bus to SSE
  * clients through this seam (`CONTEXT.md`).
  */
 export function attachProgressStream(

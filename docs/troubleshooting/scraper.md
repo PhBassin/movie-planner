@@ -16,7 +16,6 @@ Scraping failures, parser errors, and debugging guide for Movie Planner.
 - [Input Validation Errors](#input-validation-errors)
 - [Error Propagation](#error-propagation)
 - [Progress Tracking](#progress-tracking)
-- [Redis Queue Issues](#redis-queue-issues)
 - [Browser Issues](#browser-issues)
 - [Debugging](#debugging)
 - [Common Error Messages](#common-error-messages)
@@ -498,31 +497,21 @@ function connectSSE() {
 
 ---
 
-## Redis Queue Issues
+## PostgreSQL Queue Issues
 
-### Job Parsing Failure (Microservice Mode)
+### Job Parsing Failure
 
-**Error in scraper logs:**
+**Error in worker logs:**
 
 ```
-[RedisJobConsumer] Failed to parse job
+[PgJobConsumer] Error claiming queue job
 ```
 
-**Cause:** Invalid JSON in Redis queue.
-
-**Behavior:**
-- Job skipped
-- Error logged
-- Consumer continues to next job
-
-**Check Redis queue:**
+**Check the queue and database:**
 
 ```bash
-# View pending jobs
-docker compose exec redis redis-cli LRANGE scraper:jobs 0 -1
-
-# Clear queue (if corrupted)
-docker compose exec redis redis-cli DEL scraper:jobs
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM scrape_jobs"
+docker compose logs worker
 ```
 
 ---
@@ -532,7 +521,7 @@ docker compose exec redis redis-cli DEL scraper:jobs
 **Error:**
 
 ```
-[RedisJobConsumer] Job handler failed: Error: ...
+[PgJobConsumer] Job handler failed: Error: ...
 ```
 
 **Cause:** Exception during job execution.
@@ -546,37 +535,30 @@ docker compose exec redis redis-cli DEL scraper:jobs
 
 ---
 
-### Redis Connection Loss
+### PostgreSQL Connection Loss
 
 **Error:**
 
 ```
-Error: connect ECONNREFUSED 127.0.0.1:6379
+Error: connect ECONNREFUSED 127.0.0.1:5432
 ```
 
-**Cause:** Redis not running or wrong `REDIS_URL`.
+**Cause:** PostgreSQL is not running or its connection settings are wrong.
 
 **Solution:**
 
 ```bash
-# Check Redis status
-docker compose ps redis
+# Check database status
+docker compose ps db
+docker compose exec db pg_isready -U postgres -d movie_planner
 
-# Check environment variable
-cat .env | grep REDIS_URL
-
-# Should be:
-REDIS_URL=redis://redis:6379  # Not localhost!
-
-# Test connection
-docker compose exec redis redis-cli ping
-# Expected: PONG
-
-# Restart scraper microservice
-docker compose restart scraper
+# Restart the worker
+docker compose restart worker
 ```
 
-**⚠️ No automatic reconnection** - scraper must be restarted.
+The worker retries failed queue claims with a pause. The notification bus also
+reconnects and re-issues its subscriptions. Restart the worker only when the
+database remains unavailable after the retry loop.
 
 ---
 
@@ -585,7 +567,7 @@ docker compose restart scraper
 **Error in logs:**
 
 ```
-[RedisJobConsumer] Error polling queue: ...
+[PgJobConsumer] Error claiming queue job: ...
 ```
 
 **Behavior:**
@@ -847,15 +829,6 @@ Fatal error: Database connection lost
 
 ---
 
-### Redis Errors (Microservice Mode)
-
-```
-[RedisClient] Failed to parse progress event
-[RedisJobConsumer] Failed to parse job
-[RedisJobConsumer] Job handler failed: Error: ...
-[RedisJobConsumer] Error polling queue: connect ECONNREFUSED
-```
-
 ---
 
 ## Environment Variables
@@ -875,11 +848,10 @@ SCRAPE_THEATER_DELAY_MS=3000
 # Delay between movie detail fetches (milliseconds)
 SCRAPE_MOVIE_DELAY_MS=500
 
-# Redis connection (for microservice mode)
-REDIS_URL=redis://redis:6379
 ```
 
-> **Note:** As of v4.x, the scraper microservice is always included in `docker-compose.yaml` — the `USE_REDIS_SCRAPER` flag has been removed. Scraping always dispatches via Redis.
+> The worker role is always included in `compose.yaml`; scraping uses the
+> Postgres queue and notification bus.
 
 ---
 
@@ -889,11 +861,8 @@ REDIS_URL=redis://redis:6379
 # Edit .env file
 nano .env
 
-# Restart scraper microservice (all scraping uses Redis)
-docker compose restart server
-
-# Restart scraper microservice
-docker compose restart scraper
+# Restart the web and worker roles
+docker compose restart web worker
 ```
 
 ---

@@ -18,8 +18,7 @@ import { PostgresNotificationBus } from './postgres-notification-bus.js';
 // Both arms now run on Postgres (ADR 0009): the job queue lives on the
 // `scrape_jobs` table (`PgJobQueue`, issue #24) and the pub/sub fan-outs
 // (progress + schedule-change) run over LISTEN/NOTIFY (`PostgresNotificationBus`,
-// issue #25). Redis is no longer part of the producer; issue #26 retires the
-// leftover Redis code across the repo.
+// issue #25).
 // ---------------------------------------------------------------------------
 
 export class PostgresBusProducer implements BusProducer {

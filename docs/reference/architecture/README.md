@@ -19,8 +19,7 @@ High-level system architecture and component overview.
 - Express.js API server
 - React frontend
 - PostgreSQL database
-- Redis (optional, for microservice mode)
-- Scraper (Redis microservice)
+- Worker role (Postgres queue consumer)
 - Observability stack (Prometheus, Grafana, Loki, Tempo)
 
 **Best for:** Understanding the big picture, architectural decisions
@@ -32,7 +31,7 @@ Detailed scraper architecture and design.
 
 **What you'll learn:**
 - In-process vs microservice architecture
-- Job queue system (Redis)
+- Job queue system (Postgres `scrape_jobs`)
 - Progress tracking (SSE events)
 - HTML parsing strategy
 - Error handling and retries
@@ -40,8 +39,7 @@ Detailed scraper architecture and design.
 - Scrape session management
 
 **Modes:**
-- **Legacy mode**: In-process scraping (default)
-- **Microservice mode**: Standalone scraper service with Redis queue
+- **Worker mode**: Isolated worker process with a Postgres queue
 
 **Best for:** Understanding scraping internals, troubleshooting scraper issues
 
@@ -83,16 +81,16 @@ Admin Panel → Settings API → Database → Theme Generator → CSS Variables 
 └──────┬──────┘
        │
        ↓
-┌─────────────┐      ┌──────────────┐      ┌──────────────┐
-│ Express API │─────→│  PostgreSQL  │      │    Redis     │
-│ (Port 3000) │      │  (Port 5432) │      │ (Port 6379)  │
-└──────┬──────┘      └──────────────┘      └──────┬───────┘
-       │                                           │
-       │              ┌──────────────┐            │
-       └─────────────→│   Scraper    │←───────────┘
-                      │ Microservice │
-                      │ (Port 3001)  │
-                      └──────────────┘
+┌─────────────┐      ┌──────────────┐
+│ Express API │─────→│  PostgreSQL  │
+│ (Port 3000) │      │  (Port 5432) │
+└──────┬──────┘      │ queue + data │
+       │             └──────┬───────┘
+       │                    │
+       └─────────────→┌────┴────────┐
+                       │   Worker    │
+                       │ queue + cron│
+                       └─────────────┘
 
 Monitoring Stack:
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
@@ -104,20 +102,18 @@ Monitoring Stack:
 ### Scraper Data Flow
 
 ```
-User → [Start Scrape] → API Server → Redis Publisher
-                              ↓
-                      [Job Published]
-                              ↓
-                         Redis Queue
-                              ↓
-                    Scraper Microservice
-                              ↓
-                      HTTP Client + Parser
-                              ↓
-                         Database
-                              ↓
-                    Redis Progress Publisher
-                              ↓
+User → [Start Scrape] → API Server → Postgres scrape_jobs
+                               ↓
+                       [Job Published]
+                               ↓
+                     Worker claims job
+                               ↓
+                       HTTP Client + Parser
+                               ↓
+                          Database
+                               ↓
+                  Postgres LISTEN/NOTIFY
+                               ↓
                       API Server (SSE)
                               ↓
                             User
@@ -128,7 +124,7 @@ User → [Start Scrape] → API Server → Redis Publisher
 ## Design Principles
 
 1. **Separation of Concerns**: Clear boundaries between scraping, API, and frontend
-2. **Microservice First**: Scraper runs as standalone service with Redis communication
+2. **Isolated Worker**: Scraping runs in a separate worker process with Postgres communication
 3. **Observability First**: Comprehensive logging, metrics, and tracing
 4. **Configuration over Code**: Settings managed via database, not hardcoded
 5. **Testability**: Unit tests, integration tests, E2E tests at all layers
