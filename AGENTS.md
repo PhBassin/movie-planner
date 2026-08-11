@@ -56,7 +56,7 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 ## Tooling notes
 
 - `fallow` (dead-code/health) is wired via MCP and `.fallowrc.json` — prefer it for unused-export/dependency checks.
-- Past performance learnings live in `.jules/bolt.md`; deeper architecture docs in `docs/`.
+- `codegraph` is wired via MCP. Use it for code base exploration.
 
 ## Agent skills
 
