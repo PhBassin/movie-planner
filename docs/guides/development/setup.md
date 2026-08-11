@@ -64,7 +64,7 @@ cp .env.example .env
 | `JWT_SECRET` | yes | ≥ 32 chars. Generate with `openssl rand -base64 64`. |
 | `POSTGRES_PASSWORD` | yes | Any non-empty value. |
 | `POSTGRES_DB` | no | Defaults to `movie_planner` (the canonical name). |
-| `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:3000`. |
+| `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:3000,http://localhost:5173`. |
 | `ENABLE_SCRAPE_CRON` | no | `true` lets the worker fire scheduled scrapes. The worker always loads schedules from the database; this only gates execution. |
 
 ---
@@ -81,7 +81,9 @@ npm run dev:logs     # tail logs
 npm run dev:down     # stop
 ```
 
-Services: `db`, `web`, `client`, `worker`.
+Services: `db`, `web`, `client`, `worker`. The `client` service is the local
+Vite development server; the shared application image also contains the
+compiled SPA for production `web` deployments.
 The server auto-applies the consolidated baseline (`docker/init.sql`) on first
 startup of a fresh database, then runs any pending migrations under
 `migrations/`. No external image or volume is required.
@@ -100,7 +102,7 @@ npm run server:db:init
 
 # In separate terminals:
 npm run server:dev       # web API on http://localhost:3000
-npm run client:dev       # UI on http://localhost:5173
+npm run client:dev       # Vite UI on http://localhost:5173, proxying /api
 npm run scraper:consumer # worker consumer
 ```
 

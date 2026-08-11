@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { DB } from './db/index.js';
 import { createApp } from './app.js';
 
@@ -326,5 +329,40 @@ describe('App - Theme Endpoint', () => {
       expect(cspHeader).toMatch(/font-src[^;]*'self'/);
       expect(cspHeader).toMatch(/font-src[^;]*data:/);
     });
+  });
+});
+
+describe('App - SPA serving', () => {
+  let staticRoot: string;
+
+  beforeEach(async () => {
+    staticRoot = await mkdtemp(join(tmpdir(), 'movie-planner-spa-'));
+    await writeFile(
+      join(staticRoot, 'index.html'),
+      '<!doctype html><html><body><div id="root"></div></body></html>',
+    );
+  });
+
+  it('serves the SPA entry point for client-side routes without changing API 404s', async () => {
+    const app = createApp({ publicPath: staticRoot });
+
+    const page = await request(app)
+      .get('/theater/42')
+      .expect(200);
+
+    expect(page.text).toContain('<div id="root"></div>');
+
+    const apiResponse = await request(app)
+      .get('/api/does-not-exist')
+      .expect(404);
+
+    expect(apiResponse.body).toEqual({
+      success: false,
+      error: 'API endpoint not found',
+    });
+  });
+
+  afterEach(async () => {
+    await rm(staticRoot, { recursive: true, force: true });
   });
 });
