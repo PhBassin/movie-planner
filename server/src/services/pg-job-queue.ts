@@ -4,16 +4,15 @@ import type { BusTransaction, ScrapeJob, ScrapeJobAddTheater } from '@movie-plan
 import { parseStrictInt } from '../utils/number.js';
 
 // ---------------------------------------------------------------------------
-// PgJobQueue — the Postgres implementation of the *queue* arm of the bus
-// (web/producer side). The pub/sub arm still runs over Redis until LISTEN/NOTIFY
-// lands (#25); PostgresBusProducer composes this queue with the Redis pub/sub
-// delegate so callers see one BusProducer (issue #24, ADR 0009).
+// PgJobQueue — the Postgres implementation of the queue arm of the bus
+// (web/producer side). PostgresBusProducer composes this queue with the
+// Postgres LISTEN/NOTIFY backend so callers see one BusProducer.
 //
 // The queue is the `scrape_jobs` table (migration 001). Enqueue inserts the
 // serialized ScrapeJob as JSONB; the worker claims rows with
 // `FOR UPDATE SKIP LOCKED` (see scraper/src/bus/pg-job-consumer.ts). This class
-// owns its own pg.Pool — mirroring how RedisClient owns its Redis connections —
-// which keeps the module side-effect free and unit-testable without a DB.
+// owns its own pg.Pool, which keeps the module side-effect free and unit-testable
+// without a DB.
 // ---------------------------------------------------------------------------
 
 /**

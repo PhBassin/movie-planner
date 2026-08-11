@@ -24,8 +24,8 @@ containerized with Docker.
 
 ## Features
 
-- **Automated scraping** of theater showtimes from the source website, via a
-  standalone scraper microservice consuming a Redis job queue.
+- **Automated scraping** of theater showtimes from the source website, via the
+  isolated worker role consuming a PostgreSQL job queue.
 - **Scraper resilience** with automatic HTTP 429 detection and graceful shutdown.
 - **RESTful API** built with Express.js and TypeScript.
 - **React SPA** (Vite) with a member-facing homepage driven by a personal
@@ -53,7 +53,7 @@ containerized with Docker.
 └────────┬────────┘
          │ HTTP API / SSE
          ▼
-┌─────────────────┐    Redis pub/sub    ┌───────────────────┐
+┌─────────────────┐  PostgreSQL bus    ┌───────────────────┐
 │  Express API    │◄───────────────────►│ Scraper           │
 │  (TypeScript)   │   scrape:jobs queue │ Microservice      │
 │  API + frontend │────────────────────►│ (consumer + cron) │
@@ -69,14 +69,12 @@ containerized with Docker.
               │  showtimes / reports    │
               └─────────────────────────┘
 
-              ┌─────────────────────────┐
-              │   Redis  (mandatory)    │  Job queue + progress pub/sub
-              └─────────────────────────┘
 ```
 
-The API publishes scrape jobs to Redis; the scraper microservice consumes them,
-fetches the source site, and writes results directly to PostgreSQL. Progress
-flows back to the client via Redis pub/sub → SSE. Redis is mandatory.
+The API publishes scrape jobs to PostgreSQL; the worker claims them with
+`FOR UPDATE SKIP LOCKED`, fetches the source site, and writes results directly
+to PostgreSQL. Progress flows back to the client via PostgreSQL `LISTEN/NOTIFY`
+→ SSE. PostgreSQL is the only stateful component.
 
 See [CONTEXT.md](CONTEXT.md) for the domain glossary and the
 [architecture reference](docs/reference/architecture/) for system design.
@@ -89,7 +87,7 @@ See [CONTEXT.md](CONTEXT.md) for the domain glossary and the
 
 - Docker and Docker Compose
 - Node.js 24 (only for the host-application path)
-- Ports 3000, 5432, 6379 available
+- Ports 3000, 5432, and 5173 available
 - `openssl` (for `JWT_SECRET` generation)
 
 ### Required environment
@@ -113,7 +111,7 @@ npm run dev          # docker compose up --build
 
 ### Option B — Host application on Node 24
 
-Runs PostgreSQL and Redis in Docker; the client, web, and worker run on the
+Runs PostgreSQL in Docker; the client, web, and worker run on the
 host under Node 24.
 
 ```bash
@@ -123,7 +121,7 @@ cp .env.example .env
 # Fill in POSTGRES_PASSWORD and JWT_SECRET in .env
 
 npm install --legacy-peer-deps
-npm run dev:infra     # starts Postgres + Redis in Docker
+npm run dev:infra     # starts Postgres in Docker
 
 # In separate terminals:
 npm run server:dev       # web API on http://localhost:3000

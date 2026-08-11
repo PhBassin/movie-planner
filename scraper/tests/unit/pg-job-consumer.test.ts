@@ -44,7 +44,7 @@ describe('PgJobConsumer', () => {
     await expect(consumer.popOne()).resolves.toBeNull();
   });
 
-  it('preserves Redis terminal behavior for malformed payloads', async () => {
+  it('rejects malformed payloads after the job is claimed', async () => {
     mockPool.query.mockResolvedValueOnce({ rows: [{ payload: 'not-json' }] });
 
     await expect(consumer.popOne()).rejects.toThrow(SyntaxError);

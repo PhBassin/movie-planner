@@ -11,8 +11,7 @@ export type { NotificationClient, NotificationClientFactory };
 
 // ---------------------------------------------------------------------------
 // PostgresNotificationBus — the `worker` role's LISTEN/NOTIFY backend (issue
-// #25, ADR 0009). It replaces the Redis pub/sub delegate in
-// `PostgresBusConsumer`: the worker publishes progress and subscribes to
+// #25, ADR 0009). The worker publishes progress and subscribes to
 // schedule-change nudges over Postgres, the single stateful component. The
 // connect/subscribe/publish/reconnect lifecycle lives in the shared
 // `BasePostgresNotificationBus`; this subclass binds the worker logger and the

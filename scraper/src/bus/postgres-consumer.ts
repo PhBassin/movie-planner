@@ -14,8 +14,7 @@ import { PostgresNotificationBus } from './postgres-notification-bus.js';
 /**
  * Worker bus after the incremental migration: Postgres owns the queue
  * (`PgJobConsumer`, issue #24) and the pub/sub fan-outs run over LISTEN/NOTIFY
- * (`PostgresNotificationBus`, issue #25). Redis is no longer part of the
- * consumer; issue #26 retires the leftover Redis code across the repo.
+ * (`PostgresNotificationBus`, issue #25).
  */
 export class PostgresBusConsumer implements BusConsumer {
   constructor(

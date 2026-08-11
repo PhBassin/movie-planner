@@ -7,13 +7,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      // Exclude integration-heavy files that require a live DB/Redis connection.
-      // scraper/index.ts (thin orchestrator entry) and redis/client.ts require live
+      // Exclude integration-heavy files that require a live DB connection.
+      // scraper/index.ts is a thin orchestrator entry that needs live
       // infrastructure; core run logic is tested via the ScrapeRun class in
       // scrape-run.ts and the helpers test file.
       exclude: [
         'src/scraper/index.ts',
-        'src/redis/client.ts',
       ],
       thresholds: {
         lines: 80,

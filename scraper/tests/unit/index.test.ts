@@ -46,7 +46,7 @@ const mockBus = {
   disconnect: vi.fn(),
 };
 
-vi.mock('../../src/redis/client.js', () => ({
+vi.mock('../../src/bus/bus-consumer.js', () => ({
   getBusConsumer: vi.fn().mockReturnValue(mockBus),
   disconnectBus: vi.fn(),
 }));

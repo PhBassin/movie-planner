@@ -642,10 +642,7 @@ docker compose ps
 curl http://localhost:3000/api/health
 
 # Database connection
-docker compose exec db psql -U postgres -d ics -c "SELECT 1;"
-
-# Redis connection
-docker compose exec redis redis-cli ping
+docker compose exec db pg_isready -U postgres -d movie_planner
 ```
 
 ---

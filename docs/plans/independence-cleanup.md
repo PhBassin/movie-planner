@@ -56,7 +56,7 @@ No inherited VPS hostname or other operational endpoint is allowed, including in
 - Keep the migration runner for future migrations, beginning with `001_*` after the baseline.
 - Preserve secure random initial-admin bootstrap behavior in application code.
 - Support both fully containerized and host-application local development.
-- Keep local PostgreSQL/Redis, local image builds, local backup/restore, and Prometheus metrics.
+- Keep local PostgreSQL, local image builds, local backup/restore, and Prometheus metrics.
 - Remove OpenTelemetry and its dependencies.
 - Audit active documentation for verifiable factual accuracy, not just names.
 - Simplify GitHub to a protected `main` branch with CI, security checks, and automated releases.
@@ -97,9 +97,9 @@ No automatic or optional import from an inherited database or Docker volume is p
 The project supports two explicit paths:
 
 1. `compose.yaml` provides the default, fully Dockerized `npm run dev` path.
-2. `compose.infra.yaml` runs PostgreSQL and Redis while Node 24 runs the client, server, scraper consumer, and scraper cron on the host.
+2. `compose.infra.yaml` runs PostgreSQL while Node 24 runs the client, web, and worker roles on the host.
 
-Compose services use short names (`db`, `redis`, `server`, `client`, `scraper`, and `scraper-cron`) without fixed `container_name` values. Compose supplies the `movie-planner` resource prefix.
+Compose services use short names (`db`, `web`, `client`, and `worker`) without fixed `container_name` values. Compose supplies the `movie-planner` resource prefix.
 
 The consumer and cron services start in the full Docker path. External scheduled scraping remains disabled unless `ENABLE_SCRAPE_CRON=true` is explicitly configured.
 
@@ -233,7 +233,7 @@ Dependencies: PR 2.
 Acceptance:
 
 - Both development paths start successfully from an empty database.
-- Healthchecks pass for PostgreSQL, Redis, server, client, scraper consumer, and scraper cron as applicable.
+- Healthchecks pass for PostgreSQL, web, client, and worker as applicable.
 - Local backup and restore round-trip succeeds.
 - No old resource name is required or reused.
 

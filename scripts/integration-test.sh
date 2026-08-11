@@ -57,10 +57,10 @@ fi
 # Wait for web server service
 WEB_MAX_WAIT=60
 WEB_WAIT=0
-echo "⏳ Waiting for server service to be healthy..."
+echo "⏳ Waiting for web service to be healthy..."
 while [ $WEB_WAIT -lt $WEB_MAX_WAIT ]; do
   if curl -f -s http://localhost:3000/api/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Server service is healthy${NC}"
+    echo -e "${GREEN}✅ Web service is healthy${NC}"
     break
   fi
   sleep 2
@@ -68,8 +68,8 @@ while [ $WEB_WAIT -lt $WEB_MAX_WAIT ]; do
 done
 
 if [ $WEB_WAIT -ge $WEB_MAX_WAIT ]; then
-  echo -e "${RED}❌ Server service health check timeout${NC}"
-  docker compose logs server
+  echo -e "${RED}❌ Web service health check timeout${NC}"
+  docker compose logs web
   exit 1
 fi
 
@@ -102,8 +102,8 @@ else
   echo ""
   echo "📋 Capturing logs for debugging..."
   echo ""
-  echo "=== Server Service Logs ==="
-  docker compose logs server | tail -100
+  echo "=== Web Service Logs ==="
+  docker compose logs web | tail -100
   echo ""
   echo "=== Database Logs ==="
   docker compose logs db | tail -50

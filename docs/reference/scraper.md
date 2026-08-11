@@ -292,18 +292,20 @@ See [API.md](./api/README.md) for complete API reference:
 
 ## Scraper Architecture
 
-The scraper runs as a microservice, decoupled from the API server via Redis.
+The scraper runs as an isolated worker role, decoupled from the API server by
+the Postgres-backed bus.
 
 ```
-Express API (server)
- └─> Redis Publisher (scrape:jobs)
-      └─> Redis Consumer (scraper)
+Express API (web)
+ └─> PostgreSQL scrape_jobs queue
+      └─> Worker claims with SKIP LOCKED
            └─> PostgreSQL (direct insert)
-           └─> Redis Publisher (progress events)
+           └─> PostgreSQL LISTEN/NOTIFY (progress events)
                 └─> Express API (SSE streaming)
 ```
 
-The scraper microservice (`scraper` and `scraper-cron`) is always included in `docker-compose.yaml` — no feature flag needed.
+The worker role is included in `compose.yaml` and owns both job execution and
+cron scheduling.
 
 **Benefits:**
 - Isolates scraping workload from API server

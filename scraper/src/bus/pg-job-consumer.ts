@@ -74,8 +74,8 @@ export class PgJobConsumer {
       try {
         await handler(job);
       } catch (error) {
-        // The row was deleted by the claim, matching Redis BLPOP terminal
-        // failure behavior: log the failure and do not retry the job.
+        // The row was deleted by the claim: log the failure and do not retry
+        // the job.
         logger.error('[PgJobConsumer] Job handler failed', { error });
       }
     }

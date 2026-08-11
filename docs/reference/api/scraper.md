@@ -42,7 +42,7 @@ POST /api/scraper/trigger
 **Response Fields:**
 - `reportId` - Unique scrape report ID (can be used to track progress in database)
 - `message` - Human-readable status message
-- `queueDepth` - Number of jobs in the Redis queue after this job was added
+- `queueDepth` - Number of jobs in the Postgres queue after this job was added
 
 **Response (404 — theater not found):**
 ```json

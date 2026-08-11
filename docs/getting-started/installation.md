@@ -16,7 +16,7 @@ Detailed setup for the two supported local development paths.
 ## Method 1 — Fully Dockerized (default)
 
 The default path. `compose.yaml` builds one application image locally and runs
-Postgres, Redis, the web API, the React dev server, and the worker together.
+Postgres, the web API, the React dev server, and the worker together.
 
 ```bash
 git clone https://github.com/PhBassin/movie-planner.git
@@ -45,14 +45,13 @@ npm run dev:logs     # tail logs
 npm run dev:down     # stop
 ```
 
-Scheduled scraping is handled by the worker follow-up in issue 23; the default
-worker currently runs the Redis consumer.
+Scheduled scraping runs in the worker role, which consumes the Postgres queue.
 
 ---
 
 ## Method 2 — Host application on Node 24
 
-Runs only PostgreSQL and Redis in Docker; the client, web, and worker run
+Runs only PostgreSQL in Docker; the client, web, and worker run
 on the host under Node 24 (handy for stepping through code with a debugger).
 
 ```bash
@@ -71,7 +70,7 @@ npm run server:db:init
 # In separate terminals:
 npm run server:dev            # web API on http://localhost:3000
 npm run client:dev            # UI on http://localhost:5173
-npm run scraper:consumer     # worker Redis consumer
+npm run scraper:consumer     # worker Postgres queue consumer
 ```
 
 > Dependency installs require `--legacy-peer-deps` due to known peer-dep

@@ -62,7 +62,7 @@ async function startServer() {
     const shutdown = async () => {
       logger.info('\n⏹️  Shutting down gracefully...');
 
-      // Disconnect Redis
+      // Disconnect the Postgres-backed bus
       const { getBusProducer: getProducer } = await import('./services/bus-producer.js');
       await getProducer().disconnect().catch(() => {});
 

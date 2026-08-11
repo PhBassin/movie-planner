@@ -36,7 +36,7 @@ Movie Planner is a **full-stack theater showtimes aggregator** that scrapes movi
 - **White-label branding**: Fully customizable branding system
 - **User management**: Role-based access control (admin/viewer)
 - **Observability**: Structured logging, metrics, and distributed tracing
-- **Two scraper modes**: In-process (legacy) or microservice (Redis-based)
+- **Isolated worker**: Scraping runs in the worker role, using Postgres for queueing and notifications
 
 ---
 
@@ -66,25 +66,19 @@ Movie Planner is a **full-stack theater showtimes aggregator** that scrapes movi
     │  - Admin routes  │
     └────────┬─────────┘
              │
-             ├─────────────────┐
-             │                 │
-             ↓                 ↓
-    ┌──────────────────┐  ┌──────────────────┐
-    │   PostgreSQL     │  │      Redis       │
-    │   (Port 5432)    │  │   (Port 6379)    │
-    │                  │  │   Optional for   │
-    │  - Theaters       │  │   microservice   │
-    │  - Movies         │  │   scraper mode   │
-    │  - Showtimes     │  └────────┬─────────┘
-    │  - Users         │           │
-    │  - Settings      │           │ Job Queue
-    └──────────────────┘           ↓
-                          ┌──────────────────┐
-                          │ Scraper Service  │
-                          │  (Port 3001)     │
-                          │  Optional        │
-                          │  Microservice    │
-                          └──────────────────┘
+     └─────────────────┐
+                       ↓
+              ┌──────────────────┐
+              │   PostgreSQL     │
+              │   (Port 5432)    │
+              │ data + queue +   │
+              │ LISTEN/NOTIFY    │
+              └────────┬─────────┘
+                       ↓
+              ┌──────────────────┐
+              │ Worker role      │
+              │ queue + cron     │
+              └──────────────────┘
 
 Monitoring Stack (Optional):
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
@@ -102,8 +96,7 @@ Monitoring Stack (Optional):
 |---------|-------|------|---------|
 | `web` | Node.js 24 | 3000 | Express API + React frontend |
 | `db` | PostgreSQL 15 | 5432 | Database |
-| `redis` | Redis 7 | 6379 | Job queue (mandatory) |
-| `worker` | Node.js 24 | - | Redis consumer and cron scheduler (scheduling folds into the worker per ADR 0009) |
+| `worker` | Node.js 24 | - | Postgres queue consumer and cron scheduler |
 
 The bundled Grafana / Loki / Tempo / Prometheus-server stack was removed in
 issue #3 (PR 4). Prometheus instrumentation remains in-app via `prom-client`
@@ -122,7 +115,7 @@ and is exposed at the authenticated `/metrics` endpoint.
 - REST API endpoints for theaters, movies, showtimes, users, settings
 - JWT-based authentication and authorization
 - Rate limiting and security middleware
-- Redis job publishing for scraper dispatch
+- Postgres job publishing for worker dispatch
 - Server-Sent Events (SSE) for real-time scrape progress
 - Database migrations (automatic on startup)
 - Static file serving (production frontend)
@@ -182,13 +175,14 @@ See [Database Schema](../database/schema.md) for complete details.
 
 ### 4. Scraper Service
 
-All scraping is dispatched via Redis to the standalone scraper microservice (`scraper` container), always included in `docker-compose.yaml`.
+All scraping is dispatched via the Postgres queue to the isolated worker role,
+which is always included in `compose.yaml`.
 
 **Responsibilities**:
 - Fetch HTML from theater websites
 - Parse showtimes, movies, and metadata
 - Update database with new/changed data
-- Report progress via Redis pub/sub
+- Report progress via Postgres `LISTEN/NOTIFY`
 - Error handling and retries
 - Rate limiting to avoid blocking
 
@@ -196,20 +190,7 @@ See [Scraper System Architecture](./scraper-system.md) for details.
 
 ---
 
-### 5. Redis
-
-**Technology**: Redis 7
-
-**Responsibilities**:
-- Job queue for scraper microservice
-- Progress updates from scraper to API server
-- Pub/sub for real-time events
-
-**When to use**: Production deployments needing horizontal scalability
-
----
-
-### 6. Monitoring Stack (Optional)
+### 5. Monitoring Stack (Optional)
 
 **Components**:
 - **Prometheus**: Metrics collection and storage
@@ -246,11 +227,11 @@ Browser → Express API → PostgreSQL
 ```
 Admin → [Trigger Scrape] → Express API
                                ↓
-                      Redis Job Publisher
+                       Postgres Job Publisher
                                ↓
-                          Redis Queue
+                         Postgres Queue
                                ↓
-                   Scraper Microservice (scraper)
+                    Worker role (scraper)
                                ↓
                          HTTP Client
                                ↓
@@ -258,18 +239,18 @@ Admin → [Trigger Scrape] → Express API
                                ↓
                          PostgreSQL
                                ↓
-                    Redis Progress Events
+                  Postgres LISTEN/NOTIFY
                                ↓
                         SSE → Browser
 ```
 
 1. Admin triggers scrape via UI or cron job
-2. Express publishes job to Redis queue
-3. Scraper microservice picks up the job
+2. Express publishes job to the Postgres queue
+3. Worker claims the job
 4. Scraper fetches HTML from theater websites
 5. Parser extracts showtimes
 6. Data written to PostgreSQL
-7. Progress events published back via Redis
+7. Progress events published back via Postgres `LISTEN/NOTIFY`
 8. Browser receives real-time progress via SSE
 
 ---
@@ -317,7 +298,6 @@ Browser → GET /api/theme.css
 | **Express.js** | 4.x | Web framework |
 | **TypeScript** | 5.x | Type safety |
 | **PostgreSQL** | 15.x | Database |
-| **Redis** | 7.x | Job queue (optional) |
 | **Winston** | 3.x | Structured logging |
 | **node-cron** | 3.x | Scheduled tasks |
 | **JWT** | 9.x | Authentication |
@@ -363,7 +343,7 @@ Browser → GET /api/theme.css
 
 ### 2. Scraper Architecture
 
-**Decision**: All scraping is dispatched via Redis to the standalone scraper microservice
+**Decision**: All scraping is dispatched via Postgres to the isolated worker role
 
 **Rationale**:
 - **Fault isolation**: Scraper failures don't affect API availability
@@ -447,8 +427,8 @@ See [White-Label System Architecture](./white-label-system.md) for details.
 - Cron jobs run on every instance (can cause duplicate scrapes)
 
 **Solutions for production scale**:
-1. **Use Redis scraper mode**: Decouple scraping from API server
-2. **Redis pub/sub for SSE**: Share progress events across instances
+1. **Use the worker role**: Decouple scraping from the API server
+2. **Postgres `LISTEN/NOTIFY` for SSE**: Share progress events across processes
 3. **Leader election**: Only one instance runs cron jobs
 4. **Nginx sticky sessions**: Route SSE connections to same instance
 
@@ -471,7 +451,7 @@ See [White-Label System Architecture](./white-label-system.md) for details.
 **Not currently implemented**
 
 **Future options**:
-- **Redis cache**: Cache API responses (theaters, movies)
+- **Application cache**: Cache API responses (theaters, movies)
 - **HTTP caching**: ETag / Cache-Control headers
 - **CDN**: Cache static assets (frontend bundle, images)
 

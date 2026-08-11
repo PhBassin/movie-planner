@@ -15,10 +15,10 @@ roles; there is no registry publication.
 
 | File | Path | What runs in Docker |
 |------|------|---------------------|
-| `compose.yaml` | Default, fully Dockerized | Postgres, Redis, web, client (Vite), worker |
-| `compose.infra.yaml` | Host-application (Node 24) | Postgres and Redis only |
+| `compose.yaml` | Default, fully Dockerized | Postgres, web, client (Vite), worker |
+| `compose.infra.yaml` | Host-application (Node 24) | Postgres only |
 
-Compose services use short names (`db`, `redis`, `web`, `client`, `worker`)
+Compose services use short names (`db`, `web`, `client`, `worker`)
 without fixed `container_name` values. Compose supplies the
 `movie-planner` resource prefix.
 
@@ -62,7 +62,7 @@ npm run dev
 ## Health checks
 
 Every service has a healthcheck. `docker compose ps` shows the state; the
-web, db, redis, and worker services use small Node HTTP
+web, db, and worker services use small Node HTTP
 probes against `/api/health` or `/metrics`.
 
 ```bash
@@ -79,7 +79,7 @@ npm run dev              # compose.yaml up --build
 npm run dev:logs         # tail logs
 npm run dev:down         # stop
 
-npm run dev:infra        # compose.infra.yaml up -d (Postgres + Redis only)
+npm run dev:infra        # compose.infra.yaml up -d (Postgres only)
 npm run dev:infra:down   # stop infra
 ```
 

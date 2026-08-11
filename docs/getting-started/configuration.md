@@ -93,13 +93,6 @@ Never commit this value.
 | `SCRAPE_DELAY_MS` | `1000` | Generic scrape delay. |
 | `ENABLE_SCRAPE_CRON` | `false` | Set `true` to let the worker fire scheduled scrapes. The worker always registers schedules from the database; this gates whether they execute. |
 
-### Redis
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `REDIS_URL` | `redis://redis:6379` (compose) / `redis://localhost:6379` (host-app) | Set by the compose files. |
-| `REDIS_PORT` | `6379` | Host port the compose files publish. |
-
 ---
 
 ## First admin password
