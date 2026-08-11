@@ -70,7 +70,7 @@ npm run server:db:init
 # In separate terminals:
 npm run server:dev            # web API on http://localhost:3000
 npm run client:dev            # UI on http://localhost:5173
-  npm run scraper:consumer     # worker Postgres queue consumer
+npm run scraper:consumer     # worker Postgres queue consumer
 ```
 
 > Dependency installs require `--legacy-peer-deps` due to known peer-dep

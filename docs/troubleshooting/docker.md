@@ -40,7 +40,7 @@ Error: JWT_SECRET environment variable is required
 echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
 
 # Restart containers
-docker compose restart server
+docker compose restart web
 ```
 
 ---
@@ -58,10 +58,10 @@ docker compose restart server
 docker compose ps
 
 # View recent logs
-docker compose logs --tail=50 server
+docker compose logs --tail=50 web
 
 # Check exit code
-docker inspect server --format='{{.State.ExitCode}}'
+docker inspect web --format='{{.State.ExitCode}}'
 ```
 
 **Common causes:**
@@ -75,10 +75,10 @@ docker inspect server --format='{{.State.ExitCode}}'
 
 ```bash
 # Remove restart policy temporarily to see error
-docker compose up server
+docker compose up web
 
 # Check health check endpoint manually
-docker compose exec server wget -qO- http://localhost:3000/api/health
+docker compose exec web wget -qO- http://localhost:3000/api/health
 ```
 
 ---
@@ -119,7 +119,7 @@ docker compose restart db
 ### `Error: bind: address already in use`
 
 **Default ports used:**
-- `3000` - Web server (server)
+- `3000` - Web server (web)
 - `5432` - PostgreSQL (db)
 - `3001` - Grafana (monitoring profile)
 - `9090` - Prometheus (monitoring profile)
@@ -158,7 +158,7 @@ docker compose up -d
 
 ```yaml
 services:
-  server:
+  web:
     ports:
       - "${PORT:-3000}:3000"  # Maps host ${PORT} to container 3000
 ```
@@ -200,13 +200,13 @@ docker compose up -d
 
 ```bash
 # Restart to pick up config changes
-docker compose restart server
+docker compose restart web
 
 # Verify mount
-docker compose exec server ls -la /app/dist/config/
+docker compose exec web ls -la /app/dist/config/
 
 # Force recreate container
-docker compose up -d --force-recreate server
+docker compose up -d --force-recreate web
 ```
 
 **Note:** Config volume mount: `./server/src/config:/app/dist/config`
@@ -272,7 +272,7 @@ healthcheck:
 curl http://localhost:3000/api/health
 
 # Inside container
-docker compose exec server wget -qO- http://localhost:3000/api/health
+docker compose exec web wget -qO- http://localhost:3000/api/health
 
 # Expected response:
 # {"status":"ok","timestamp":"2026-03-05T..."}
@@ -282,13 +282,13 @@ docker compose exec server wget -qO- http://localhost:3000/api/health
 
 ```bash
 # Check if server is listening
-docker compose exec server netstat -tulpn | grep :3000
+docker compose exec web netstat -tulpn | grep :3000
 
 # Check application logs
-docker compose logs server | tail -50
+docker compose logs web | tail -50
 
 # Test without health check
-docker compose up server --no-deps
+docker compose up web --no-deps
 ```
 
 ---
@@ -323,8 +323,8 @@ docker compose exec db pg_isready -U postgres
 ### No Memory Limits on Other Services
 
 **⚠️ Warning:** No explicit memory/CPU limits on:
-- `server`
-- `scraper`
+- `web`
+- `worker`
 - `db`
 
 **Risk:** Services can exhaust host resources.
@@ -333,7 +333,7 @@ docker compose exec db pg_isready -U postgres
 
 ```yaml
 services:
-  server:
+  web:
     deploy:
       resources:
         limits:
@@ -354,7 +354,7 @@ services:
 **Check if OOM killed:**
 
 ```bash
-docker inspect server --format='{{.State.OOMKilled}}'
+docker inspect web --format='{{.State.OOMKilled}}'
 ```
 
 **Solution:**
@@ -385,14 +385,14 @@ POSTGRES_HOST=localhost
 **Test connectivity:**
 
 ```bash
-# From server, ping database
-docker compose exec server ping db
+# From web, ping database
+docker compose exec web ping db
 
 # Check DNS resolution
-docker compose exec server nslookup db
+docker compose exec web nslookup db
 
 # Test PostgreSQL connection
-docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
+docker compose exec web psql -h db -U postgres -d movie_planner -c "SELECT 1;"
 ```
 
 ---
@@ -429,7 +429,7 @@ ERROR: Failed to download Chromium
 DOCKER_BUILDKIT=1 docker compose build --build-arg BUILDKIT_INLINE_CACHE=1
 
 # Or download Playwright browsers manually first
-docker compose build --no-cache server
+docker compose build --no-cache web
 ```
 
 **Dockerfile optimization:**
@@ -491,7 +491,7 @@ docker compose down
 docker compose down -v
 
 # Restart specific service
-docker compose restart server
+docker compose restart web
 
 # View service status
 docker compose ps
@@ -504,29 +504,29 @@ docker compose ps
 docker compose logs
 
 # Follow logs in real-time
-docker compose logs -f server
+docker compose logs -f web
 
 # Last 50 lines
-docker compose logs --tail=50 server
+docker compose logs --tail=50 web
 
 # Filter for errors
-docker compose logs server | grep ERROR
+docker compose logs web | grep ERROR
 ```
 
 ### Debugging
 
 ```bash
 # Inspect container
-docker inspect server
+docker inspect web
 
 # View container processes
-docker compose top server
+docker compose top web
 
 # Execute command in container
-docker compose exec server sh
+docker compose exec web sh
 
 # View resource usage
-docker stats server
+docker stats web
 
 # Validate docker-compose.yaml
 docker compose config
@@ -579,7 +579,7 @@ docker compose stop  # Sends SIGTERM, waits for graceful shutdown
 
 ```yaml
 services:
-  server:
+  web:
     restart: "no"  # Never restart
     # or
     restart: always  # Always restart

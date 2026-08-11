@@ -89,5 +89,11 @@ jobs:
           PG_QUEUE_TEST_URL: postgres://postgres:test@localhost:5432/movie_planner_test
         working-directory: server
 
+      - name: Run scraper tests (incl. Postgres queue/LISTEN-NOTIFY integration)
+        run: npm run test:run
+        env:
+          PG_QUEUE_TEST_URL: postgres://postgres:test@localhost:5432/movie_planner_test
+        working-directory: scraper
+
       - name: Scraper-protocol tests & coverage
         run: npm run test:coverage --workspace=@movie-planner/scraper-protocol

@@ -414,7 +414,7 @@ CREATE INDEX idx_scrape_attempts_theater_date ON scrape_attempts(theater_id, dat
 -- ============================================================================
 -- Scraping: Postgres-backed job queue (ADR 0009)
 -- ============================================================================
--- Replaces the Redis `scrape:jobs` list. The worker role claims the oldest row
+-- The worker role claims the oldest row
 -- with `FOR UPDATE SKIP LOCKED` (delete-and-return); see migration 001 and the
 -- BusConsumer implementation. FIFO is by `id` (BIGSERIAL); `enqueued_at` is
 -- retained for queue ordering and audit timestamps.

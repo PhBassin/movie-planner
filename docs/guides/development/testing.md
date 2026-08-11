@@ -404,6 +404,9 @@ server/
 │   │   │   ├── theater-parser.ts          # Implementation
 │   │   │   ├── theater-parser.test.ts     # Tests
 │   │   │   └── ...
+│   │   ├── postgres-notification-bus.test.ts             # Unit tests
+│   │   ├── postgres-notification-bus.integration.test.ts # Integration tests (need PG_QUEUE_TEST_URL)
+│   │   └── ...
 │   ├── routes/
 │   │   ├── auth.ts                        # Implementation
 │   │   ├── auth.test.ts                   # Tests
@@ -413,8 +416,6 @@ server/
 │       ├── date.test.ts                   # Tests
 │       └── ...
 └── tests/                                 # Dedicated test directory
-    ├── services/
-    │   └── postgres-notification-bus.test.ts # Integration tests
     └── fixtures/                          # Test HTML files
         ├── theater-c0072-page.html
         ├── theater-c0089-page.html

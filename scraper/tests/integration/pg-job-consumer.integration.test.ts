@@ -58,7 +58,6 @@ describe.runIf(Boolean(TEST_URL))('Postgres queue consumer integration', () => {
     );
 
     const first = new PgJobConsumer(TEST_URL, 0);
-    consumers.push(first);
     await expect(first.popOne()).resolves.toMatchObject({ reportId: 10 });
     await first.disconnect();
 
@@ -75,7 +74,6 @@ describe.runIf(Boolean(TEST_URL))('Postgres queue consumer integration', () => {
     );
 
     const first = new PgJobConsumer(TEST_URL, 0);
-    consumers.push(first);
     await expect(first.popOne()).resolves.toMatchObject({ reportId: 12 });
     await first.disconnect();
 

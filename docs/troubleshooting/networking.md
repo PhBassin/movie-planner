@@ -45,8 +45,8 @@ echo "CORS_ORIGIN=http://localhost:5173" >> .env
 # Allow multiple origins (production)
 echo "CORS_ORIGIN=https://app.example.com,https://www.example.com" >> .env
 
-# Restart server
-docker compose restart server
+# Restart web
+docker compose restart web
 ```
 
 **Default:** `CORS_ORIGIN=http://localhost:5173` (Vite dev server)
@@ -142,20 +142,20 @@ Error: connect ECONNREFUSED 127.0.0.1:5432
 POSTGRES_HOST=db      # Not localhost
 
 # Restart services
-docker compose restart server
+docker compose restart web
 ```
 
 **Test connectivity:**
 
 ```bash
-# From server container, ping database
-docker compose exec server ping db
+# From the web container, ping database
+docker compose exec web ping db
 
 # Check DNS resolution
-docker compose exec server nslookup db
+docker compose exec web nslookup db
 
 # Test database connection
-docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
+docker compose exec web psql -h db -U postgres -d movie_planner -c "SELECT 1;"
 ```
 
 ---
@@ -166,7 +166,7 @@ docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
 
 ```yaml
 services:
-  server:
+  web:
     ports:
       - "3000:3000"  # host:container
       #   ↑    ↑
@@ -181,7 +181,7 @@ services:
 curl http://localhost:3000/api/health
 
 # From another container
-curl http://server:3000/api/health
+curl http://web:3000/api/health
 ```
 
 **Common mistake:**
@@ -220,7 +220,7 @@ server {
     ssl_certificate_key /etc/ssl/private/key.pem;
 
     location / {
-        proxy_pass http://server:3000;
+        proxy_pass http://web:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -326,7 +326,7 @@ curl -N http://localhost:3000/api/scraper/progress
 
 ```nginx
 location /api/scraper/progress {
-    proxy_pass http://server:3000;
+    proxy_pass http://web:3000;
     proxy_set_header Connection '';
     proxy_http_version 1.1;
     proxy_buffering off;
@@ -358,7 +358,7 @@ SCRAPE_THEATER_DELAY_MS=3000  # Default: 3 seconds
 SCRAPE_MOVIE_DELAY_MS=500  # Default: 500ms
 
 # Restart to apply
-docker compose restart server
+docker compose restart web
 ```
 
 **If AlloCiné rate limits you:**
@@ -368,7 +368,7 @@ docker compose restart server
 ```bash
 echo "SCRAPE_THEATER_DELAY_MS=5000" >> .env  # 5 seconds between theaters
 echo "SCRAPE_MOVIE_DELAY_MS=1000" >> .env   # 1 second between movies
-docker compose restart server
+docker compose restart web
 ```
 
 2. **Scrape fewer theaters at once** (use API to scrape specific theaters)
@@ -376,7 +376,7 @@ docker compose restart server
 3. **Monitor for 403/429 errors in logs:**
 
 ```bash
-docker compose logs server | grep "Failed to fetch"
+docker compose logs web | grep "Failed to fetch"
 ```
 
 ---
@@ -417,8 +417,8 @@ Retry-After: 60
 
 ```bash
 # Each service can resolve other service names
-docker compose exec server ping db
- docker compose exec server nslookup db
+docker compose exec web ping db
+docker compose exec web nslookup db
 
 # Expected: Resolves to container IP
 ```
@@ -427,7 +427,7 @@ docker compose exec server ping db
 
 ```yaml
 services:
-  server:
+  web:
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -449,7 +449,7 @@ getaddrinfo ENOTFOUND www.allocine.fr
 
 ```bash
 # Test DNS from container
-docker compose exec server nslookup www.allocine.fr
+docker compose exec web nslookup www.allocine.fr
 
 # If fails, check Docker DNS config
 # Or add custom DNS servers (see above)
@@ -496,16 +496,16 @@ curl -N http://localhost:3000/api/scraper/progress
 
 ```bash
 # Ping between containers
-docker compose exec server ping db
+docker compose exec web ping db
 
 # Check DNS resolution
-docker compose exec server nslookup db
+docker compose exec web nslookup db
 
 # Check listening ports
-docker compose exec server netstat -tulpn
+docker compose exec web netstat -tulpn
 
 # Check network interfaces
-docker compose exec server ip addr
+docker compose exec web ip addr
 
 # Inspect network
 docker network inspect movie-planner_default
@@ -530,10 +530,10 @@ curl http://localhost:3000/api/theaters \
 
 ```bash
 # Monitor requests (from container logs)
-docker compose logs -f server | grep "GET\|POST\|PUT\|DELETE"
+docker compose logs -f web | grep "GET\|POST\|PUT\|DELETE"
 
 # View all connections
-docker compose exec server netstat -an | grep ESTABLISHED
+docker compose exec web netstat -an | grep ESTABLISHED
 ```
 
 ---
@@ -564,7 +564,7 @@ POSTGRES_PORT=5432
 
 ```yaml
 services:
-  server:
+  web:
     network_mode: host  # Use host networking
 ```
 
