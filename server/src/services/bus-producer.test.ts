@@ -26,8 +26,12 @@ vi.mock('./postgres-notification-bus.js', () => ({
     disconnect = notifications.disconnect;
   },
 }));
+vi.mock('../utils/logger.js', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}));
 
 import { PostgresBusProducer, getBusProducer, resetBusProducer } from './bus-producer.js';
+import { logger } from '../utils/logger.js';
 
 describe('PostgresBusProducer', () => {
   beforeEach(() => {
@@ -82,6 +86,24 @@ describe('PostgresBusProducer', () => {
     expect(notifications.publish).toHaveBeenCalledWith(
       NOTIFICATION_CHANNELS.scheduleChanged,
       JSON.stringify(event),
+    );
+  });
+
+  it('logs and swallows schedule-change publish failures (ephemeral nudge, best-effort)', async () => {
+    vi.mocked(notifications.publish).mockRejectedValueOnce(new Error('pg down'));
+    const producer = new PostgresBusProducer(queue, notifications);
+
+    await expect(
+      producer.publishScheduleChange({ action: 'created' as const, scheduleId: 1 }),
+    ).resolves.toBeUndefined();
+
+    expect(notifications.publish).toHaveBeenCalledWith(
+      NOTIFICATION_CHANNELS.scheduleChanged,
+      JSON.stringify({ action: 'created', scheduleId: 1 }),
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      '[PostgresBusProducer] Dropped schedule-change notification',
+      { error: expect.any(Error) },
     );
   });
 

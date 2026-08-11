@@ -56,7 +56,17 @@ export class PostgresBusProducer implements BusProducer {
   }
 
   async publishScheduleChange(event: ScheduleChangeEvent): Promise<void> {
-    await this.notifications.publish(NOTIFICATION_CHANNELS.scheduleChanged, JSON.stringify(event));
+    // Best-effort by design: schedule-change is an ephemeral reload nudge (the
+    // schedules table stays the source of truth), so a publish failure — a
+    // payload over PostgreSQL's 8 KB cap, or a transient Postgres outage — must
+    // never fail the admin request whose durable write already succeeded. This
+    // matches the worker's `publishProgress` contract; all three channels are
+    // ephemeral (ADR 0009, CONTEXT.md).
+    try {
+      await this.notifications.publish(NOTIFICATION_CHANNELS.scheduleChanged, JSON.stringify(event));
+    } catch (error) {
+      logger.error('[PostgresBusProducer] Dropped schedule-change notification', { error });
+    }
   }
 
   // --- Lifecycle -------------------------------------------------------------

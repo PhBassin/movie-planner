@@ -6,6 +6,12 @@ import { NOTIFICATION_CHANNELS, parseNotificationPayload } from './notifications
 import type { NotificationChannel, NotificationBus } from './notifications.js';
 import { pgConnectionConfig } from './pg-config.js';
 import type { PgConnectionConfig } from './pg-config.js';
+import { BasePostgresNotificationBus } from './postgres-notification-bus.js';
+import type {
+  NotificationClient,
+  NotificationClientFactory,
+  NotificationLogger,
+} from './postgres-notification-bus.js';
 
 export type {
   ScrapeJob,
@@ -20,6 +26,16 @@ export type {
   NotificationChannel,
   NotificationBus,
   PgConnectionConfig,
+  NotificationClient,
+  NotificationClientFactory,
+  NotificationLogger,
 };
 
-export { serializeJob, parseJob, NOTIFICATION_CHANNELS, parseNotificationPayload, pgConnectionConfig };
+export {
+  serializeJob,
+  parseJob,
+  NOTIFICATION_CHANNELS,
+  parseNotificationPayload,
+  pgConnectionConfig,
+  BasePostgresNotificationBus,
+};
