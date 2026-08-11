@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { pgConnectionConfig } from '@movie-planner/scraper-protocol';
 import type { BusTransaction, ScrapeJob, ScrapeJobAddTheater } from '@movie-planner/scraper-protocol';
 import { parseStrictInt } from '../utils/number.js';
 
@@ -17,18 +18,11 @@ import { parseStrictInt } from '../utils/number.js';
 
 /**
  * Build a pg.Pool config from the same environment the application uses
- * (DATABASE_URL wins; otherwise the POSTGRES_* vars). Mirrors db/internal/client.
+ * (DATABASE_URL wins; otherwise the POSTGRES_* vars). Shared with the worker
+ * and the pub/sub backends via `pgConnectionConfig` in scraper-protocol.
  */
 function poolConfigFromEnv(): pg.PoolConfig {
-  const connectionString = process.env.DATABASE_URL;
-  if (connectionString) return { connectionString };
-  return {
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD as string,
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseStrictInt(process.env.POSTGRES_PORT) || 5432,
-    database: process.env.POSTGRES_DB || 'movie_planner',
-  };
+  return pgConnectionConfig();
 }
 
 const INSERT_JOB = 'INSERT INTO scrape_jobs (payload) VALUES ($1::jsonb)';

@@ -21,8 +21,13 @@ export type {
 // ---------------------------------------------------------------------------
 // RedisClient — the Redis implementation of the BusProducer port (web role).
 // The port itself (BusProducer) lives in @movie-planner/scraper-protocol; this
-// class is the concrete backend. The worker side's progress publisher lives in
-// the scraper image — the server never publishes progress.
+// class is the concrete backend.
+//
+// STATUS: no longer used by production code. The queue migrated to Postgres
+// (#24) and the pub/sub arms migrated to LISTEN/NOTIFY (#25); `bus-producer.ts`
+// now composes `PgJobQueue` + `PostgresNotificationBus`. This file is retained
+// until issue #26 retires Redis entirely — it is covered by its tests and is
+// the reference for what #26 deletes.
 // ---------------------------------------------------------------------------
 
 export class RedisClient implements BusProducer {

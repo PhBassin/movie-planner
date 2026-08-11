@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { parseJob, type ScrapeJob } from '@movie-planner/scraper-protocol';
+import { parseJob, pgConnectionConfig, type ScrapeJob } from '@movie-planner/scraper-protocol';
 import { logger } from '../utils/logger.js';
 
 const CLAIM_JOB = `
@@ -19,16 +19,7 @@ const CLAIM_JOB = `
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 
 function poolConfigFromEnv(): pg.PoolConfig {
-  const connectionString = process.env.DATABASE_URL;
-  if (connectionString) return { connectionString };
-
-  return {
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD as string,
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: Number(process.env.POSTGRES_PORT) || 5432,
-    database: process.env.POSTGRES_DB || 'movie_planner',
-  };
+  return pgConnectionConfig();
 }
 
 /** Postgres queue consumer; claiming removes a job atomically before handling. */

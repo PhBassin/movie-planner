@@ -23,11 +23,12 @@ export type {
 // ---------------------------------------------------------------------------
 // Internal Redis-backed building blocks.
 //
-// These classes are the concrete Redis implementation of each bus arm. They
-// are exported for testing but the worker role does not use them directly —
-// it goes through `RedisBusConsumer` (below), which composes them and
-// implements the `BusConsumer` port. A future Postgres backend (#24/#25)
-// provides its own `BusConsumer` implementation and these classes retire.
+// STATUS: no longer used by production code. The queue migrated to Postgres
+// (#24) and the pub/sub arms migrated to LISTEN/NOTIFY (#25); `getBusConsumer`
+// below now returns a `PostgresBusConsumer` over `PgJobConsumer` +
+// `PostgresNotificationBus`. These classes are retained until issue #26 retires
+// Redis entirely — they are covered by their tests and are the reference for
+// what #26 deletes.
 // ---------------------------------------------------------------------------
 
 /**
@@ -211,20 +212,16 @@ export class RedisBusConsumer implements BusConsumer {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton — initialised lazily so tests can mock ioredis before importing.
-// Returns the BusConsumer port so callers depend on the contract, not the
-// concrete Redis backend.
+// Singleton — initialised lazily so tests can mock before importing. Returns
+// the BusConsumer port so callers depend on the contract, not the concrete
+// Postgres backend.
 // ---------------------------------------------------------------------------
 
 let _consumer: BusConsumer | null = null;
 
 export function getBusConsumer(): BusConsumer {
   if (!_consumer) {
-    const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
-    _consumer = new PostgresBusConsumer(
-      new PgJobConsumer(),
-      new RedisBusConsumer(url, false),
-    );
+    _consumer = new PostgresBusConsumer(new PgJobConsumer());
   }
   return _consumer;
 }
