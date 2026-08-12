@@ -2,7 +2,8 @@
 
 Movie Planner ships two local development compose files. The default compose
 file builds one application image and runs it as separate `web` and `worker`
-roles; there is no registry publication.
+roles; there is no registry publication. The image also contains the compiled
+SPA, which the `web` role serves from the same origin as the API.
 
 **Related:**
 - [Setup guide](../development/setup.md) — host-app prerequisites
@@ -17,6 +18,11 @@ roles; there is no registry publication.
 |------|------|---------------------|
 | `compose.yaml` | Default, fully Dockerized | Postgres, web, client (Vite), worker |
 | `compose.infra.yaml` | Host-application (Node 24) | Postgres only |
+
+The `client` service is intentionally a development-only Vite server. A
+production deployment runs the image's `web` role directly; it does not need a
+separate client container. The production image serves `/api/*` as API routes,
+static assets from the client build, and `index.html` for client-side routes.
 
 Compose services use short names (`db`, `web`, `client`, `worker`)
 without fixed `container_name` values. Compose supplies the
@@ -38,6 +44,15 @@ npm run dev          # docker compose up --build (rebuilds on each up)
 # or, force a clean rebuild:
 docker compose build --no-cache
 ```
+
+The frontend build uses `VITE_API_BASE_URL=/api`. This keeps API calls,
+authentication cookies, SSE, and SPA assets on one origin when the `web` role
+serves the bundle. API 404s remain JSON responses because the Express API
+fallback is registered before the SPA history fallback.
+
+During the Dockerized development path, Vite proxies `/api` to
+`http://web:3000` over the Compose network. When Vite runs on the host, its
+default proxy target is `http://localhost:3000`.
 
 ---
 

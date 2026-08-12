@@ -40,7 +40,11 @@ const __dirname = path.dirname(__filename);
 const serverRegistry = new Registry();
 collectDefaultMetrics({ register: serverRegistry, prefix: 'ics_web_' });
 
-export function createApp() {
+export interface AppOptions {
+  staticRoot?: string;
+}
+
+export function createApp(options: AppOptions = {}) {
   const app = express();
 
   // Trust the first proxy to ensure accurate IP resolution for rate limiting
@@ -234,17 +238,10 @@ export function createApp() {
   // Serve React static files when the built client is present (public/index.html)
   // This is independent of NODE_ENV — the built assets exist in Docker images
   // and after local production builds regardless of runtime mode.
-  const publicPath = path.join(__dirname, '../public');
-  const indexPath = path.join(publicPath, 'index.html');
+  const staticRoot = options.staticRoot ?? path.join(__dirname, '../public');
+  const indexPath = path.join(staticRoot, 'index.html');
   if (fs.existsSync(indexPath)) {
-    // Vite 8.x adds crossorigin on <script type=module> tags, which triggers
-    // CORS even on same-origin requests when accessed via a real hostname
-    // (browsers treat localhost specially). Add the required CORS header.
-    app.use(express.static(publicPath, {
-      setHeaders: (res) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-      }
-    }));
+    app.use(express.static(staticRoot));
 
     // Serve index.html for all non-API routes (SPA support)
     app.get('{*splat}', generalLimiter, (_req, res) => {

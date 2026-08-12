@@ -7,8 +7,7 @@ COPY client/package.json ./client/
 COPY server/package.json ./server/
 COPY scraper/package.json ./scraper/
 COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
-RUN rm -f package-lock.json && \
-    npm install --legacy-peer-deps && \
+RUN npm ci --legacy-peer-deps && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/* /var/tmp/*
 
@@ -17,7 +16,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY client/ ./client/
-ENV VITE_APP_NAME=Movie-Planner
+ARG VITE_APP_NAME=Movie-Planner
+ARG VITE_API_BASE_URL=/api
+ENV VITE_APP_NAME=${VITE_APP_NAME}
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build --workspace=client && \
     rm -rf node_modules/.cache client/node_modules/.vite
 
@@ -60,8 +62,7 @@ COPY --chown=nodejs:nodejs client/package.json ./client/
 COPY --chown=nodejs:nodejs server/package.json ./server/
 COPY --chown=nodejs:nodejs scraper/package.json ./scraper/
 COPY --chown=nodejs:nodejs packages/scraper-protocol/package.json ./packages/scraper-protocol/
-RUN rm -f package-lock.json && \
-    npm install --omit=dev --workspaces --legacy-peer-deps && \
+RUN npm ci --omit=dev --workspaces --legacy-peer-deps && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/*
 

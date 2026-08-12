@@ -16,7 +16,7 @@ Detailed setup for the two supported local development paths.
 ## Method 1 — Fully Dockerized (default)
 
 The default path. `compose.yaml` builds one application image locally and runs
-Postgres, the web API, the React dev server, and the worker together.
+Postgres, the web API, the React Vite dev server, and the worker together.
 
 ```bash
 git clone https://github.com/PhBassin/movie-planner.git
@@ -46,6 +46,11 @@ npm run dev:down     # stop
 ```
 
 Scheduled scraping runs in the worker role, which consumes the Postgres queue.
+
+The Vite service is a development convenience, not a production requirement.
+The application image also builds the SPA and copies it into the web runtime;
+the Express process serves that bundle alongside `/api` in a production
+deployment.
 
 ---
 

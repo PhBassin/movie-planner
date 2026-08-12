@@ -62,7 +62,7 @@ describe('getCorsOptions', () => {
     }
   });
 
-  it('should default to localhost:5173 if ALLOWED_ORIGINS is not set', () => {
+  it('should default to the Vite development origin if ALLOWED_ORIGINS is not set', () => {
     delete process.env.ALLOWED_ORIGINS;
     const options = getCorsOptions();
 

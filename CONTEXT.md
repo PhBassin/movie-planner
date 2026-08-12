@@ -328,6 +328,17 @@ The **admin-facing shape** `RateLimitAuditInfo` (same file) wraps the flat confi
 - Not the source-side rate limiter that protects AlloCiné (`RateLimitError`). Those are separate concerns: `RateLimitConfig` protects this service's HTTP surface; `RateLimitError` reports when the upstream source has throttled us.
 - Not the same across services. Only the server has an HTTP surface to rate-limit; the scraper has no equivalent shape.
 
+## Application delivery
+
+### Web-served SPA
+
+The compiled React SPA is served by the `web` role alongside the `/api` routes
+from one origin in the production image. Local development keeps the Vite
+development server and proxies `/api` to `web`. The delivery arrangement is an
+application-topology concern, not a domain entity; its implementation lives in
+`Dockerfile`, `client/vite.config.ts`, `server/src/app.ts`, and `compose.yaml`
+(issue #27).
+
 ## Authentication
 
 ### Session

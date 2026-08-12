@@ -65,7 +65,10 @@ services:
     ports:
       - "${CLIENT_PORT:-5173}:5173"
     environment:
-      VITE_API_BASE_URL: http://localhost:${SERVER_PORT:-3000}/api
+      # Keep browser requests on the Vite origin; the dev server proxies /api
+      # to web, matching the same-origin production bundle.
+      VITE_API_BASE_URL: /api
+      VITE_DEV_API_TARGET: http://web:3000
     depends_on:
       web:
         condition: service_healthy

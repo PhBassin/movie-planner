@@ -47,30 +47,28 @@ containerized with Docker.
 ## Architecture
 
 ```
-┌─────────────────┐
-│   React SPA     │  Port 80 (container) / 5173 (host dev)
-│   (Vite + TS)   │
-└────────┬────────┘
-         │ HTTP API / SSE
-         ▼
-┌─────────────────┐  PostgreSQL bus    ┌───────────────────┐
-│  Express API    │◄───────────────────►│ Scraper           │
-│  (TypeScript)   │   scrape:jobs queue │ Microservice      │
-│  API + frontend │────────────────────►│ (consumer + cron) │
-│  only — no      │                     │                   │
-│  scraping code  │                     │   SQL             │
-└────────┬────────┘                     └────────┬──────────┘
-         │ SQL                                   │ SQL
-         └──────────────────┬────────────────────┘
-                            ▼
-              ┌─────────────────────────┐
-              │   PostgreSQL  Port 5432 │
-              │  theaters / movies /    │
-              │  showtimes / reports    │
-              └─────────────────────────┘
+┌────────────────────────────────────────────┐
+│ Express web role                           │
+│ API + SSE + production SPA (one origin)    │
+└──────────────────────┬─────────────────────┘
+                       │ PostgreSQL bus
+                       ▼
+┌────────────────────────────────────────────┐
+│ Worker role                                │
+│ queue consumer + scheduler + scraper       │
+└──────────────────────┬─────────────────────┘
+                       │ SQL
+                       ▼
+             ┌─────────────────────────┐
+             │   PostgreSQL  Port 5432 │
+             │ theaters / movies /     │
+             │ showtimes / reports     │
+             └─────────────────────────┘
 
 ```
 
+In production, the web role serves the compiled React SPA and API from one
+origin. Local development keeps Vite on port 5173 and proxies `/api` to web.
 The API publishes scrape jobs to PostgreSQL; the worker claims them with
 `FOR UPDATE SKIP LOCKED`, fetches the source site, and writes results directly
 to PostgreSQL. Progress flows back to the client via PostgreSQL `LISTEN/NOTIFY`

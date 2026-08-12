@@ -79,7 +79,8 @@ Never commit this value.
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `CLIENT_PORT` | `5173` | Vite dev server port. |
-| `VITE_API_BASE_URL` | `http://localhost:${SERVER_PORT:-3000}/api` | Set automatically by `compose.yaml`. |
+| `VITE_API_BASE_URL` | `/api` | Same-origin API base. Vite proxies this path to `web` during local development; the production image bakes the same value into the SPA. |
+| `VITE_DEV_API_TARGET` | `http://localhost:3000` | Vite-only proxy target. The Dockerized client overrides this to `http://web:3000`; host-run Vite keeps the localhost default. |
 
 ### Scraper
 
