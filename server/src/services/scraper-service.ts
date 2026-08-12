@@ -1,4 +1,4 @@
-import { getRedisClient } from './redis-client.js';
+import { getBusProducer } from './bus-producer.js';
 import { progressTracker } from './progress-tracker.js';
 import { createScrapeReport, getLatestScrapeReport } from '../db/report-queries.js';
 import { getTheaters } from '../db/theater-queries.js';
@@ -10,7 +10,7 @@ export class ScraperService {
   constructor(private db: DB) {}
 
   /**
-   * Triggers a new scrape job by publishing it to the Redis queue.
+   * Triggers a new scrape job by enqueuing it on the bus.
    * Validates the theaterId if provided.
    */
   async triggerScrape(options: { theaterId?: string; movieId?: number } = {}) {
@@ -26,20 +26,22 @@ export class ScraperService {
       }
     }
 
-    const reportId = await createScrapeReport(this.db, 'manual');
-
     // Reset stale events so new SSE subscribers don't receive previous session's
     // completed/failed events and immediately dismiss the progress panel.
     progressTracker.reset();
 
-    const queueDepth = await getRedisClient().publishJob({
-      type: 'scrape',
-      reportId,
-      triggerType: 'manual',
-      options: {
-        ...(theaterId && { theaterId }),
-        ...(movieId && { movieId }),
-      },
+    const { reportId, queueDepth } = await this.db.transaction(async (transaction) => {
+      const reportId = await createScrapeReport(transaction as typeof this.db, 'manual');
+      const queueDepth = await getBusProducer().enqueueJob({
+        type: 'scrape',
+        reportId,
+        triggerType: 'manual',
+        options: {
+          ...(theaterId && { theaterId }),
+          ...(movieId && { movieId }),
+        },
+      }, transaction);
+      return { reportId, queueDepth };
     });
 
     return { reportId, queueDepth };
@@ -51,8 +53,6 @@ export class ScraperService {
    */
   async triggerResume(parentReportId: number, pendingAttempts: ScrapeAttempt[]) {
     // Create new report with parent link
-    const reportId = await createScrapeReport(this.db, 'manual', parentReportId);
-
     // Reset stale events
     progressTracker.reset();
 
@@ -62,14 +62,18 @@ export class ScraperService {
       date: a.date,
     }));
 
-    const queueDepth = await getRedisClient().publishJob({
-      type: 'scrape',
-      reportId,
-      triggerType: 'manual',
-      options: {
-        resumeMode: true,
-        pendingAttempts: pendingList,
-      },
+    const { reportId, queueDepth } = await this.db.transaction(async (transaction) => {
+      const reportId = await createScrapeReport(transaction as typeof this.db, 'manual', parentReportId);
+      const queueDepth = await getBusProducer().enqueueJob({
+        type: 'scrape',
+        reportId,
+        triggerType: 'manual',
+        options: {
+          resumeMode: true,
+          pendingAttempts: pendingList,
+        },
+      }, transaction);
+      return { reportId, queueDepth };
     });
 
     return { reportId, queueDepth };

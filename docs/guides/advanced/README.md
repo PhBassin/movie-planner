@@ -22,18 +22,18 @@ Choose a guide based on your current challenge:
 
 ## Guide Summaries
 
-### 1. Production Scaling: Redis Queue Management & Job Orchestration
+### 1. Production Scaling: Postgres Queue Management & Job Orchestration
 
 **When to read**: After deploying a working instance, ready to scale.
 
 **Topics covered**:
-- **RUN_MODE Architecture** – Choose between oneshot (Kubernetes Jobs), consumer (Deployment), cron (Scheduled), or direct (local dev)
-- **Queue Management** – Redis FIFO structure, queue depth monitoring, backpressure handling
+- **RUN_MODE Architecture** – Choose between oneshot (Kubernetes Jobs), consumer (worker: queue consumer + cron scheduler), or direct (local dev)
+- **Queue Management** – Postgres queue depth monitoring, backpressure handling
 - **Multi-Instance Deployment** – Docker Compose scaling, Kubernetes Deployments with HPA, auto-scaling based on queue depth
 - **Job Orchestration** – Job types (scrape, add_theater), job lifecycle, retry strategies
 - **Monitoring & Alerting** – Key metrics (queue depth, success rate, duration), Prometheus queries, Grafana dashboards, alert rules
-- **Performance Optimization** – Rate limiting tuning, database connection pooling, Redis optimization
-- **Troubleshooting** – Queue growing, slow processing, memory leaks, Redis connection errors
+- **Performance Optimization** – Rate limiting tuning and database connection pooling
+- **Troubleshooting** – Queue growth, slow processing, memory leaks, and database connection errors
 
 **Key Takeaways**:
 - `RUN_MODE=consumer` recommended for continuous background scraping

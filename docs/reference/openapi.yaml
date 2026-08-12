@@ -306,10 +306,6 @@ components:
           type: string
           enum: [up, down]
           example: up
-        redis:
-          type: string
-          enum: [up, down]
-          example: up
         uptime_seconds:
           type: number
           example: 86400
@@ -877,7 +873,7 @@ paths:
       summary: System Health Check
       tags: [System]
       security: []
-      description: Check system health status (database, redis, etc)
+      description: Check system health status (database and application)
       responses:
         '200':
           description: System is healthy

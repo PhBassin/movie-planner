@@ -3,14 +3,14 @@ import { TheaterService } from './theater-service.js';
 import * as theaterQueries from '../db/theater-queries.js';
 import * as showtimeQueries from '../db/showtime-queries.js';
 import * as reportQueries from '../db/report-queries.js';
-import * as redisClient from './redis-client.js';
+import * as busProducer from './bus-producer.js';
 import { type DB } from '../db/index.js';
 import { isValidAllocineUrl, extractTheaterIdFromUrl } from '../utils/url.js';
 
 vi.mock('../db/theater-queries.js');
 vi.mock('../db/showtime-queries.js');
 vi.mock('../db/report-queries.js');
-vi.mock('./redis-client.js');
+vi.mock('./bus-producer.js');
 vi.mock('../utils/url.js', () => ({
   isValidAllocineUrl: vi.fn(() => true),
   extractTheaterIdFromUrl: vi.fn(() => 'C0013'),
@@ -19,7 +19,9 @@ vi.mock('../utils/url.js', () => ({
 
 describe('TheaterService', () => {
   let theaterService: TheaterService;
-  const mockDb = {} as DB;
+  const mockDb = {
+    transaction: vi.fn(async (callback: (transaction: DB) => Promise<unknown>) => callback(mockDb as DB)),
+  } as unknown as DB;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -62,16 +64,17 @@ describe('TheaterService', () => {
       await expect(theaterService.addTheaterViaUrl('http://valid')).rejects.toThrow('Could not extract theater ID');
     });
 
-    it('should add theater and publish job on success', async () => {
-      const mockPublish = vi.fn().mockResolvedValue(1);
-      vi.mocked(redisClient.getRedisClient).mockReturnValue({ publishAddTheaterJob: mockPublish } as any);
+    it('should add theater and enqueue job on success', async () => {
+      const mockEnqueue = vi.fn().mockResolvedValue(1);
+      vi.mocked(busProducer.getBusProducer).mockReturnValue({ enqueueAddTheaterJob: mockEnqueue } as any);
       vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(42 as any);
       vi.mocked(theaterQueries.addTheater).mockResolvedValue({ id: 'C0013' } as any);
 
       const result = await theaterService.addTheaterViaUrl('http://valid');
 
       expect(result.id).toBe('C0013');
-      expect(mockPublish).toHaveBeenCalledWith(42, 'https://cleaned-url');
+      expect(mockEnqueue.mock.calls[0][0]).toBe(42);
+      expect(mockEnqueue.mock.calls[0][1]).toBe('https://cleaned-url');
     });
   });
 

@@ -1,11 +1,13 @@
 {
   "name": "@movie-planner/scraper",
   "version": "0.0.0-development",
-  "description": "Standalone scraper microservice for Movie Planner",
+  "description": "Movie Planner worker role",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "pretest": "npm run build --workspace=@movie-planner/scraper-protocol",
+    "pretest:run": "npm run build --workspace=@movie-planner/scraper-protocol",
     "prebuild": "npm run build --workspace=@movie-planner/scraper-protocol",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
@@ -15,8 +17,7 @@
   },
   "keywords": [
     "scraper",
-    "microservice",
-    "redis"
+    "worker"
   ],
   "author": "",
   "license": "MIT",
@@ -24,7 +25,6 @@
     "@movie-planner/scraper-protocol": "*",
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
-    "ioredis": "^5.11.0",
     "node-cron": "^4.2.1",
     "pg": "^8.21.0",
     "prom-client": "^15.1.0",

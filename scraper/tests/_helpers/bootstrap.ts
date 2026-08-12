@@ -1,7 +1,7 @@
 /**
  * Common bootstrap for scraper integration/unit tests.
  *
- * Provides reusable mocks for DB, Redis, logger, and metrics
+ * Provides reusable mocks for DB, bus, logger, and metrics
  * that appear across multiple scraper test files.
  *
  * Usage:
@@ -59,18 +59,23 @@ export function bootstrapDbMock() {
 }
 
 // ---------------------------------------------------------------------------
-// Redis mock
+// Bus mock
 // ---------------------------------------------------------------------------
 
-/** Redis publisher/consumer mock. */
-export function bootstrapRedisMock() {
+/** Bus consumer mock (matches the BusConsumer port surface). */
+export function bootstrapBusMock() {
   return {
-    getRedisPublisher: vi
+    getBusConsumer: vi
       .fn()
-      .mockReturnValue({ emit: vi.fn() }),
-    getRedisConsumer: vi
-      .fn()
-      .mockReturnValue({ start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }),
-    disconnectRedis: vi.fn(),
+      .mockReturnValue({
+        progressPublisher: { emit: vi.fn() },
+        publishProgress: vi.fn(),
+        consumeJobs: vi.fn(),
+        stopConsuming: vi.fn(),
+        popOneJob: vi.fn(),
+        subscribeScheduleChange: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    disconnectBus: vi.fn(),
   };
 }

@@ -55,7 +55,7 @@ Restore the local database from a backup file.
 
 **Features:**
 - Creates safety backup (`movie_planner_before_restore_*.sql.gz`) before restore
-- Stops `server`, `scraper`, and `scraper-cron` during the restore, then restarts them
+- Stops `web` and `worker` during the restore, then restarts them
 - Supports `.sql` and `.sql.gz` files
 - Interactive confirmation prompt
 - Applies the dump in a single transaction with `ON_ERROR_STOP`: any failure

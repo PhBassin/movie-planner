@@ -4,16 +4,18 @@ Environment variable reference for Movie Planner.
 
 ## How configuration works
 
-Movie Planner reads its environment through two compose files (`compose.yaml`
-for the fully-Dockerized path, `compose.infra.yaml` for the host-app path)
-plus a small set of host-side overrides for the host-app path. Secrets and
-deployment-specific values go in `.env`; everything else is hardcoded with
-sensible defaults inside the compose files.
+Movie Planner reads its environment through three compose files (`compose.yaml`
+for the fully-Dockerized path, `compose.infra.yaml` for the host-app path, and
+`compose.prod.yaml` for the production deployment) plus a small set of host-side
+overrides for the host-app path. Secrets and deployment-specific values go in
+`.env`; everything else is hardcoded with sensible defaults inside the compose
+files.
 
 | File | Purpose | When to use |
 |------|---------|-------------|
 | `.env.example` | Required base template (secrets + a few knobs). | Always copy to `.env` first. |
 | `.env.dev.example` | Host-application overrides (Node 24). | Append to `.env` only when using `compose.infra.yaml`. |
+| `.env.prod.example` | Production template (`compose.prod.yaml`). | Copy to `.env` on the production host. |
 
 Quick start:
 
@@ -79,27 +81,20 @@ Never commit this value.
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `CLIENT_PORT` | `5173` | Vite dev server port. |
-| `VITE_API_BASE_URL` | `http://localhost:${SERVER_PORT:-3000}/api` | Set automatically by `compose.yaml`. |
+| `VITE_API_BASE_URL` | `/api` | Same-origin API base. Vite proxies this path to `web` during local development; the production image bakes the same value into the SPA. |
+| `VITE_DEV_API_TARGET` | `http://localhost:3000` | Vite-only proxy target. The Dockerized client overrides this to `http://web:3000`; host-run Vite keeps the localhost default. |
 
 ### Scraper
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `SCRAPE_MODE` | `from_today_limited` (consumer) / `weekly` (cron, host-app) | Scraping strategy. |
+| `SCRAPE_MODE` | `from_today_limited` (consumer) / `weekly` (host-app) | Scraping strategy. |
 | `SCRAPE_DAYS` | `7` | Number of days to scrape per run. |
 | `SCRAPE_THEATER_DELAY_MS` | `3000` | Delay between theaters. |
 | `SCRAPE_MOVIE_DELAY_MS` | `500` | Delay between movies. |
 | `SCRAPER_CONCURRENCY` | `2` | Parallelism within a scrape run. |
 | `SCRAPE_DELAY_MS` | `1000` | Generic scrape delay. |
-| `SCRAPE_CRON_SCHEDULE` | `0 8 * * 3` | Cron for the scraper-cron service. Build expressions at [crontab.guru](https://crontab.guru/). |
-| `ENABLE_SCRAPE_CRON` | `false` | Set `true` to enable external scheduled scraping in the scraper-cron service. |
-
-### Redis
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `REDIS_URL` | `redis://redis:6379` (compose) / `redis://localhost:6379` (host-app) | Set by the compose files. |
-| `REDIS_PORT` | `6379` | Host port the compose files publish. |
+| `ENABLE_SCRAPE_CRON` | `false` | Set `true` to let the worker fire scheduled scrapes. The worker always registers schedules from the database; this gates whether they execute. |
 
 ---
 
@@ -128,8 +123,9 @@ In development over plain HTTP, set `COOKIE_SECURE=false` (already set in
 ### Scraper is idle
 
 External scheduled scraping is gated by `ENABLE_SCRAPE_CRON=true`. The
-consumer service (always running in `compose.yaml`) handles on-demand
-scrapes regardless.
+worker (always running in `compose.yaml`) registers schedules from the
+database and fires them when this is set; it also handles on-demand scrapes
+from the queue regardless.
 
 ---
 

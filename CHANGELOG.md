@@ -25,7 +25,7 @@ No Movie Planner release has been published yet. The first planned release is
   `db:init` runner; secure random initial-admin bootstrap; real PostgreSQL
   baseline test (#3, PR 2).
 - `compose.yaml` (default fully Dockerized) and `compose.infra.yaml` (host-app
-  on Node 24 with only Postgres and Redis containerized) local development
+  on Node 24 with only Postgres containerized) local development
   paths; renamed `movie_planner_*` backup/restore utilities (#3, PR 3).
 
 ### Removed — inherited surfaces
@@ -47,7 +47,7 @@ No Movie Planner release has been published yet. The first planned release is
 - `backup-db.sh` now dumps with `pg_dump --clean --if-exists` so backups
   replay over an existing schema, and removes the incomplete dump on failure
   (#3, PR 6).
-- `restore-db.sh` is now atomic and loud: stops `server`, `scraper`, and
-  `scraper-cron` for the duration of the restore, applies the dump with
+- `restore-db.sh` is now atomic and loud: stops `web` and `worker` for the
+  duration of the restore, applies the dump with
   `ON_ERROR_STOP=1 --single-transaction`, restarts the services regardless of
   outcome, and exits non-zero on any failure (#3, PR 6).

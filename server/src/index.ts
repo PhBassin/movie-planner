@@ -27,16 +27,16 @@ async function startServer() {
     logger.info('📦 Initializing database...');
     await initializeDatabase();
 
-    // Subscribe to Redis progress events and forward to SSE clients
-    const { getRedisClient } = await import('./services/redis-client.js');
+    // Subscribe to PostgreSQL progress notifications and forward to SSE clients
+    const { getBusProducer } = await import('./services/bus-producer.js');
     const { progressTracker } = await import('./services/progress-tracker.js');
 
-    const redisClient = getRedisClient();
-    await redisClient.subscribeToProgress((event) => {
+    const busProducer = getBusProducer();
+    await busProducer.subscribeToProgress((event) => {
       progressTracker.emit(event);
     });
 
-    logger.info('📡 Redis progress subscription active (scrape:progress)');
+    logger.info('📡 PostgreSQL progress subscription active (scrape:progress)');
 
     // Create Express app
     const app = createApp();
@@ -62,9 +62,9 @@ async function startServer() {
     const shutdown = async () => {
       logger.info('\n⏹️  Shutting down gracefully...');
 
-      // Disconnect Redis
-      const { getRedisClient: getClient } = await import('./services/redis-client.js');
-      await getClient().disconnect().catch(() => {});
+      // Disconnect the Postgres-backed bus
+      const { getBusProducer: getProducer } = await import('./services/bus-producer.js');
+      await getProducer().disconnect().catch(() => {});
 
       // Close server
       server.close(() => {

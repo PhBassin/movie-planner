@@ -15,9 +15,8 @@ Detailed setup for the two supported local development paths.
 
 ## Method 1 — Fully Dockerized (default)
 
-The default path. `compose.yaml` builds the server and scraper images locally
-and runs Postgres, Redis, the API, the React dev server, the scraper consumer,
-and the scraper cron together.
+The default path. `compose.yaml` builds one application image locally and runs
+Postgres, the web API, the React Vite dev server, and the worker together.
 
 ```bash
 git clone https://github.com/PhBassin/movie-planner.git
@@ -46,14 +45,18 @@ npm run dev:logs     # tail logs
 npm run dev:down     # stop
 ```
 
-External scheduled scraping is disabled by default; set
-`ENABLE_SCRAPE_CRON=true` in `.env` to enable the scraper-cron service.
+Scheduled scraping runs in the worker role, which consumes the Postgres queue.
+
+The Vite service is a development convenience, not a production requirement.
+The application image also builds the SPA and copies it into the web runtime;
+the Express process serves that bundle alongside `/api` in a production
+deployment.
 
 ---
 
 ## Method 2 — Host application on Node 24
 
-Runs only PostgreSQL and Redis in Docker; the client, server, and scraper run
+Runs only PostgreSQL in Docker; the client, web, and worker run
 on the host under Node 24 (handy for stepping through code with a debugger).
 
 ```bash
@@ -70,9 +73,9 @@ npm run dev:infra              # docker compose -f compose.infra.yaml up -d
 npm run server:db:init
 
 # In separate terminals:
-npm run server:dev            # API on http://localhost:3000
+npm run server:dev            # web API on http://localhost:3000
 npm run client:dev            # UI on http://localhost:5173
-npm run scraper:dev           # scraper consumer + cron
+npm run scraper:consumer     # worker Postgres queue consumer
 ```
 
 > Dependency installs require `--legacy-peer-deps` due to known peer-dep

@@ -1,13 +1,13 @@
 # AGENTS.md
 
-Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) + React SPA (`client`) + standalone scraper microservice (`scraper`)**, PostgreSQL + Redis, fully Dockerized.
+Theater showtimes aggregator. npm-workspaces monorepo: **Express API (`server`) + React SPA (`client`) + worker (`scraper`)**, PostgreSQL-only, fully Dockerized.
 
 ## Critical conventions
 
 - **Node 24 only** (`engines: >=24 <25`, see `.nvmrc`). CI/hooks run on Node 24.
 - **ESM everywhere** (`"type": "module"`). Relative TS imports MUST use `.js` extensions, e.g. `import { logger } from './utils/logger.js'`. Omitting the extension breaks runtime.
 - Each workspace has its OWN `utils/logger.js`. `packages/logger` is not a real workspace — ignore it.
-- Dependency installs use `npm install --legacy-peer-deps` (peer-dep conflicts exist; plain `npm install` may fail). CI deletes `package-lock.json` before installing.
+- Local dependency installs use `npm install --legacy-peer-deps` (peer-dep conflicts exist; plain `npm install` may fail). Docker image builds use the committed lockfile with `npm ci --legacy-peer-deps` for reproducible layers. CI deletes `package-lock.json` before installing.
 - **Never add a dependency without explicit user consent.** Prefer existing libraries already in the relevant workspace.
 - **`CONTEXT.md` at the repo root is the project's domain glossary.** Before introducing or naming a domain concept (entity, FSM, wire-format type), read it first and extend it in the same change. New code MUST use the canonical terms it defines; new or overloaded concepts MUST be added there with cross-references to the source files.
 
@@ -33,13 +33,13 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 
 ## Dev environment
 
-- Full stack with hot reload: `npm run dev` (Docker compose: db + server + client). `npm run dev:down` / `dev:logs`.
+- Full stack with hot reload: `npm run dev` (Docker compose: db + web + worker + client). `npm run dev:down` / `dev:logs`.
 - Server alone (no Docker): `npm run server:dev` (tsx watch). Needs a reachable Postgres + the env vars below.
 - **Required env** (server refuses to start without): `JWT_SECRET` (min 32 chars, `openssl rand -base64 64`) and `POSTGRES_PASSWORD`. DB name is `movie_planner`, user `postgres`. See `.env.example`.
 
 ## Architecture (non-obvious)
 
-- **The API does NOT scrape.** API publishes jobs to Redis queue `scrape:jobs`; the scraper microservice consumes them, fetches the source site, and writes results **directly to PostgreSQL**. Progress flows back API-side via Redis pub/sub → SSE → client. **Redis is mandatory.**
+- **The web role does NOT scrape.** Web publishes jobs to the Postgres `scrape_jobs` queue; the worker role consumes them, fetches the source site, and writes results **directly to PostgreSQL**. Progress flows back web-side through PostgreSQL `LISTEN/NOTIFY` → SSE → client. PostgreSQL is the only stateful component.
 - Migrations: sequential numbered SQL in `migrations/`, idempotent, tracked in `schema_migrations` with SHA-256 checksums. Applied automatically at server startup when `AUTO_MIGRATE=true` (default). On fresh DB a random admin password is logged once. When adding one, use the next number and keep it idempotent (note: some numbers like 017/018 were duplicated historically — verify the real next free number).
 
 ## Security/code patterns to honor (from `.jules/sentinel.md`)
@@ -56,7 +56,7 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 ## Tooling notes
 
 - `fallow` (dead-code/health) is wired via MCP and `.fallowrc.json` — prefer it for unused-export/dependency checks.
-- Past performance learnings live in `.jules/bolt.md`; deeper architecture docs in `docs/`.
+- `codegraph` is wired via MCP. Use it for code base exploration.
 
 ## Agent skills
 

@@ -1,34 +1,44 @@
 # Docker Setup
 
-Movie Planner ships two local development compose files. Both build the
-server and scraper images locally — there is no registry publication.
+Movie Planner ships two local development compose files and one production
+compose file. The development compose files build one application image and
+run it as separate `web` and `worker` roles; there is no registry publication.
+The image also contains the compiled SPA, which the `web` role serves from the
+same origin as the API.
 
 **Related:**
+- [Production](./production.md) — `compose.prod.yaml`, deploy + smoke test
 - [Setup guide](../development/setup.md) — host-app prerequisites
 - [Configuration](../../getting-started/configuration.md) — environment variables
 - [Networking](./networking.md) — local ports and proxies
 
 ---
 
-## The two compose files
+## The compose files
 
 | File | Path | What runs in Docker |
 |------|------|---------------------|
-| `compose.yaml` | Default, fully Dockerized | Postgres, Redis, server, client (Vite), scraper consumer, scraper cron |
-| `compose.infra.yaml` | Host-application (Node 24) | Postgres and Redis only |
+| `compose.yaml` | Default, fully Dockerized | Postgres, web, client (Vite), worker |
+| `compose.infra.yaml` | Host-application (Node 24) | Postgres only |
+| `compose.prod.yaml` | Production deployment (ADR 0009) | Postgres, web, worker |
 
-Compose services use short names (`db`, `redis`, `server`, `client`, `scraper`,
-`scraper-cron`) without fixed `container_name` values. Compose supplies the
+The `client` service is intentionally a development-only Vite server. A
+production deployment runs the image's `web` role directly; it does not need a
+separate client container. The production image serves `/api/*` as API routes,
+static assets from the client build, and `index.html` for client-side routes.
+
+See [Production](./production.md) for the production compose file and its
+smoke test. Compose services use short names (`db`, `web`, `client`, `worker`)
+without fixed `container_name` values. Compose supplies the
 `movie-planner` resource prefix.
 
 ---
 
 ## Build vs. image
 
-Both compose files build the server/scraper images from local Dockerfiles:
+The default compose file builds the shared application image from:
 
-- `Dockerfile` — server + client production bundle (used by the `server` service)
-- `Dockerfile.scraper` — scraper runtime (used by `scraper` and `scraper-cron`)
+- `Dockerfile` — server, worker, and client production bundle (used by `web` and `worker`)
 
 There is no `image:` pull from `ghcr.io` or any external registry. To rebuild
 after a Dockerfile or dependency change:
@@ -38,6 +48,15 @@ npm run dev          # docker compose up --build (rebuilds on each up)
 # or, force a clean rebuild:
 docker compose build --no-cache
 ```
+
+The frontend build uses `VITE_API_BASE_URL=/api`. This keeps API calls,
+authentication cookies, SSE, and SPA assets on one origin when the `web` role
+serves the bundle. API 404s remain JSON responses because the Express API
+fallback is registered before the SPA history fallback.
+
+During the Dockerized development path, Vite proxies `/api` to
+`http://web:3000` over the Compose network. When Vite runs on the host, its
+default proxy target is `http://localhost:3000`.
 
 ---
 
@@ -62,12 +81,12 @@ npm run dev
 ## Health checks
 
 Every service has a healthcheck. `docker compose ps` shows the state; the
-server, db, redis, scraper, and scraper-cron services use small Node HTTP
+web, db, and worker services use small Node HTTP
 probes against `/api/health` or `/metrics`.
 
 ```bash
 docker compose ps
-docker compose logs server
+docker compose logs web worker
 ```
 
 ---
@@ -79,7 +98,7 @@ npm run dev              # compose.yaml up --build
 npm run dev:logs         # tail logs
 npm run dev:down         # stop
 
-npm run dev:infra        # compose.infra.yaml up -d (Postgres + Redis only)
+npm run dev:infra        # compose.infra.yaml up -d (Postgres only)
 npm run dev:infra:down   # stop infra
 ```
 

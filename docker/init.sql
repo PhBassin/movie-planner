@@ -412,6 +412,22 @@ CREATE INDEX idx_scrape_attempts_report_status ON scrape_attempts(report_id, sta
 CREATE INDEX idx_scrape_attempts_theater_date ON scrape_attempts(theater_id, date);
 
 -- ============================================================================
+-- Scraping: Postgres-backed job queue (ADR 0009)
+-- ============================================================================
+-- The worker role claims the oldest row
+-- with `FOR UPDATE SKIP LOCKED` (delete-and-return); see migration 001 and the
+-- BusConsumer implementation. FIFO is by `id` (BIGSERIAL); `enqueued_at` is
+-- retained for queue ordering and audit timestamps.
+
+CREATE TABLE scrape_jobs (
+  id BIGSERIAL PRIMARY KEY,
+  payload JSONB NOT NULL,
+  enqueued_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_scrape_jobs_enqueued_at ON scrape_jobs(enqueued_at);
+
+-- ============================================================================
 -- Authentication: refresh tokens
 -- ============================================================================
 

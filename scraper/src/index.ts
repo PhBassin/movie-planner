@@ -2,10 +2,15 @@ import { logger } from './utils/logger.js';
 import { registry, scrapeJobsTotal, scrapeDurationSeconds, moviesScrapedTotal, showtimesScrapedTotal } from './utils/metrics.js';
 
 import { runScraper, addTheaterAndScrape } from './scraper/index.js';
-import { getRedisPublisher, getRedisConsumer, getRedisSubscriber, disconnectRedis, type ScrapeJob, type ScrapeJobScrape, type ScrapeJobAddTheater, type ScheduleChangeEvent } from './redis/client.js';
+import type { ScrapeSummary } from './types/scraper.js';
+import type { ProgressPublisher } from './scraper/scrape-run.js';
+import { getBusConsumer, disconnectBus } from './bus/bus-consumer.js';
+import type { BusConsumer } from '@movie-planner/scraper-protocol';
+import type { ScrapeJob, ScrapeJobScrape, ScrapeJobAddTheater } from '@movie-planner/scraper-protocol';
 import { db } from './db/client.js';
 import { createScrapeReport, updateScrapeReport } from './db/report-queries.js';
 import { getEnabledSchedules, updateScheduleRunStatus } from './db/schedule-queries.js';
+import { CronScheduler, toCronSchedule, type CronSchedule } from './scheduler/cron-scheduler.js';
 
 // ---------------------------------------------------------------------------
 // Metrics HTTP server (always-on, port 9091)
@@ -38,12 +43,13 @@ async function startMetricsServer(): Promise<void> {
 
 /**
  * RUN_MODE controls how this container behaves:
- *  - "oneshot"  : Pop one job from Redis queue, execute it, then exit. (default)
- *  - "consumer" : Long-running process that polls Redis queue continuously.
- *  - "cron"     : Run scraper on a schedule (no Redis, uses CRON_SCHEDULE env).
+ *  - "oneshot"  : Pop one job from the Postgres queue, execute it, then exit. (default)
+ *  - "consumer" : Long-running worker process — consumes the job queue AND
+ *                 runs the cron scheduler (ADR 0009: scheduling folds into
+ *                 the worker so the scraping domain stays in one process).
  *  - "direct"   : Run scraper immediately once and exit (for local dev / manual use).
  */
-type RunMode = 'oneshot' | 'consumer' | 'cron' | 'direct';
+type RunMode = 'oneshot' | 'consumer' | 'direct';
 
 const RUN_MODE: RunMode = (process.env.RUN_MODE as RunMode) ?? 'oneshot';
 
@@ -51,8 +57,7 @@ const RUN_MODE: RunMode = (process.env.RUN_MODE as RunMode) ?? 'oneshot';
 // Job executor
 // ---------------------------------------------------------------------------
 
-export async function executeJob(job: ScrapeJob): Promise<void> {
-  const publisher = getRedisPublisher();
+export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): Promise<void> {
   // Support legacy jobs that predate the discriminated union (no 'type' field)
   const jobType = ('type' in job) ? job.type : 'scrape';
 
@@ -67,7 +72,7 @@ export async function executeJob(job: ScrapeJob): Promise<void> {
   if (jobType === 'add_theater') {
     const addTheaterJob = job as ScrapeJobAddTheater;
     try {
-      await addTheaterAndScrape(db, addTheaterJob.url, publisher);
+      await addTheaterAndScrape(db, addTheaterJob.url, progress);
       await updateScrapeReport(db, job.reportId, {
         status: 'success',
         completed_at: new Date().toISOString(),
@@ -90,29 +95,14 @@ export async function executeJob(job: ScrapeJob): Promise<void> {
 
   try {
     const scrapeJob = job as ScrapeJobScrape;
-    const summary = await runScraper(publisher, scrapeJob.options);
+    const summary = await runScraper(progress, scrapeJob.options);
 
-    const status = summary.failed_theaters === 0
-      ? 'success'
-      : summary.successful_theaters > 0
-        ? 'partial_success'
-        : 'failed';
+    const status = await recordScrapeOutcome(job.reportId, summary);
 
     durationTimer();
     scrapeJobsTotal.inc({ status, trigger: job.triggerType });
     moviesScrapedTotal.inc({ theater: 'all' }, summary.total_movies);
     showtimesScrapedTotal.inc({ theater: 'all' }, summary.total_showtimes);
-
-    await updateScrapeReport(db, job.reportId, {
-      status,
-      completed_at: new Date().toISOString(),
-      total_theaters: summary.total_theaters,
-      successful_theaters: summary.successful_theaters,
-      failed_theaters: summary.failed_theaters,
-      total_movies_scraped: summary.total_movies,
-      total_showtimes_scraped: summary.total_showtimes,
-      errors: summary.errors,
-    });
 
     logger.info(`[scraper] Job ${job.reportId} completed with status: ${status}`);
   } catch (err) {
@@ -132,236 +122,139 @@ export async function executeJob(job: ScrapeJob): Promise<void> {
 // Oneshot mode: pop one job and exit
 // ---------------------------------------------------------------------------
 
-async function runOneshot(): Promise<void> {
-  logger.info('[scraper] Mode: oneshot');
-  const consumer = getRedisConsumer();
+/**
+ * Derive the outcome status from a scrape summary and record it on the
+ * report. Shared by the job executor, the cron executor, and the direct-run
+ * path so the status rule (no failures → success, some → partial, none →
+ * failed) and the report fields live in one place. Returns the status so
+ * callers can also update metrics and the originating schedule row.
+ */
+async function recordScrapeOutcome(reportId: number, summary: ScrapeSummary): Promise<'success' | 'partial_success' | 'failed'> {
+  const status = summary.failed_theaters === 0
+    ? 'success'
+    : summary.successful_theaters > 0
+      ? 'partial_success'
+      : 'failed';
 
-  // Use a non-blocking pop (LPOP) for oneshot
-  const { default: Redis } = await import('ioredis');
-  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+  await updateScrapeReport(db, reportId, {
+    status,
+    completed_at: new Date().toISOString(),
+    total_theaters: summary.total_theaters,
+    successful_theaters: summary.successful_theaters,
+    failed_theaters: summary.failed_theaters,
+    total_movies_scraped: summary.total_movies,
+    total_showtimes_scraped: summary.total_showtimes,
+    errors: summary.errors,
+  });
+
+  return status;
+}
+
+async function runOneshot(bus: BusConsumer): Promise<void> {
+  logger.info('[scraper] Mode: oneshot');
 
   try {
-    const raw = await redis.lpop('scrape:jobs');
-    if (!raw) {
+    const job = await bus.popOneJob();
+    if (!job) {
       logger.info('[scraper] No job in queue. Exiting.');
       return;
     }
 
-    const job: ScrapeJob = JSON.parse(raw);
     logger.info(`[scraper] Processing job: reportId=${job.reportId}`);
-    await executeJob(job);
+    await executeJob(job, { emit: (event) => bus.publishProgress(event) });
   } finally {
-    await redis.quit();
-    await disconnectRedis();
+    await disconnectBus();
     await db.end();
   }
 }
 
 // ---------------------------------------------------------------------------
-// Consumer mode: long-running queue consumer
+// Worker mode: long-running queue consumer + cron scheduler
 // ---------------------------------------------------------------------------
 
-async function runConsumer(): Promise<void> {
-  logger.info('[scraper] Mode: consumer (long-running)');
-  const consumer = getRedisConsumer();
+/**
+ * Runs the scrape triggered by a cron tick. This is the "how to scrape" half
+ * of the domain; the `CronScheduler` decides *when* to call it. Gated by
+ * `ENABLE_SCRAPE_CRON` so a freshly-deployed worker registers schedules
+ * (visible in logs/metrics) without firing scrapes until the operator opts in.
+ */
+export async function runScheduledScrape(bus: BusConsumer, schedule: CronSchedule): Promise<void> {
+  if (process.env.ENABLE_SCRAPE_CRON !== 'true') {
+    logger.info(`[scraper] External scheduled scraping disabled (ENABLE_SCRAPE_CRON is not true). Skipping cron execution for "${schedule.name}".`);
+    return;
+  }
 
-  // Graceful shutdown
-  process.on('SIGTERM', async () => {
-    logger.info('[scraper] SIGTERM received, shutting down...');
-    consumer.stop();
-    await disconnectRedis();
-    await db.end();
-    process.exit(0);
-  });
+  logger.info(`[scraper] Cron triggered for "${schedule.name}", starting scrape...`);
 
-  process.on('SIGINT', async () => {
-    logger.info('[scraper] SIGINT received, shutting down...');
-    consumer.stop();
-    await disconnectRedis();
-    await db.end();
-    process.exit(0);
-  });
+  let reportId: number;
+  try {
+    reportId = await createScrapeReport(db, 'cron');
+  } catch (err) {
+    logger.error('[scraper] Failed to create scrape report:', err);
+    return;
+  }
 
-  await consumer.start(async (job) => {
-    await executeJob(job);
-  });
+  const publisher: ProgressPublisher = { emit: (event) => bus.publishProgress(event) };
+
+  try {
+    const summary = await runScraper(publisher);
+
+    const status = await recordScrapeOutcome(reportId, summary);
+    await updateScheduleRunStatus(db, schedule.id, status);
+
+    logger.info(`[scraper] Cron scrape for "${schedule.name}" completed: ${status}`);
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error(`[scraper] Cron scrape for "${schedule.name}" failed:`, err);
+    await updateScrapeReport(db, reportId, {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      errors: [{ theater_name: 'System', error: errorMessage }],
+    }).catch(() => {});
+
+    await updateScheduleRunStatus(db, schedule.id, 'failed').catch(() => {});
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Cron mode: scheduled scraping with dynamic reload
-// ---------------------------------------------------------------------------
+async function runWorker(bus: BusConsumer): Promise<void> {
+  logger.info('[scraper] Mode: worker (queue consumer + scheduler)');
 
-async function runCron(): Promise<void> {
-  const cronModule = await import('node-cron');
-  const cron = cronModule.default;
+  const scheduler = new CronScheduler({
+    bus,
+    executor: (schedule) => runScheduledScrape(bus, schedule),
+    loadEnabledSchedules: async () => (await getEnabledSchedules(db)).map(toCronSchedule),
+  });
 
-  interface ScheduleTask {
-    id: number;
-    name: string;
-    cron_expression: string;
-    task: ReturnType<typeof cron.schedule>;
-  }
-
-  const activeTasks = new Map<number, ScheduleTask>();
-
-  async function executeSchedule(schedule: { id?: number; name: string; cron_expression: string }): Promise<void> {
-    if (process.env.ENABLE_SCRAPE_CRON !== 'true') {
-      logger.info(`[scraper] External scheduled scraping disabled (ENABLE_SCRAPE_CRON is not true). Skipping cron execution for "${schedule.name}".`);
-      return;
-    }
-
-    logger.info(`[scraper] Cron triggered for "${schedule.name}", starting scrape...`);
-
-    let reportId: number;
-    try {
-      reportId = await createScrapeReport(db, 'cron');
-    } catch (err) {
-      logger.error('[scraper] Failed to create scrape report:', err);
-      return;
-    }
-
-    const publisher = getRedisPublisher();
-
-    try {
-      const summary = await runScraper(publisher);
-
-      const status = summary.failed_theaters === 0
-        ? 'success'
-        : summary.successful_theaters > 0
-          ? 'partial_success'
-          : 'failed';
-
-      await updateScrapeReport(db, reportId, {
-        status,
-        completed_at: new Date().toISOString(),
-        total_theaters: summary.total_theaters,
-        successful_theaters: summary.successful_theaters,
-        failed_theaters: summary.failed_theaters,
-        total_movies_scraped: summary.total_movies,
-        total_showtimes_scraped: summary.total_showtimes,
-        errors: summary.errors,
-      });
-
-      if (schedule.id) {
-        await updateScheduleRunStatus(db, schedule.id, status);
-      }
-
-      logger.info(`[scraper] Cron scrape for "${schedule.name}" completed: ${status}`);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      logger.error(`[scraper] Cron scrape for "${schedule.name}" failed:`, err);
-      await updateScrapeReport(db, reportId, {
-        status: 'failed',
-        completed_at: new Date().toISOString(),
-        errors: [{ theater_name: 'System', error: errorMessage }],
-      }).catch(() => {});
-
-      if (schedule.id) {
-        await updateScheduleRunStatus(db, schedule.id, 'failed').catch(() => {});
-      }
-    }
-  }
-
-  function scheduleTask(schedule: { id: number; name: string; cron_expression: string }): ScheduleTask | null {
-    if (!cron.validate(schedule.cron_expression)) {
-      logger.error(`[scraper] Invalid cron expression for "${schedule.name}": ${schedule.cron_expression}`);
-      return null;
-    }
-
-    logger.info(`[scraper] Scheduling "${schedule.name}" with cron: ${schedule.cron_expression}`);
-
-    const task = cron.schedule(schedule.cron_expression, () => {
-      executeSchedule(schedule);
-    });
-
-    return { ...schedule, task };
-  }
-
-  async function handleScheduleChange(event: ScheduleChangeEvent): Promise<void> {
-    const { action, scheduleId, schedule } = event;
-
-    logger.info(`[scraper] Received schedule change event: ${action} for schedule ${scheduleId}`);
-
-    switch (action) {
-      case 'created':
-        if (schedule && schedule.enabled !== false) {
-          const task = scheduleTask(schedule);
-          if (task) {
-            activeTasks.set(scheduleId, task);
-            logger.info(`[scraper] Added new schedule task: "${schedule.name}" (id=${scheduleId})`);
-          }
-        }
-        break;
-
-      case 'updated':
-        activeTasks.get(scheduleId)?.task.stop();
-        activeTasks.delete(scheduleId);
-        if (schedule && schedule.enabled !== false) {
-          const task = scheduleTask(schedule);
-          if (task) {
-            activeTasks.set(scheduleId, task);
-            logger.info(`[scraper] Updated schedule task: "${schedule.name}" (id=${scheduleId})`);
-          }
-        } else {
-          logger.info(`[scraper] Schedule ${scheduleId} is disabled, not scheduling`);
-        }
-        break;
-
-      case 'deleted':
-        activeTasks.get(scheduleId)?.task.stop();
-        activeTasks.delete(scheduleId);
-        logger.info(`[scraper] Removed schedule task: id=${scheduleId}`);
-        break;
-    }
-  }
-
-  async function subscribeToScheduleChanges(): Promise<void> {
-    const subscriber = getRedisSubscriber();
-    await subscriber.subscribe('scraper:schedule:changed', handleScheduleChange);
-  }
-
-  async function loadInitialSchedules(): Promise<void> {
-    try {
-      const schedules = await getEnabledSchedules(db);
-      for (const schedule of schedules) {
-        const task = scheduleTask(schedule);
-        if (task) {
-          activeTasks.set(schedule.id, task);
-        }
-      }
-      logger.info(`[scraper] Loaded ${activeTasks.size} schedule(s) from database`);
-    } catch (err) {
-      logger.warn('[scraper] Failed to load schedules from database:', err);
-    }
-  }
-
-  await loadInitialSchedules();
-  await subscribeToScheduleChanges();
+  await scheduler.start();
 
   if (process.env.ENABLE_SCRAPE_CRON !== 'true') {
     logger.info('[scraper] ENABLE_SCRAPE_CRON is not set to "true". External scheduled scrapes will be skipped when triggered.');
   }
+  logger.info(`[scraper] ${scheduler.size} cron task(s) scheduled. Listening for jobs and schedule changes...`);
 
-  logger.info(`[scraper] ${activeTasks.size} cron task(s) scheduled. Listening for schedule changes...`);
-
-  async function shutdown(): Promise<void> {
-    logger.info('[scraper] Shutting down cron mode...');
-    for (const task of activeTasks.values()) {
-      task.task.stop();
-    }
-    await disconnectRedis();
+  // Graceful shutdown — stop the cron tasks, drain the consumer, close pools.
+  const shutdown = async (): Promise<void> => {
+    logger.info('[scraper] Shutting down worker...');
+    scheduler.stop();
+    bus.stopConsuming();
+    await disconnectBus();
     await db.end();
-  }
+    process.exit(0);
+  };
 
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+
+  await bus.consumeJobs(async (job) => {
+    await executeJob(job, { emit: (event) => bus.publishProgress(event) });
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Direct mode: run once immediately and exit
 // ---------------------------------------------------------------------------
 
-async function runDirect(): Promise<void> {
+async function runDirect(bus: BusConsumer): Promise<void> {
   logger.info('[scraper] Mode: direct (immediate one-time run)');
 
   let reportId: number;
@@ -373,31 +266,16 @@ async function runDirect(): Promise<void> {
   }
 
   try {
-    const publisher = getRedisPublisher();
+    const publisher: ProgressPublisher = { emit: (event) => bus.publishProgress(event) };
     const summary = await runScraper(publisher);
 
     if (reportId !== -1) {
-      const status = summary.failed_theaters === 0
-        ? 'success'
-        : summary.successful_theaters > 0
-          ? 'partial_success'
-          : 'failed';
-
-      await updateScrapeReport(db, reportId, {
-        status,
-        completed_at: new Date().toISOString(),
-        total_theaters: summary.total_theaters,
-        successful_theaters: summary.successful_theaters,
-        failed_theaters: summary.failed_theaters,
-        total_movies_scraped: summary.total_movies,
-        total_showtimes_scraped: summary.total_showtimes,
-        errors: summary.errors,
-      });
+      await recordScrapeOutcome(reportId, summary);
     }
 
     logger.info('[scraper] Direct run completed.');
   } finally {
-    await disconnectRedis();
+    await disconnectBus();
     await db.end();
   }
 }
@@ -412,18 +290,19 @@ async function main(): Promise<void> {
   // Start metrics HTTP endpoint (non-blocking)
   await startMetricsServer();
 
+  // One bus consumer drives every mode — queued jobs, progress publishing,
+  // and schedule-change subscription all flow through this port.
+  const bus = getBusConsumer();
+
   switch (RUN_MODE) {
     case 'oneshot':
-      await runOneshot();
+      await runOneshot(bus);
       break;
     case 'consumer':
-      await runConsumer();
-      break;
-    case 'cron':
-      await runCron();
+      await runWorker(bus);
       break;
     case 'direct':
-      await runDirect();
+      await runDirect(bus);
       break;
     default:
       throw new Error(`Unknown RUN_MODE: ${RUN_MODE}`);

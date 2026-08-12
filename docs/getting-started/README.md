@@ -15,8 +15,7 @@ host-application under Node 24.
 
 ### [Configuration](./configuration.md)
 
-Environment variable reference: required secrets, database, server, scraper,
-and Redis.
+Environment variable reference: required secrets, database, server, and scraper.
 
 ---
 

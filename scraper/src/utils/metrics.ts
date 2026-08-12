@@ -45,11 +45,3 @@ export const showtimesScrapedTotal = new Counter({
   labelNames: ['theater'] as const,
   registers: [registry],
 });
-
-/** Redis queue depth gauge (updated periodically). */
-const redisQueueDepth = new Counter({
-  name: 'redis_queue_depth_total',
-  help: 'Total jobs popped from the Redis scrape queue',
-  labelNames: [] as const,
-  registers: [registry],
-});

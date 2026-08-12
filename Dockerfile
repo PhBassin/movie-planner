@@ -1,141 +1,85 @@
-# ============================================================================
-# Multi-Stage Dockerfile for Theater Scraper
-# ============================================================================
-# Stage 1: Dependencies (Shared)
-# Stage 2: Build Frontend (React + Vite)
-# Stage 3: Build Backend (TypeScript)
-# Stage 4: Production Runtime (Node.js with built assets)
-# ============================================================================
+# Multi-stage image for the Movie Planner web and worker roles.
 
-# ----------------------------------------------------------------------------
-# Stage 1: Dependencies
-# ----------------------------------------------------------------------------
-FROM node:24-alpine AS deps
-
+FROM node:24-slim AS deps
 WORKDIR /app
-
-# Copy root package files
 COPY package.json package-lock.json ./
-# Copy workspace package files to allow correct dependency resolution
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 COPY scraper/package.json ./scraper/
 COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
-
-# Install all dependencies using legacy-peer-deps for React hooks ESLint plugin
-# Remove package-lock.json to regenerate with correct platform-specific bindings
-RUN rm -f package-lock.json && \
-    npm install --legacy-peer-deps && \
+RUN npm ci --legacy-peer-deps && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/* /var/tmp/*
 
-# ----------------------------------------------------------------------------
-# Stage 2: Build Frontend
-# ----------------------------------------------------------------------------
-FROM node:24-alpine AS frontend-builder
-
-ARG VITE_APP_NAME=Movie-Planner
+FROM node:24-slim AS frontend-builder
 WORKDIR /app
-
-# Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-# Copy root files needed for workspaces
 COPY package.json package-lock.json ./
-
-# Copy client source
 COPY client/ ./client/
-
+ARG VITE_APP_NAME=Movie-Planner
+ARG VITE_API_BASE_URL=/api
 ENV VITE_APP_NAME=${VITE_APP_NAME}
-
-# Build frontend workspace
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build --workspace=client && \
     rm -rf node_modules/.cache client/node_modules/.vite
 
-# ----------------------------------------------------------------------------
-# Stage 3: Build Backend
-# ----------------------------------------------------------------------------
-FROM node:24-alpine AS backend-builder
-
+FROM node:24-slim AS web-builder
 WORKDIR /app
-
-# Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-# Copy root files
 COPY package.json package-lock.json ./
-
-# Copy backend source
 COPY server/ ./server/
 COPY packages/ ./packages/
+RUN npm run build --workspace=@movie-planner/scraper-protocol && \
+    cd server && npx tsc -p tsconfig.json && cd /app && \
+    rm -rf node_modules/.cache && \
+    find ./server/dist -name "*.map" -delete
 
-# Build backend workspace
-RUN npm run build --workspace=@movie-planner/server && \
-    rm -rf node_modules/.cache
+FROM node:24-slim AS worker-builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY scraper/ ./scraper/
+COPY packages/ ./packages/
+RUN npm run build --workspace=@movie-planner/scraper-protocol && \
+    cd scraper && npx tsc -p tsconfig.json && cd /app && \
+    rm -rf node_modules/.cache && \
+    find ./scraper/dist \( -name "*.map" -o -name "*.d.ts" \) -delete
 
-# Cleanup build artifacts in builder stage
-RUN find ./server/dist -name "*.map" -delete && \
-    find ./server/dist -name "*.d.ts.map" -delete
-
-# ----------------------------------------------------------------------------
-# Stage 4: Production Runtime
-# ----------------------------------------------------------------------------
-FROM node:24-alpine AS production
-
-RUN apk add --no-cache dumb-init
-
-RUN addgroup -S -g 1001 nodejs && \
-    adduser -S -G nodejs -u 1001 nodejs
+FROM node:24-slim AS production
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends dumb-init chromium fonts-liberation && \
+    rm -rf /var/lib/apt/lists/*
+RUN groupadd -r -g 1001 nodejs && useradd -r -g nodejs -u 1001 -m nodejs
 
 WORKDIR /app
 RUN chown nodejs:nodejs /app
+COPY docker/entrypoint.sh /usr/local/bin/movie-planner-entrypoint
+RUN chmod 755 /usr/local/bin/movie-planner-entrypoint
 
 USER nodejs
-
-# Copy package files for production install
 COPY --chown=nodejs:nodejs package.json package-lock.json ./
 COPY --chown=nodejs:nodejs client/package.json ./client/
 COPY --chown=nodejs:nodejs server/package.json ./server/
 COPY --chown=nodejs:nodejs scraper/package.json ./scraper/
 COPY --chown=nodejs:nodejs packages/scraper-protocol/package.json ./packages/scraper-protocol/
-
-# Install only production dependencies for the server workspace
-# Remove package-lock.json and regenerate to get correct platform-specific bindings
-# (sharp, and any other native modules need this for Alpine Linux)
-RUN rm -f package-lock.json && \
-    npm install --omit=dev --workspace=@movie-planner/server --legacy-peer-deps && \
+RUN npm ci --omit=dev --workspaces --legacy-peer-deps && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/*
 
-# The server workspace needs to run from its directory or the root
-# We will run from the root and point to the server's dist
-
-# Copy built backend from builder
-COPY --from=backend-builder --chown=nodejs:nodejs /app/server/dist ./server/dist
-# Copy only the JSON config file, not the entire directory (to preserve compiled JS files)
-COPY --from=backend-builder --chown=nodejs:nodejs /app/server/src/config/theaters.json ./server/dist/config/theaters.json
-
-# Copy database migrations
+COPY --from=web-builder --chown=nodejs:nodejs /app/server/dist ./server/dist
+COPY --from=web-builder --chown=nodejs:nodejs /app/server/src/config/theaters.json ./server/dist/config/theaters.json
+COPY --from=web-builder --chown=nodejs:nodejs /app/packages/scraper-protocol/dist ./packages/scraper-protocol/dist
+COPY --from=worker-builder --chown=nodejs:nodejs /app/scraper/dist ./scraper/dist
+COPY --from=frontend-builder --chown=nodejs:nodejs /app/client/dist ./server/public
 COPY --chown=nodejs:nodejs migrations ./migrations
 
-# Copy built frontend from builder into server's public directory so it can serve it
-COPY --from=frontend-builder --chown=nodejs:nodejs /app/client/dist ./server/public
-
-USER root
-
-# Aggressive final cleanup
-RUN find /app/server/dist -name "*.d.ts" -delete && \
-    find /app/server/public -name "*.map" -delete && \
-    find /app -name "*.test.js" -delete && \
-    find /app -name "*.spec.js" -delete || true
-
-USER nodejs
-
+ENV CHROME_PATH=/usr/bin/chromium
 EXPOSE 3000
-
+# Role-agnostic healthcheck: the same image runs as `web` (:3000/api/health)
+# or `worker` (:9091/metrics); exactly one role is live per container, so a
+# 200 from either endpoint means healthy. Compose files may override per role.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+  CMD node -e "const http=require('http');const probe=(url)=>new Promise((ok)=>{http.get(url,(r)=>ok(r.statusCode===200)).on('error',()=>ok(false))});Promise.all([probe('http://localhost:3000/api/health'),probe('http://localhost:9091/metrics')]).then(([web,worker])=>process.exit(web||worker?0:1))"
 
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start the application using workspace syntax or pointing to the built file
-CMD ["node", "server/dist/index.js"]
-
+ENTRYPOINT ["dumb-init", "--", "/usr/local/bin/movie-planner-entrypoint"]
+CMD ["web"]

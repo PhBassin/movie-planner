@@ -94,7 +94,7 @@ This makes the link to Selection explicit: a *successful* TheaterSubmission term
 **What a TheaterSubmission is *not*:**
 - Not an **admin-gated request**. There is no approval queue and no waiting state imposed by Staff; the scrape fires on submission (subject only to dedup and throttle).
 - Not a **Selection**. A TheaterSubmission mutates the *shared catalog* and has a side-effect (a scrape); a Selection add is private and side-effect-free.
-- Not a **ScrapeJob**. The TheaterSubmission is the Member-originated act; the `add_theater` ScrapeJob is the work unit it produces on the Redis queue.
+- Not a **ScrapeJob**. The TheaterSubmission is the Member-originated act; the `add_theater` ScrapeJob is the work unit it produces on the Postgres queue.
 
 ### Appearance
 
@@ -122,9 +122,9 @@ The Homepage carries a **New section** ("Nouveautés cette semaine"): the subset
 
 ### Member notification
 
-A transient, best-effort push from the server to a Member's open SSE connection, telling them that a **TheaterSubmission** of theirs just resolved. A Member notification is the *ephemeral* counterpart to the durable outcome record: the **TheaterSubmission** row (surfaced on "Mes soumissions") is the source of truth that persists; the notification is the "it just happened" nudge for a Member who happens to be online. See ADR 0005 for the full model.
+A transient, best-effort push from the server to a Member's open SSE connection, telling them that a **TheaterSubmission** of theirs just resolved. A Member notification is the *ephemeral* counterpart to the durable outcome record: the **TheaterSubmission** row (surfaced on "Mes soumissions") is the source of truth that persists; the notification is the "it just happened" nudge for a Member who happens to be online. The reserved PostgreSQL `member:notices` `LISTEN/NOTIFY` channel (`NOTIFICATION_CHANNELS.memberNotices`) is the future transport extension point; it has no producers or callers yet. See ADR 0005 for the full model.
 
-- **Not an entity.** A notification carries no id, has no read/unread state, and is never persisted. It is published on a Redis `member:notices` pub/sub channel (a peer of `scrape:progress` and `scraper:schedule:changed`, but Member-domain rather than scraping-domain), routed by `member_id` to the Member's live SSE connections on `/api/me/notifications`, and dropped if none are connected. A Member who was offline when a notification fired simply sees the outcome on "Mes soumissions" next visit — nothing is lost, because the submission row already recorded it durably.
+- **Not an entity.** A notification carries no id, has no read/unread state, and is never persisted. It is reserved for the PostgreSQL `member:notices` `LISTEN/NOTIFY` channel (a peer of `scrape:progress` and `scraper:schedule:changed`, but Member-domain rather than scraping-domain), to be routed by `member_id` to the Member's live SSE connections on `/api/me/notifications` once callers exist. A Member who was offline when a notification fired simply sees the outcome on "Mes soumissions" next visit — nothing is lost, because the submission row already recorded it durably.
 - **Three outcomes.** A notification fires for exactly the three async resolution outcomes of a TheaterSubmission: `succeeded`, `succeeded_selection_full` (the scrape worked but the Selection was full, so the cinema was not auto-added — a distinct outcome, since the Member must free a slot and add it from the catalog), and `failed`. **Throttle rejection and dedup downgrade are not notifications** — both resolve synchronously in the `POST` submission response.
 - **Auth-only email.** Notifications never go to email. The mailer (verification, password-reset) is reserved for auth; a submission outcome is not time-critical enough to push off-platform.
 - **Handshake-only auth, per-Member fan-out.** The SSE stream authenticates at connect time and stays open until the client closes it; revocation (suspension, password change) takes effect at the next auth boundary, as elsewhere. The server fans each notification to all of a Member's live connections (multi-device), up to a small per-Member concurrent cap.
@@ -235,12 +235,12 @@ An external website that publishes showtime data and from which one or more Thea
 ## Scraping
 
 **Two origins of a scrape.** Scraping in movie-planner has exactly two origins, and they belong to different actors:
-1. **Operational scraping — owned by Staff.** The scheduled/periodic runs (the `schedules`), full re-scrapes, Resume of incomplete runs, and all monitoring. This is what "scrapping is managed by the admin" means.
+1. **Operational scraping — owned by Staff.** The scheduled/periodic runs (the `scrape_schedules` rows), full re-scrapes, Resume of incomplete runs, and all monitoring. This is what "scrapping is managed by the admin" means.
 2. **Add-triggered one-shot — owned by a Member via a TheaterSubmission.** When a Member submits a new Theater URL, an immediate `add_theater` ScrapeJob fires with no Staff involvement (subject only to dedup and the per-Member throttle). This is the one exception to "Staff own scraping," and it exists so that adding a cinema is never blocked on an admin being available.
 
 Both origins produce the same artifacts downstream (ScrapeReport, ScrapeAttempts, ProgressEvents); they differ only in who originates them and whether they recur.
 
-The terms in this section name the recurring concepts of one end-to-end scrape run. A run is initiated by a ScrapeJob on the Redis queue, executed by the scraper microservice which emits ProgressEvents during the run, and tracked in the database via a ScrapeReport (the run-level record) holding many ScrapeAttempts (one per `(theater, date)` pair). One concept — Resume — lets a stopped/incomplete run be re-issued scoped to only its unfinished attempts. RateLimitConfig governs the API-side request throttling that protects AlloCiné responses from being overwhelmed.
+The terms in this section name the recurring concepts of one end-to-end scrape run. A run is initiated by a ScrapeJob on the Postgres queue, executed by the worker role which emits ProgressEvents during the run, and tracked in the database via a ScrapeReport (the run-level record) holding many ScrapeAttempts (one per `(theater, date)` pair). One concept — Resume — lets a stopped/incomplete run be re-issued scoped to only its unfinished attempts. RateLimitConfig governs the API-side request throttling that protects AlloCiné responses from being overwhelmed.
 
 ### ScrapeAttempt
 
@@ -265,7 +265,7 @@ Terminal states: `success`, `failed`, `rate_limited`, `not_attempted`. There is 
 
 ### ScrapeSummary
 
-The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The server-side copy at `server/src/services/progress-tracker.ts:19` and the scraper-side copy at `scraper/src/types/scraper.ts:113` are now re-exports from the protocol package; the duplicate declarations are gone.
+The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **Canonical home is `packages/scraper-protocol/src/events.ts`.** The server (`server/src/services/progress-tracker.ts`) and the scraper (`scraper/src/types/scraper.ts`) re-export it from the protocol package; the duplicate declarations are gone.
 
 ### ScrapeRun
 
@@ -286,25 +286,36 @@ A Resume always produces a **new** ScrapeReport with `parent_report_id` set to t
 
 ### ScrapeJob
 
-A unit of work submitted by the server over the Redis `scrape:jobs` list for the scraper microservice to execute. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
+A unit of work submitted by the server through the `BusProducer` to the Postgres `scrape_jobs` queue for the worker role to execute. The worker atomically claims the oldest row with `FOR UPDATE SKIP LOCKED`; the row is deleted at claim time, so terminal failures are not retried. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
 
-**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). Both `server/src/services/redis-client.ts` and `scraper/src/redis/client.ts` re-export the type and the `serializeJob` / `parseJob` helpers from the protocol package; the previous duplicate declarations are gone. `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
+**Canonical home is `packages/scraper-protocol/src/jobs.ts`.** The queue implementation is `server/src/services/pg-job-queue.ts` and `scraper/src/bus/pg-job-consumer.ts`; the pub/sub fan-outs run on `LISTEN/NOTIFY` via `PostgresNotificationBus` (`server/src/services/postgres-notification-bus.ts`, `scraper/src/bus/postgres-notification-bus.ts`). `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
 
 The `ScrapeJobScrape.options` shape now has a single canonical declaration that includes `resumeMode` and `pendingAttempts` for the Resume case. Both sides of the wire agree, and the scraper's local `ScrapeOptions` (`scraper/src/scraper/index.ts:140`) is now a scraper-internal type that no longer needs to redeclare wire fields.
 
 ### ProgressEvent
 
-A discrete event published by the scraper onto the Redis `scrape:progress` pub/sub channel during a run, fanned out by the server to connected SSE clients. The union covers run start (`started`), per-theater and per-date lifecycle (`theater_started`, `date_started`, `date_completed`, `date_failed`, `date_stale`), per-movie lifecycle (`movie_started`, `movie_completed`, `movie_failed`), run completion (`completed` with the ScrapeSummary), and fatal failure (`failed`).
+A discrete event published by the scraper onto the PostgreSQL `scrape:progress` `LISTEN/NOTIFY` channel during a run, fanned out by the server to connected SSE clients. The union covers run start (`started`), per-theater and per-date lifecycle (`theater_started`, `date_started`, `date_completed`, `date_failed`, `date_stale`), per-movie lifecycle (`movie_started`, `movie_completed`, `movie_failed`), run completion (`completed` with the ScrapeSummary), and fatal failure (`failed`). Delivery is ephemeral: a notification reaches only the SSE clients connected at the moment it fires, and no historical event is replayed to a late subscriber.
 
-**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The scraper's local declaration at `scraper/src/types/scraper.ts:98` and the server's re-declaration at `server/src/services/progress-tracker.ts:4` are now re-exports from the protocol package.
+**Canonical home is `packages/scraper-protocol/src/events.ts`.** The scraper (`scraper/src/types/scraper.ts`) and the server (`server/src/services/progress-tracker.ts`) re-export it from the protocol package.
 
 ### ScheduleChangeEvent
 
-A fire-and-forget pub/sub notification on the Redis `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the schedules table; the scraper subscribes and re-evaluates its in-process cron jobs in response.
+A fire-and-forget `LISTEN/NOTIFY` notification on the PostgreSQL `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `scrape_schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the `scrape_schedules` table; the scraper subscribes and re-evaluates its in-process cron jobs in response. Delivery is ephemeral and is not a durable schedule-change log: a worker that misses a nudge re-syncs on its next reload.
 
-**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The previous scraper-side declaration at `scraper/src/redis/client.ts:9` and server-side declaration at `server/src/services/redis-client.ts:15` are now re-exports from the protocol package.
+**Canonical home is `packages/scraper-protocol/src/events.ts`.** Wire-format event types are re-exported from the protocol package; transport implementations live under `server/src/services/` and `scraper/src/bus/`.
 
-**ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
+**ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `scrape_schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
+
+**CronSchedule is the scheduler-facing projection, not a new entity.** Per ADR 0009 (decision 3) scheduling folds into the worker role; `CronSchedule` (`scraper/src/scheduler/cron-scheduler.ts`) is the narrow `{ id, name, cronExpression }` shape the worker's `CronScheduler` registers and fires — a projection of a `Schedule` row produced via `toCronSchedule`, not a separate persisted concept. The DB row stays canonical; the projection is volatile, rebuilt on every reload.
+
+### Bus port (`BusProducer`, `BusConsumer`)
+
+The interface seam between the `web` and `worker` roles over the queue and two pub/sub channels above. Both arms run on Postgres (ADR 0009): the `scrape_jobs` queue is consumed with `FOR UPDATE SKIP LOCKED`, and progress + schedule-change pub/sub run over `LISTEN/NOTIFY` (`PostgresNotificationBus`, issue #25). The port is what makes the backend a drop-in: role code depends on the interface, the concrete queue/transport is the swappable part.
+
+- **`BusProducer`** (web side): enqueue jobs, query depth, subscribe to progress for SSE fan-out, publish schedule-change notices.
+- **`BusConsumer`** (worker side): consume/pop jobs, publish progress, subscribe to schedule changes, plus a `disconnect()` lifecycle hook on both.
+
+**Canonical home is `packages/scraper-protocol/src/bus.ts`** (issue #21). The active implementations are composed backends: `server/src/services/bus-producer.ts` (`PostgresBusProducer` = `PgJobQueue` + `PostgresNotificationBus`) and `scraper/src/bus/postgres-consumer.ts` (`PostgresBusConsumer` = `PgJobConsumer` + `PostgresNotificationBus`). The `LISTEN/NOTIFY` channel names and the raw `NotificationBus` transport contract live in `packages/scraper-protocol/src/notifications.ts` (`NOTIFICATION_CHANNELS`, issue #25). `member:notices` is a reserved peer channel (ADR 0005) with no callers in code yet; it joins the port when it gains an implementation.
 
 ### RateLimitConfig
 
@@ -316,6 +327,18 @@ The **admin-facing shape** `RateLimitAuditInfo` (same file) wraps the flat confi
 - Not a per-request decision. The limiter decides per-request allow/deny; the config sets the thresholds.
 - Not the source-side rate limiter that protects AlloCiné (`RateLimitError`). Those are separate concerns: `RateLimitConfig` protects this service's HTTP surface; `RateLimitError` reports when the upstream source has throttled us.
 - Not the same across services. Only the server has an HTTP surface to rate-limit; the scraper has no equivalent shape.
+
+## Application delivery
+
+### Web-served SPA
+
+The compiled React SPA is served by the `web` role alongside the `/api` routes
+from one origin in the production image. Local development keeps the Vite
+development server and proxies `/api` to `web`. The delivery arrangement is an
+application-topology concern, not a domain entity; its implementation lives in
+`Dockerfile`, `client/vite.config.ts`, `server/src/app.ts`, and the compose
+files — `compose.yaml` (dev, issue #27) and `compose.prod.yaml` (production,
+issue #28).
 
 ## Authentication
 

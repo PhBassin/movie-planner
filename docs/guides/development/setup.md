@@ -30,7 +30,7 @@ Complete guide for setting up a local development environment for Movie Planner.
 | **Node.js** | 24.x | Required for the host-application path. `engines: >=24 <25`. |
 | **npm** | 10.x | Included with Node.js. |
 | **Git** | 2.x | |
-| **Docker** | 24.x | For the fully Dockerized path or for Postgres + Redis only. |
+| **Docker** | 24.x | For the fully Dockerized path or for Postgres-only infrastructure. |
 | **Docker Compose** | v2.x | Included with Docker Desktop. |
 
 System: Linux, macOS, or Windows/WSL2. 4 GB RAM minimum.
@@ -64,9 +64,8 @@ cp .env.example .env
 | `JWT_SECRET` | yes | ≥ 32 chars. Generate with `openssl rand -base64 64`. |
 | `POSTGRES_PASSWORD` | yes | Any non-empty value. |
 | `POSTGRES_DB` | no | Defaults to `movie_planner` (the canonical name). |
-| `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:3000`. |
-| `SCRAPE_CRON_SCHEDULE` | no | Cron expression for the scraper-cron service. |
-| `ENABLE_SCRAPE_CRON` | no | `true` enables external scheduled scraping (cron service only). |
+| `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:5173` (Vite dev server; the production SPA is same-origin). |
+| `ENABLE_SCRAPE_CRON` | no | `true` lets the worker fire scheduled scrapes. The worker always loads schedules from the database; this only gates execution. |
 
 ---
 
@@ -82,27 +81,37 @@ npm run dev:logs     # tail logs
 npm run dev:down     # stop
 ```
 
-Services: `db`, `redis`, `server`, `client`, `scraper`, `scraper-cron`.
+Services: `db`, `web`, `client`, `worker`. The `client` service is the local
+Vite development server; the shared application image also contains the
+compiled SPA for production `web` deployments.
 The server auto-applies the consolidated baseline (`docker/init.sql`) on first
 startup of a fresh database, then runs any pending migrations under
 `migrations/`. No external image or volume is required.
 
 ### Path B — Host application: `compose.infra.yaml`
 
-Runs only PostgreSQL and Redis in Docker; the client, server, and scraper run
+Runs only PostgreSQL in Docker; the client, web, and worker run
 on the host under Node 24.
 
 ```bash
 npm install --legacy-peer-deps
-npm run dev:infra     # docker compose -f compose.infra.yaml up -d (Postgres + Redis)
+npm run dev:infra     # docker compose -f compose.infra.yaml up -d (Postgres)
 
 # Initialize the database from the consolidated baseline (first run only):
 npm run server:db:init
 
 # In separate terminals:
-npm run server:dev    # http://localhost:3000
-npm run client:dev    # http://localhost:5173
-npm run scraper:dev   # consumer + cron
+npm run server:dev       # web API on http://localhost:3000
+npm run client:dev       # Vite UI on http://localhost:5173, proxying /api
+npm run scraper:consumer # worker consumer
+```
+
+Type-check each workspace before running the full suite:
+
+```bash
+(cd server && npx tsc --noEmit)
+(cd scraper && npx tsc --noEmit)
+(cd client && npx tsc -b)
 ```
 
 > The legacy `--legacy-peer-deps` flag is required because of known peer-dep

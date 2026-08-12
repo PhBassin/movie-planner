@@ -40,7 +40,7 @@ Error: JWT_SECRET environment variable is required
 echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
 
 # Restart containers
-docker compose restart server
+docker compose restart web
 ```
 
 ---
@@ -58,10 +58,10 @@ docker compose restart server
 docker compose ps
 
 # View recent logs
-docker compose logs --tail=50 server
+docker compose logs --tail=50 web
 
 # Check exit code
-docker inspect server --format='{{.State.ExitCode}}'
+docker inspect web --format='{{.State.ExitCode}}'
 ```
 
 **Common causes:**
@@ -75,21 +75,21 @@ docker inspect server --format='{{.State.ExitCode}}'
 
 ```bash
 # Remove restart policy temporarily to see error
-docker compose up server
+docker compose up web
 
 # Check health check endpoint manually
-docker compose exec server wget -qO- http://localhost:3000/api/health
+docker compose exec web wget -qO- http://localhost:3000/api/health
 ```
 
 ---
 
 ### Service Dependencies Not Starting
 
-**Cause:** `depends_on: healthy` waiting for database/Redis health checks.
+**Cause:** `depends_on: healthy` waiting for the database health check.
 
 **Expected behavior:**
-- `server` waits for `db` and `redis` to be **healthy**
-- `scraper` waits for `db` and `redis` to be **healthy**
+- `web` waits for `db` to be **healthy**
+- `worker` waits for `db` to be **healthy**
 
 **Check dependency status:**
 
@@ -99,8 +99,7 @@ docker compose ps
 
 # Expected output:
 # db      healthy
-# redis   healthy
-# server     running (after deps healthy)
+# web     running (after db is healthy)
 ```
 
 **If dependencies stuck:**
@@ -109,11 +108,8 @@ docker compose ps
 # Check database health
 docker compose exec db pg_isready -U postgres
 
-# Check Redis health
-docker compose exec redis redis-cli ping
-
-# Restart dependencies
-docker compose restart db redis
+# Restart the database dependency
+docker compose restart db
 ```
 
 ---
@@ -123,9 +119,8 @@ docker compose restart db redis
 ### `Error: bind: address already in use`
 
 **Default ports used:**
-- `3000` - Web server (server)
+- `3000` - Web server (web)
 - `5432` - PostgreSQL (db)
-- `6379` - Redis (redis)
 - `3001` - Grafana (monitoring profile)
 - `9090` - Prometheus (monitoring profile)
 - `3100` - Loki (monitoring profile)
@@ -163,7 +158,7 @@ docker compose up -d
 
 ```yaml
 services:
-  server:
+  web:
     ports:
       - "${PORT:-3000}:3000"  # Maps host ${PORT} to container 3000
 ```
@@ -205,13 +200,13 @@ docker compose up -d
 
 ```bash
 # Restart to pick up config changes
-docker compose restart server
+docker compose restart web
 
 # Verify mount
-docker compose exec server ls -la /app/dist/config/
+docker compose exec web ls -la /app/dist/config/
 
 # Force recreate container
-docker compose up -d --force-recreate server
+docker compose up -d --force-recreate web
 ```
 
 **Note:** Config volume mount: `./server/src/config:/app/dist/config`
@@ -277,7 +272,7 @@ healthcheck:
 curl http://localhost:3000/api/health
 
 # Inside container
-docker compose exec server wget -qO- http://localhost:3000/api/health
+docker compose exec web wget -qO- http://localhost:3000/api/health
 
 # Expected response:
 # {"status":"ok","timestamp":"2026-03-05T..."}
@@ -287,13 +282,13 @@ docker compose exec server wget -qO- http://localhost:3000/api/health
 
 ```bash
 # Check if server is listening
-docker compose exec server netstat -tulpn | grep :3000
+docker compose exec web netstat -tulpn | grep :3000
 
 # Check application logs
-docker compose logs server | tail -50
+docker compose logs web | tail -50
 
 # Test without health check
-docker compose up server --no-deps
+docker compose up web --no-deps
 ```
 
 ---
@@ -321,75 +316,15 @@ docker compose exec db pg_isready -U postgres
 
 ---
 
-### Redis Health Check
-
-**Configuration:**
-
-```yaml
-healthcheck:
-  test: ["CMD", "redis-cli", "ping"]
-  interval: 10s
-  timeout: 5s
-  retries: 5
-```
-
-**Manual test:**
-
-```bash
-docker compose exec redis redis-cli ping
-
-# Expected output:
-# PONG
-```
-
----
-
 ## Resource Constraints
-
-### Redis Memory Limit
-
-**Configuration:**
-
-```yaml
-redis:
-  command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
-```
-
-**Settings:**
-- **Memory limit:** 256 MB
-- **Eviction policy:** `allkeys-lru` (least recently used)
-- **Persistence:** AOF enabled
-
-**Impact when limit hit:**
-- Old keys evicted automatically
-- **Scraper queue jobs may be lost** if Redis evicts active jobs
-- No error thrown, silent data loss
-
-**Monitor Redis memory:**
-
-```bash
-# Check memory usage
-docker compose exec redis redis-cli INFO memory | grep used_memory_human
-
-# Check evicted keys count
-docker compose exec redis redis-cli INFO stats | grep evicted_keys
-```
-
-**Increase limit (if needed):**
-
-Edit `docker-compose.yaml`:
-
-```yaml
-command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
-```
 
 ---
 
 ### No Memory Limits on Other Services
 
 **⚠️ Warning:** No explicit memory/CPU limits on:
-- `server`
-- `scraper`
+- `web`
+- `worker`
 - `db`
 
 **Risk:** Services can exhaust host resources.
@@ -398,7 +333,7 @@ command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendo
 
 ```yaml
 services:
-  server:
+  web:
     deploy:
       resources:
         limits:
@@ -419,7 +354,7 @@ services:
 **Check if OOM killed:**
 
 ```bash
-docker inspect server --format='{{.State.OOMKilled}}'
+docker inspect web --format='{{.State.OOMKilled}}'
 ```
 
 **Solution:**
@@ -442,24 +377,22 @@ docker inspect server --format='{{.State.OOMKilled}}'
 ```bash
 # ✅ CORRECT in Docker
 POSTGRES_HOST=db
-REDIS_URL=redis://redis:6379
 
 # ❌ WRONG in Docker
 POSTGRES_HOST=localhost
-REDIS_URL=redis://localhost:6379
 ```
 
 **Test connectivity:**
 
 ```bash
-# From server, ping database
-docker compose exec server ping db
+# From web, ping database
+docker compose exec web ping db
 
 # Check DNS resolution
-docker compose exec server nslookup db
+docker compose exec web nslookup db
 
 # Test PostgreSQL connection
-docker compose exec server psql -h db -U postgres -d ics -c "SELECT 1;"
+docker compose exec web psql -h db -U postgres -d movie_planner -c "SELECT 1;"
 ```
 
 ---
@@ -496,7 +429,7 @@ ERROR: Failed to download Chromium
 DOCKER_BUILDKIT=1 docker compose build --build-arg BUILDKIT_INLINE_CACHE=1
 
 # Or download Playwright browsers manually first
-docker compose build --no-cache server
+docker compose build --no-cache web
 ```
 
 **Dockerfile optimization:**
@@ -558,7 +491,7 @@ docker compose down
 docker compose down -v
 
 # Restart specific service
-docker compose restart server
+docker compose restart web
 
 # View service status
 docker compose ps
@@ -571,29 +504,29 @@ docker compose ps
 docker compose logs
 
 # Follow logs in real-time
-docker compose logs -f server
+docker compose logs -f web
 
 # Last 50 lines
-docker compose logs --tail=50 server
+docker compose logs --tail=50 web
 
 # Filter for errors
-docker compose logs server | grep ERROR
+docker compose logs web | grep ERROR
 ```
 
 ### Debugging
 
 ```bash
 # Inspect container
-docker inspect server
+docker inspect web
 
 # View container processes
-docker compose top server
+docker compose top web
 
 # Execute command in container
-docker compose exec server sh
+docker compose exec web sh
 
 # View resource usage
-docker stats server
+docker stats web
 
 # Validate docker-compose.yaml
 docker compose config
@@ -646,7 +579,7 @@ docker compose stop  # Sends SIGTERM, waits for graceful shutdown
 
 ```yaml
 services:
-  server:
+  web:
     restart: "no"  # Never restart
     # or
     restart: always  # Always restart

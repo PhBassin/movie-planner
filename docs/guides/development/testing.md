@@ -112,7 +112,7 @@ The server package contains comprehensive test coverage across multiple areas:
 - **API Routes**: Authentication, theaters, movies, users, settings, reports
 - **Database**: Queries, migrations, benchmarks, user management, settings
 - **Scraping**: HTML parsing, JSON parsing, HTTP client, utilities
-- **Services**: Theme generation, system info, Redis client
+- **Services**: Theme generation, system info, Postgres bus
 - **Middleware**: Admin authorization, rate limiting
 - **Utilities**: Date functions, image validation, HTML decoding, CORS config
 
@@ -404,6 +404,9 @@ server/
 │   │   │   ├── theater-parser.ts          # Implementation
 │   │   │   ├── theater-parser.test.ts     # Tests
 │   │   │   └── ...
+│   │   ├── postgres-notification-bus.test.ts             # Unit tests
+│   │   ├── postgres-notification-bus.integration.test.ts # Integration tests (need PG_QUEUE_TEST_URL)
+│   │   └── ...
 │   ├── routes/
 │   │   ├── auth.ts                        # Implementation
 │   │   ├── auth.test.ts                   # Tests
@@ -413,8 +416,6 @@ server/
 │       ├── date.test.ts                   # Tests
 │       └── ...
 └── tests/                                 # Dedicated test directory
-    ├── services/
-    │   └── redis-client.test.ts           # Integration tests
     └── fixtures/                          # Test HTML files
         ├── theater-c0072-page.html
         ├── theater-c0089-page.html
@@ -425,7 +426,7 @@ scraper/
 └── tests/unit/                            # Scraper microservice tests
     ├── logger.test.ts
     ├── metrics.test.ts
-    ├── redis-client.test.ts
+    ├── postgres-notification-bus.test.ts
     ├── tracer.test.ts
     └── scraper/
         └── utils.test.ts

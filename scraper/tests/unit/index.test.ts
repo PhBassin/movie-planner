@@ -1,15 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // --- Mocks (must be declared before any imports of the module under test) ---
 
 const mockRunScraper = vi.fn();
 const mockAddTheaterAndScrape = vi.fn();
 const mockUpdateScrapeReport = vi.fn().mockResolvedValue(undefined);
-const mockGetRedisPublisher = vi.fn().mockReturnValue({ emit: vi.fn() });
+const mockCreateScrapeReport = vi.fn().mockResolvedValue(1);
+const mockGetEnabledSchedules = vi.fn().mockResolvedValue([]);
+const mockUpdateScheduleRunStatus = vi.fn().mockResolvedValue(undefined);
+const mockEmit = vi.fn();
 const mockScrapeJobsTotal = { inc: vi.fn() };
 const mockScrapeDurationSeconds = { startTimer: vi.fn().mockReturnValue(vi.fn()) };
 const mockMoviesScrapedTotal = { inc: vi.fn() };
 const mockShowtimesScrapedTotal = { inc: vi.fn() };
+
+// CronScheduler.start() subscribes via the bus and registers cron tasks.
+// node-cron is mocked so no real timers are scheduled.
+const mockCronTask = { stop: vi.fn(), start: vi.fn(), now: vi.fn() };
+vi.mock('node-cron', () => ({
+  default: { validate: () => true, schedule: () => mockCronTask },
+}));
 
 vi.mock('../../src/scraper/index.js', () => ({
   runScraper: mockRunScraper,
@@ -17,14 +27,28 @@ vi.mock('../../src/scraper/index.js', () => ({
 }));
 
 vi.mock('../../src/db/report-queries.js', () => ({
-  createScrapeReport: vi.fn().mockResolvedValue(1),
+  createScrapeReport: (...args: any[]) => mockCreateScrapeReport(...args),
   updateScrapeReport: (...args: any[]) => mockUpdateScrapeReport(...args),
 }));
 
-vi.mock('../../src/redis/client.js', () => ({
-  getRedisPublisher: mockGetRedisPublisher,
-  getRedisConsumer: vi.fn().mockReturnValue({ start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }),
-  disconnectRedis: vi.fn(),
+vi.mock('../../src/db/schedule-queries.js', () => ({
+  getEnabledSchedules: (...args: any[]) => mockGetEnabledSchedules(...args),
+  updateScheduleRunStatus: (...args: any[]) => mockUpdateScheduleRunStatus(...args),
+}));
+
+const mockBus = {
+  progressPublisher: { emit: mockEmit },
+  publishProgress: mockEmit,
+  consumeJobs: vi.fn(),
+  stopConsuming: vi.fn(),
+  popOneJob: vi.fn(),
+  subscribeScheduleChange: vi.fn(),
+  disconnect: vi.fn(),
+};
+
+vi.mock('../../src/bus/bus-consumer.js', () => ({
+  getBusConsumer: vi.fn().mockReturnValue(mockBus),
+  disconnectBus: vi.fn(),
 }));
 
 vi.mock('../../src/db/client.js', () => ({
@@ -43,18 +67,16 @@ vi.mock('../../src/utils/metrics.js', () => ({
   showtimesScrapedTotal: mockShowtimesScrapedTotal,
 }));
 
-// --- Import the function under test (after mocks) ---
-// We test executeJob indirectly by exercising it through the exported
-// function. Since executeJob is not exported, we test it via its
-// integration points: the mocked runScraper and addTheaterAndScrape.
+const mockProgress = { emit: mockEmit };
 
-// We import executeJob by re-exporting it for test purposes via a
-// helper that mirrors what the module does. Instead, we extract it via
-// a workaround: dynamically import the module and call the job handler.
-
-// The cleanest approach: test the dispatcher logic as a pure unit.
-// We'll import the module to exercise its exports, and inspect which
-// scraper function gets called.
+const okSummary = {
+  failed_theaters: 0,
+  successful_theaters: 1,
+  total_theaters: 1,
+  total_movies: 5,
+  total_showtimes: 20,
+  errors: [],
+};
 
 describe('executeJob dispatcher', () => {
   beforeEach(() => {
@@ -80,7 +102,7 @@ describe('executeJob dispatcher', () => {
       triggerType: 'manual',
       reportId: 42,
       options: { mode: 'from_today_limited' },
-    });
+    }, mockProgress);
 
     expect(mockRunScraper).toHaveBeenCalledOnce();
     expect(mockAddTheaterAndScrape).not.toHaveBeenCalled();
@@ -100,7 +122,7 @@ describe('executeJob dispatcher', () => {
       triggerType: 'manual',
       reportId: 43,
       url: 'https://www.allocine.fr/seance/salle_gen_csalle=C0072.html',
-    });
+    }, mockProgress);
 
     expect(mockAddTheaterAndScrape).toHaveBeenCalledOnce();
     expect(mockRunScraper).not.toHaveBeenCalled();
@@ -122,7 +144,7 @@ describe('executeJob dispatcher', () => {
     await executeJob({
       triggerType: 'cron',
       reportId: 44,
-    } as any);
+    } as any, mockProgress);
 
     expect(mockRunScraper).toHaveBeenCalledOnce();
     expect(mockAddTheaterAndScrape).not.toHaveBeenCalled();
@@ -139,7 +161,7 @@ describe('executeJob dispatcher', () => {
       triggerType: 'manual',
       reportId: 45,
       url: 'bad-url',
-    })).resolves.toBeUndefined();
+    }, mockProgress)).resolves.toBeUndefined();
 
     // Should have updated report to failed
     expect(mockUpdateScrapeReport).toHaveBeenCalledWith(
@@ -147,5 +169,71 @@ describe('executeJob dispatcher', () => {
       45,
       expect.objectContaining({ status: 'failed' })
     );
+  });
+});
+
+describe('runScheduledScrape (cron executor)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockScrapeDurationSeconds.startTimer.mockReturnValue(vi.fn());
+    vi.stubEnv('ENABLE_SCRAPE_CRON', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('skips the scrape when ENABLE_SCRAPE_CRON is not true', async () => {
+    vi.stubEnv('ENABLE_SCRAPE_CRON', 'false');
+
+    const { runScheduledScrape } = await import('../../src/index.js');
+
+    await runScheduledScrape(mockBus as any, { id: 1, name: 'Weekly', cronExpression: '0 8 * * 3' });
+
+    expect(mockCreateScrapeReport).not.toHaveBeenCalled();
+    expect(mockRunScraper).not.toHaveBeenCalled();
+  });
+
+  it('creates a cron report, runs the scrape, and records success on the schedule', async () => {
+    mockRunScraper.mockResolvedValue(okSummary);
+
+    const { runScheduledScrape } = await import('../../src/index.js');
+
+    await runScheduledScrape(mockBus as any, { id: 7, name: 'Weekly', cronExpression: '0 8 * * 3' });
+
+    expect(mockCreateScrapeReport).toHaveBeenCalledWith(expect.anything(), 'cron');
+    expect(mockRunScraper).toHaveBeenCalledOnce();
+    expect(mockUpdateScrapeReport).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.objectContaining({ status: 'success', total_movies_scraped: 5 })
+    );
+    expect(mockUpdateScheduleRunStatus).toHaveBeenCalledWith(expect.anything(), 7, 'success');
+  });
+
+  it('records failed status on the report and schedule when the scrape throws', async () => {
+    mockRunScraper.mockRejectedValue(new Error('boom'));
+
+    const { runScheduledScrape } = await import('../../src/index.js');
+
+    await runScheduledScrape(mockBus as any, { id: 8, name: 'Daily', cronExpression: '0 8 * * *' });
+
+    expect(mockUpdateScrapeReport).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.objectContaining({ status: 'failed' })
+    );
+    expect(mockUpdateScheduleRunStatus).toHaveBeenCalledWith(expect.anything(), 8, 'failed');
+  });
+
+  it('aborts cleanly when the scrape report cannot be created', async () => {
+    mockCreateScrapeReport.mockRejectedValue(new Error('db down'));
+
+    const { runScheduledScrape } = await import('../../src/index.js');
+
+    await runScheduledScrape(mockBus as any, { id: 9, name: 'Daily', cronExpression: '0 8 * * *' });
+
+    expect(mockRunScraper).not.toHaveBeenCalled();
+    expect(mockUpdateScheduleRunStatus).not.toHaveBeenCalled();
   });
 });

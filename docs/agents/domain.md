@@ -5,7 +5,7 @@ This repo uses a **single-context** layout. All engineering skills that need to 
 ## Expected locations
 
 - **Domain language / ubiquitous vocabulary:** `CONTEXT.md` at the **repo root**.
-- **Architectural Decision Records:** `docs/adr/` at the **repo root**, with files named `NNNN-short-title.md` (e.g. `0001-use-redis-for-queue.md`).
+- **Architectural Decision Records:** `docs/adr/` at the **repo root**, with files named `NNNN-short-title.md` (e.g. `0005-notification-model.md`).
 
 ## Consumer rules
 

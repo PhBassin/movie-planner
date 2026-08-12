@@ -19,19 +19,7 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  server:
+  web:
     build:
       context: .
       dockerfile: Dockerfile
@@ -45,7 +33,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-movie_planner}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      REDIS_URL: redis://redis:6379
       PORT: 3000
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -53,10 +40,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${TZ:-Europe/Paris}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      ROLE: web
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""]
@@ -79,9 +65,12 @@ services:
     ports:
       - "${CLIENT_PORT:-5173}:5173"
     environment:
-      VITE_API_BASE_URL: http://localhost:${SERVER_PORT:-3000}/api
+      # Keep browser requests on the Vite origin; the dev server proxies /api
+      # to web, matching the same-origin production bundle.
+      VITE_API_BASE_URL: /api
+      VITE_DEV_API_TARGET: http://web:3000
     depends_on:
-      server:
+      web:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:5173', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""]
@@ -90,10 +79,10 @@ services:
       retries: 5
       start_period: 60s
 
-  scraper:
+  worker:
     build:
       context: .
-      dockerfile: Dockerfile.scraper
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       NODE_ENV: development
@@ -102,48 +91,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-movie_planner}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      REDIS_URL: redis://redis:6379
-      RUN_MODE: consumer
+      RUN_MODE: ${RUN_MODE:-consumer}
       SCRAPE_MODE: from_today_limited
       SCRAPE_DAYS: "7"
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${TZ:-Europe/Paris}
+      ROLE: worker
     depends_on:
       db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:9091/metrics', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  scraper-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile.scraper
-    restart: unless-stopped
-    environment:
-      NODE_ENV: development
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB:-movie_planner}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      REDIS_URL: redis://redis:6379
-      RUN_MODE: cron
-      CRON_SCHEDULE: ${SCRAPE_CRON_SCHEDULE:-0 8 * * 3}
-      ENABLE_SCRAPE_CRON: ${ENABLE_SCRAPE_CRON:-false}
-      SCRAPE_MODE: weekly
-      SCRAPE_DAYS: "7"
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      TZ: ${TZ:-Europe/Paris}
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:9091/metrics', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""]
