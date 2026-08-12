@@ -2,7 +2,7 @@
 set -e
 
 # Post-Merge Cleanup Script
-# Safely returns to develop, updates dependencies, and cleans up merged branches.
+# Safely returns to main, updates dependencies, and cleans up merged branches.
 
 # Color codes
 RED='\033[0;31m'
@@ -17,8 +17,8 @@ echo "=================================="
 # Step 1: Pre-flight Safety Checks
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-# Check 1: Not on develop or main
-if [[ "$CURRENT_BRANCH" == "develop" || "$CURRENT_BRANCH" == "main" ]]; then
+# Check 1: Not on main
+if [[ "$CURRENT_BRANCH" == "main" ]]; then
     echo -e "${YELLOW}ℹ️  You're already on the '$CURRENT_BRANCH' branch.${NC}"
     echo ""
     echo "What would you like to do?"
@@ -53,18 +53,18 @@ fi
 if [[ -n "$FEATURE_BRANCH" ]]; then
     # Fetch origin to ensure we have latest refs for comparison
     echo "Fetching origin..."
-    git fetch origin develop > /dev/null 2>&1
+    git fetch origin main > /dev/null 2>&1
 
-    # Check if merged to remote develop (preferred) or local develop
-    if git branch -r --merged origin/develop | grep -q "$FEATURE_BRANCH" || git branch --merged develop | grep -q "$FEATURE_BRANCH"; then
-        echo -e "${GREEN}✅ Verified: Branch merged to develop${NC}"
+    # Check if merged to remote main (preferred) or local main
+    if git branch -r --merged origin/main | grep -q "$FEATURE_BRANCH" || git branch --merged main | grep -q "$FEATURE_BRANCH"; then
+        echo -e "${GREEN}✅ Verified: Branch merged to main${NC}"
     else
         echo -e "${YELLOW}⚠️  WARNING: Branch '$FEATURE_BRANCH' does not appear in merged branches${NC}"
-        echo "This usually means the PR hasn't been merged yet or local develop is outdated."
+        echo "This usually means the PR hasn't been merged yet or local main is outdated."
         echo ""
         echo "What would you like to do?"
         echo "1. Abort cleanup (recommended)"
-        echo "2. Switch to develop but KEEP branch"
+        echo "2. Switch to main but KEEP branch"
         echo "3. Force cleanup (stash & delete branch)"
         echo ""
         read -p "Choose an option (1/2/3): " CHOICE
@@ -101,29 +101,29 @@ else
     echo -e "${GREEN}✅ No uncommitted changes${NC}"
 fi
 
-# Step 4: Switch to Develop
-if [[ "$CURRENT_BRANCH" != "develop" ]]; then
-    echo "Switching to develop..."
-    git checkout develop
+# Step 4: Switch to Main
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    echo "Switching to main..."
+    git checkout main
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Failed to checkout develop${NC}"
+        echo -e "${RED}❌ Failed to checkout main${NC}"
         exit 1
     fi
-    echo -e "${GREEN}📍 Switched to branch 'develop'${NC}"
+    echo -e "${GREEN}📍 Switched to branch 'main'${NC}"
 fi
 
 # Step 5: Pull Latest Changes
 if [[ "$SKIP_PULL" != "true" ]]; then
     BEFORE_PULL=$(git rev-parse HEAD)
     echo "Pulling latest changes..."
-    if ! git pull origin develop; then
-        echo -e "${RED}❌ Error: Pull from origin/develop failed${NC}"
+    if ! git pull origin main; then
+        echo -e "${RED}❌ Error: Pull from origin/main failed${NC}"
         echo "Please resolve conflicts manually."
         exit 1
     fi
     AFTER_PULL=$(git rev-parse HEAD)
     COMMITS_PULLED=$(git rev-list --count $BEFORE_PULL..$AFTER_PULL)
-    echo -e "${GREEN}🔄 Pulled $COMMITS_PULLED new commits from origin/develop${NC}"
+    echo -e "${GREEN}🔄 Pulled $COMMITS_PULLED new commits from origin/main${NC}"
 
     # Check dependencies
     if git diff --name-only $BEFORE_PULL..$AFTER_PULL | grep -q "server/package-lock.json"; then
@@ -164,8 +164,8 @@ if [[ -n "$FEATURE_BRANCH" && "$KEEP_BRANCH" != "true" ]]; then
 fi
 
 # Step 8: Offer Multi-Branch Cleanup
-# Find merged branches excluding main, develop, and current
-MERGED_BRANCHES=$(git branch --merged develop | grep -v "^\*" | grep -vE "^\s*(develop|main)$" | sed 's/^[[:space:]]*//')
+# Find merged branches excluding main and current
+MERGED_BRANCHES=$(git branch --merged main | grep -v "^\*" | grep -vE "^\s*main$" | sed 's/^[[:space:]]*//')
 BRANCH_COUNT=$(echo "$MERGED_BRANCHES" | grep -v "^$" | wc -l | tr -d ' ')
 
 if [[ $BRANCH_COUNT -gt 0 ]]; then
@@ -190,7 +190,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✅ Post-Merge Cleanup Complete${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "📍 Current branch: ${GREEN}develop${NC}"
+echo -e "📍 Current branch: ${GREEN}main${NC}"
 if [[ "$SKIP_PULL" != "true" ]]; then
     echo -e "🔄 Pulled ${GREEN}${COMMITS_PULLED:-0}${NC} new commits"
 fi

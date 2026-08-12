@@ -50,8 +50,8 @@ The `.husky/pre-push` hook runs exactly this and **blocks push on failure**. Eme
 
 ## Git / PR workflow
 
-- Branch from `develop` (never `main`). Naming: `<type>/<issue#>-<desc>` (e.g. `feat/259-add-theater-modal`). Every PR links an issue.
-- Conventional Commits. Version bump is automated on merge to main via PR labels (`major`/`minor`/`patch`) or PR title (`feat:`→minor, `fix:`→patch, `BREAKING CHANGE:`/`[major]`→major). `main` auto-syncs back into `develop`.
+- Branch from `main` only (the old `develop` branch is retired). Naming: `<type>/<issue#>-<desc>` (e.g. `feat/259-add-theater-modal`). Every PR links an issue and targets `main`.
+- Conventional Commits. Releases are manual: dispatch the **Prepare Release** workflow with a version to open a `release/<version>` PR against `main`; merging it creates the `vX.Y.Z` tag and GitHub Release (**Tag & Release** workflow). See `docs/guides/development/cicd.md`.
 
 ## Tooling notes
 
