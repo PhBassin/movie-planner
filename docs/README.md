@@ -31,12 +31,13 @@ The documentation follows the [Divio Documentation System](https://documentation
 - [White-Label Configuration](./guides/administration/white-label.md)
 - [User Management](./guides/administration/user-management.md)
 
-**[Deployment (local only)](./guides/deployment/)** — Docker and networking for local dev
+**[Deployment](./guides/deployment/)** — Docker and networking for local dev and production
+- [Production Deployment](./guides/deployment/production.md) — `compose.prod.yaml` (web + worker + db)
 - [Docker Setup](./guides/deployment/docker.md) — `compose.yaml` and `compose.infra.yaml`
 - [Networking](./guides/deployment/networking.md) — local ports and proxies
 
-> Production/VPS deployment, GHCR publication, monitoring, scaling, and SSH
-> backup/restore are no longer supported. See the
+> GHCR publication, monitoring, scaling, and SSH backup/restore are no longer
+> supported. Production runs on one box via `compose.prod.yaml`. See the
 > [independence cleanup plan](./plans/independence-cleanup.md).
 
 ### Reference

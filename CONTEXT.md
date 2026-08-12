@@ -336,8 +336,9 @@ The compiled React SPA is served by the `web` role alongside the `/api` routes
 from one origin in the production image. Local development keeps the Vite
 development server and proxies `/api` to `web`. The delivery arrangement is an
 application-topology concern, not a domain entity; its implementation lives in
-`Dockerfile`, `client/vite.config.ts`, `server/src/app.ts`, and `compose.yaml`
-(issue #27).
+`Dockerfile`, `client/vite.config.ts`, `server/src/app.ts`, and the compose
+files — `compose.yaml` (dev, issue #27) and `compose.prod.yaml` (production,
+issue #28).
 
 ## Authentication
 

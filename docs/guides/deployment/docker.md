@@ -1,30 +1,34 @@
 # Docker Setup
 
-Movie Planner ships two local development compose files. The default compose
-file builds one application image and runs it as separate `web` and `worker`
-roles; there is no registry publication. The image also contains the compiled
-SPA, which the `web` role serves from the same origin as the API.
+Movie Planner ships two local development compose files and one production
+compose file. The development compose files build one application image and
+run it as separate `web` and `worker` roles; there is no registry publication.
+The image also contains the compiled SPA, which the `web` role serves from the
+same origin as the API.
 
 **Related:**
+- [Production](./production.md) — `compose.prod.yaml`, deploy + smoke test
 - [Setup guide](../development/setup.md) — host-app prerequisites
 - [Configuration](../../getting-started/configuration.md) — environment variables
 - [Networking](./networking.md) — local ports and proxies
 
 ---
 
-## The two compose files
+## The compose files
 
 | File | Path | What runs in Docker |
 |------|------|---------------------|
 | `compose.yaml` | Default, fully Dockerized | Postgres, web, client (Vite), worker |
 | `compose.infra.yaml` | Host-application (Node 24) | Postgres only |
+| `compose.prod.yaml` | Production deployment (ADR 0009) | Postgres, web, worker |
 
 The `client` service is intentionally a development-only Vite server. A
 production deployment runs the image's `web` role directly; it does not need a
 separate client container. The production image serves `/api/*` as API routes,
 static assets from the client build, and `index.html` for client-side routes.
 
-Compose services use short names (`db`, `web`, `client`, `worker`)
+See [Production](./production.md) for the production compose file and its
+smoke test. Compose services use short names (`db`, `web`, `client`, `worker`)
 without fixed `container_name` values. Compose supplies the
 `movie-planner` resource prefix.
 

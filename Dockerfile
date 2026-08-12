@@ -68,6 +68,7 @@ RUN npm ci --omit=dev --workspaces --legacy-peer-deps && \
 
 COPY --from=web-builder --chown=nodejs:nodejs /app/server/dist ./server/dist
 COPY --from=web-builder --chown=nodejs:nodejs /app/server/src/config/theaters.json ./server/dist/config/theaters.json
+COPY --from=web-builder --chown=nodejs:nodejs /app/packages/scraper-protocol/dist ./packages/scraper-protocol/dist
 COPY --from=worker-builder --chown=nodejs:nodejs /app/scraper/dist ./scraper/dist
 COPY --from=frontend-builder --chown=nodejs:nodejs /app/client/dist ./server/public
 COPY --chown=nodejs:nodejs migrations ./migrations
