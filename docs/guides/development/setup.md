@@ -64,7 +64,7 @@ cp .env.example .env
 | `JWT_SECRET` | yes | ≥ 32 chars. Generate with `openssl rand -base64 64`. |
 | `POSTGRES_PASSWORD` | yes | Any non-empty value. |
 | `POSTGRES_DB` | no | Defaults to `movie_planner` (the canonical name). |
-| `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:3000,http://localhost:5173`. |
+| `ALLOWED_ORIGINS` | no | CORS allow-list. Defaults to `http://localhost:5173` (Vite dev server; the production SPA is same-origin). |
 | `ENABLE_SCRAPE_CRON` | no | `true` lets the worker fire scheduled scrapes. The worker always loads schedules from the database; this only gates execution. |
 
 ---

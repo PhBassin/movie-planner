@@ -41,7 +41,7 @@ const serverRegistry = new Registry();
 collectDefaultMetrics({ register: serverRegistry, prefix: 'ics_web_' });
 
 export interface AppOptions {
-  publicPath?: string;
+  staticRoot?: string;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -238,10 +238,10 @@ export function createApp(options: AppOptions = {}) {
   // Serve React static files when the built client is present (public/index.html)
   // This is independent of NODE_ENV — the built assets exist in Docker images
   // and after local production builds regardless of runtime mode.
-  const publicPath = options.publicPath ?? path.join(__dirname, '../public');
-  const indexPath = path.join(publicPath, 'index.html');
+  const staticRoot = options.staticRoot ?? path.join(__dirname, '../public');
+  const indexPath = path.join(staticRoot, 'index.html');
   if (fs.existsSync(indexPath)) {
-    app.use(express.static(publicPath));
+    app.use(express.static(staticRoot));
 
     // Serve index.html for all non-API routes (SPA support)
     app.get('{*splat}', generalLimiter, (_req, res) => {
