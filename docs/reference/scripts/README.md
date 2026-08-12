@@ -46,7 +46,7 @@ Restores the local database from a backup file.
 
 The restore is atomic and fails loudly:
 
-- `server`, `scraper`, and `scraper-cron` are stopped first so the restore can
+- `web` and `worker` are stopped first so the restore can
   take its locks, and restarted afterwards whatever the outcome.
 - A safety backup (`movie_planner_before_restore_*.sql.gz`) is written first.
 - The dump is applied in a single transaction with `ON_ERROR_STOP`. If any

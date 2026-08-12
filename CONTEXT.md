@@ -265,7 +265,7 @@ Terminal states: `success`, `failed`, `rate_limited`, `not_attempted`. There is 
 
 ### ScrapeSummary
 
-The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The server-side copy at `server/src/services/progress-tracker.ts:19` and the scraper-side copy at `scraper/src/types/scraper.ts:113` are now re-exports from the protocol package; the duplicate declarations are gone.
+The structured result of one scrape run, attached to the final `'completed'` (or `'failed'`) ProgressEvent. Carries run-level counters (theaters / movies / showtimes / dates / duration / per-error list) and a final `status`. **Canonical home is `packages/scraper-protocol/src/events.ts`.** The server (`server/src/services/progress-tracker.ts`) and the scraper (`scraper/src/types/scraper.ts`) re-export it from the protocol package; the duplicate declarations are gone.
 
 ### ScrapeRun
 
@@ -288,7 +288,7 @@ A Resume always produces a **new** ScrapeReport with `parent_report_id` set to t
 
 A unit of work submitted by the server through the `BusProducer` to the Postgres `scrape_jobs` queue for the worker role to execute. The worker atomically claims the oldest row with `FOR UPDATE SKIP LOCKED`; the row is deleted at claim time, so terminal failures are not retried. A ScrapeJob is a **discriminated union**: `{ type: 'scrape' }` for a standard run and `{ type: 'add_theater' }` for fetching metadata for a new AlloCiné URL and scraping everything it publishes. Every job carries a `reportId`.
 
-**Canonical home is `packages/scraper-protocol/src/jobs.ts`** (issue #1212). The queue implementation is `server/src/services/pg-job-queue.ts` and `scraper/src/bus/pg-job-consumer.ts`; the pub/sub fan-outs run on `LISTEN/NOTIFY` via `PostgresNotificationBus` (`server/src/services/postgres-notification-bus.ts`, `scraper/src/bus/postgres-notification-bus.ts`). `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
+**Canonical home is `packages/scraper-protocol/src/jobs.ts`.** The queue implementation is `server/src/services/pg-job-queue.ts` and `scraper/src/bus/pg-job-consumer.ts`; the pub/sub fan-outs run on `LISTEN/NOTIFY` via `PostgresNotificationBus` (`server/src/services/postgres-notification-bus.ts`, `scraper/src/bus/postgres-notification-bus.ts`). `parseJob` validates the discriminated union at the parse boundary — the safety net that catches any future drift.
 
 The `ScrapeJobScrape.options` shape now has a single canonical declaration that includes `resumeMode` and `pendingAttempts` for the Resume case. Both sides of the wire agree, and the scraper's local `ScrapeOptions` (`scraper/src/scraper/index.ts:140`) is now a scraper-internal type that no longer needs to redeclare wire fields.
 
@@ -296,13 +296,13 @@ The `ScrapeJobScrape.options` shape now has a single canonical declaration that 
 
 A discrete event published by the scraper onto the PostgreSQL `scrape:progress` `LISTEN/NOTIFY` channel during a run, fanned out by the server to connected SSE clients. The union covers run start (`started`), per-theater and per-date lifecycle (`theater_started`, `date_started`, `date_completed`, `date_failed`, `date_stale`), per-movie lifecycle (`movie_started`, `movie_completed`, `movie_failed`), run completion (`completed` with the ScrapeSummary), and fatal failure (`failed`). Delivery is ephemeral: a notification reaches only the SSE clients connected at the moment it fires, and no historical event is replayed to a late subscriber.
 
-**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). The scraper's local declaration at `scraper/src/types/scraper.ts:98` and the server's re-declaration at `server/src/services/progress-tracker.ts:4` are now re-exports from the protocol package.
+**Canonical home is `packages/scraper-protocol/src/events.ts`.** The scraper (`scraper/src/types/scraper.ts`) and the server (`server/src/services/progress-tracker.ts`) re-export it from the protocol package.
 
 ### ScheduleChangeEvent
 
 A fire-and-forget `LISTEN/NOTIFY` notification on the PostgreSQL `scraper:schedule:changed` channel telling the scraper to reload its local cron registrations after the admin has created, updated, or deleted a `scrape_schedules` row. The event carries `action: 'created' | 'updated' | 'deleted'`, `scheduleId`, and the optional denormalized `schedule` snapshot. The **server is the source of truth** for the `scrape_schedules` table; the scraper subscribes and re-evaluates its in-process cron jobs in response. Delivery is ephemeral and is not a durable schedule-change log: a worker that misses a nudge re-syncs on its next reload.
 
-**Canonical home is `packages/scraper-protocol/src/events.ts`** (issue #1212). Wire-format event types are re-exported from the protocol package; transport implementations live under `server/src/services/` and `scraper/src/bus/`.
+**Canonical home is `packages/scraper-protocol/src/events.ts`.** Wire-format event types are re-exported from the protocol package; transport implementations live under `server/src/services/` and `scraper/src/bus/`.
 
 **ScheduleChangeEvent is not Schedule.** A `Schedule` is the persisted row in the `scrape_schedules` table (server-admin CRUD via `routes/scraper-schedules.ts`); a `ScheduleChangeEvent` is the live pub/sub notification that one of those rows changed. The event's optional `schedule` snapshot is a payload convenience, NOT a redefinition of the row — readers should fetch the row from the DB if they need canonical state.
 
