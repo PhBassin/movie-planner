@@ -9,7 +9,7 @@ export const getCorsOptions = (opts: CorsConfigOptions = {}): CorsOptions => {
   const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
   const allowedOrigins = allowedOriginsEnv
     ? allowedOriginsEnv.split(',').map((origin) => origin.trim())
-    : ['http://localhost:5173']; // Vite dev server (production SPA is same-origin)
+    : ['http://localhost:3000', 'http://localhost:5173']; // Web and Vite dev server
 
   return {
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
