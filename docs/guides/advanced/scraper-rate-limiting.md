@@ -164,10 +164,8 @@ SCRAPE_THEATER_DELAY_MS=1000  # ❌ Too fast
 SCRAPE_THEATER_DELAY_MS=3000  # ✅ Safer
 SCRAPE_THEATER_DELAY_MS=5000  # ✅ Very conservative
 
-# Apply by restarting:
-docker compose restart server
-# or for microservice mode:
-docker compose restart scraper
+# Apply by restarting the worker (the worker role runs the scraper):
+docker compose restart worker
 ```
 
 **2. Reduce Theater Count**
@@ -184,13 +182,13 @@ SELECT * FROM theaters WHERE id % 2 = 0;
 
 **3. Check for Competing Requests**
 
-If running multiple scraper instances on same IP:
+If running multiple worker instances on same IP:
 ```bash
-# Check active scraper processes
-docker compose ps | grep scraper
+# Check active worker processes
+docker compose ps | grep worker
 
 # Reduce to single instance temporarily
-docker compose stop scraper-cron
+docker compose stop worker
 ```
 
 **4. Check Current AlloCiné Status**
@@ -513,7 +511,7 @@ scrape_duration_seconds               # How long scrapes take
 **In application logs:**
 
 ```bash
-docker compose logs server | grep -i "429\|403\|timeout"
+docker compose logs worker | grep -i "429\|403\|timeout"
 
 # Example output showing rate limit:
 2026-03-18T10:15:23Z [scraper] Theater C0042: 429 Too Many Requests
@@ -530,13 +528,13 @@ docker compose logs server | grep -i "429\|403\|timeout"
 LOG_LEVEL=debug
 
 # Restart
-docker compose restart server
+docker compose restart worker
 ```
 
 **View detailed logs:**
 
 ```bash
-docker compose logs -f server | grep -i "429\|rate"
+docker compose logs -f worker | grep -i "429\|rate"
 ```
 - Search for scrape trace
 - See exact timing of each request
@@ -579,9 +577,9 @@ For **scaling to 50+ theaters**:
    - Even theaters: 3am Wednesday
    - Odd theaters: 9am Wednesday
 
-2. **Use multiple scraper instances**
+2. **Use multiple worker instances**
    ```bash
-   docker compose up -d --scale scraper=2
+   docker compose up -d --scale worker=2
    ```
 
 3. **Monitor queue depth**

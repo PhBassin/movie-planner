@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Services holding PostgreSQL connections. They must be stopped for the
 # duration of the restore, otherwise the DROP statements block on their locks.
-DB_CLIENT_SERVICES=(server scraper scraper-cron)
+DB_CLIENT_SERVICES=(web worker)
 
 if [ -z "${1:-}" ]; then
     echo "❌ Error: No backup file specified"
