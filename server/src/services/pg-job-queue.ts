@@ -15,15 +15,6 @@ import { parseStrictInt } from '../utils/number.js';
 // without a DB.
 // ---------------------------------------------------------------------------
 
-/**
- * Build a pg.Pool config from the same environment the application uses
- * (DATABASE_URL wins; otherwise the POSTGRES_* vars). Shared with the worker
- * and the pub/sub backends via `pgConnectionConfig` in scraper-protocol.
- */
-function poolConfigFromEnv(): pg.PoolConfig {
-  return pgConnectionConfig();
-}
-
 const INSERT_JOB = 'INSERT INTO scrape_jobs (payload) VALUES ($1::jsonb)';
 const COUNT_JOBS = 'SELECT COUNT(*)::text AS count FROM scrape_jobs';
 
@@ -32,7 +23,7 @@ export class PgJobQueue {
 
   constructor(connectionString?: string) {
     this.pool = new pg.Pool(
-      connectionString ? { connectionString } : poolConfigFromEnv(),
+      connectionString ? { connectionString } : pgConnectionConfig(),
     );
   }
 

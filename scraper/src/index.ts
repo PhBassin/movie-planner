@@ -97,27 +97,12 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
     const scrapeJob = job as ScrapeJobScrape;
     const summary = await runScraper(progress, scrapeJob.options);
 
-    const status = summary.failed_theaters === 0
-      ? 'success'
-      : summary.successful_theaters > 0
-        ? 'partial_success'
-        : 'failed';
+    const status = await recordScrapeOutcome(job.reportId, summary);
 
     durationTimer();
     scrapeJobsTotal.inc({ status, trigger: job.triggerType });
     moviesScrapedTotal.inc({ theater: 'all' }, summary.total_movies);
     showtimesScrapedTotal.inc({ theater: 'all' }, summary.total_showtimes);
-
-    await updateScrapeReport(db, job.reportId, {
-      status,
-      completed_at: new Date().toISOString(),
-      total_theaters: summary.total_theaters,
-      successful_theaters: summary.successful_theaters,
-      failed_theaters: summary.failed_theaters,
-      total_movies_scraped: summary.total_movies,
-      total_showtimes_scraped: summary.total_showtimes,
-      errors: summary.errors,
-    });
 
     logger.info(`[scraper] Job ${job.reportId} completed with status: ${status}`);
   } catch (err) {
@@ -139,10 +124,10 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
 
 /**
  * Derive the outcome status from a scrape summary and record it on the
- * report. Shared by the cron executor and the direct-run path so the status
- * rule (no failures → success, some → partial, none → failed) and the report
- * fields live in one place. Returns the status so callers can also update the
- * originating schedule row.
+ * report. Shared by the job executor, the cron executor, and the direct-run
+ * path so the status rule (no failures → success, some → partial, none →
+ * failed) and the report fields live in one place. Returns the status so
+ * callers can also update metrics and the originating schedule row.
  */
 async function recordScrapeOutcome(reportId: number, summary: ScrapeSummary): Promise<'success' | 'partial_success' | 'failed'> {
   const status = summary.failed_theaters === 0

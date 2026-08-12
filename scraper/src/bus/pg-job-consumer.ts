@@ -18,10 +18,6 @@ const CLAIM_JOB = `
 
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 
-function poolConfigFromEnv(): pg.PoolConfig {
-  return pgConnectionConfig();
-}
-
 /** Postgres queue consumer; claiming removes a job atomically before handling. */
 export class PgJobConsumer {
   private readonly pool: pg.Pool;
@@ -32,7 +28,7 @@ export class PgJobConsumer {
     private readonly pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   ) {
     this.pool = new pg.Pool(
-      connectionString ? { connectionString } : poolConfigFromEnv(),
+      connectionString ? { connectionString } : pgConnectionConfig(),
     );
   }
 

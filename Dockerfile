@@ -75,8 +75,11 @@ COPY --chown=nodejs:nodejs migrations ./migrations
 
 ENV CHROME_PATH=/usr/bin/chromium
 EXPOSE 3000
+# Role-agnostic healthcheck: the same image runs as `web` (:3000/api/health)
+# or `worker` (:9091/metrics); exactly one role is live per container, so a
+# 200 from either endpoint means healthy. Compose files may override per role.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+  CMD node -e "const http=require('http');const probe=(url)=>new Promise((ok)=>{http.get(url,(r)=>ok(r.statusCode===200)).on('error',()=>ok(false))});Promise.all([probe('http://localhost:3000/api/health'),probe('http://localhost:9091/metrics')]).then(([web,worker])=>process.exit(web||worker?0:1))"
 
 ENTRYPOINT ["dumb-init", "--", "/usr/local/bin/movie-planner-entrypoint"]
 CMD ["web"]
