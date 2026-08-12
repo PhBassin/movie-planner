@@ -62,7 +62,7 @@ describe('getCorsOptions', () => {
     }
   });
 
-  it('should default to the Vite development origin if ALLOWED_ORIGINS is not set', () => {
+  it('should default to the web and Vite development origins if ALLOWED_ORIGINS is not set', () => {
     delete process.env.ALLOWED_ORIGINS;
     const options = getCorsOptions();
 
@@ -72,6 +72,10 @@ describe('getCorsOptions', () => {
     if (typeof originCheck === 'function') {
       // @ts-ignore
       originCheck('http://localhost:5173', callback);
+      expect(callback).toHaveBeenCalledWith(null, true);
+
+      // @ts-ignore
+      originCheck('http://localhost:3000', callback);
       expect(callback).toHaveBeenCalledWith(null, true);
     }
   });

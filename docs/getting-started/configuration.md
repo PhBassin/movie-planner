@@ -4,16 +4,18 @@ Environment variable reference for Movie Planner.
 
 ## How configuration works
 
-Movie Planner reads its environment through two compose files (`compose.yaml`
-for the fully-Dockerized path, `compose.infra.yaml` for the host-app path)
-plus a small set of host-side overrides for the host-app path. Secrets and
-deployment-specific values go in `.env`; everything else is hardcoded with
-sensible defaults inside the compose files.
+Movie Planner reads its environment through three compose files (`compose.yaml`
+for the fully-Dockerized path, `compose.infra.yaml` for the host-app path, and
+`compose.prod.yaml` for the production deployment) plus a small set of host-side
+overrides for the host-app path. Secrets and deployment-specific values go in
+`.env`; everything else is hardcoded with sensible defaults inside the compose
+files.
 
 | File | Purpose | When to use |
 |------|---------|-------------|
 | `.env.example` | Required base template (secrets + a few knobs). | Always copy to `.env` first. |
 | `.env.dev.example` | Host-application overrides (Node 24). | Append to `.env` only when using `compose.infra.yaml`. |
+| `.env.prod.example` | Production template (`compose.prod.yaml`). | Copy to `.env` on the production host. |
 
 Quick start:
 

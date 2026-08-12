@@ -344,7 +344,7 @@ describe('App - SPA serving', () => {
   });
 
   it('serves the SPA entry point for client-side routes without changing API 404s', async () => {
-    const app = createApp({ staticRoot });
+    const app = createApp({ publicPath: staticRoot });
 
     const page = await request(app)
       .get('/theater/42')
