@@ -79,9 +79,10 @@ info "Enqueuing a smoke-test scrape job and watching the worker consume it..."
 
 PAYLOAD='{"type":"scrape","reportId":1,"triggerType":"manual","options":{"mode":"from_today_limited","days":1,"theaterId":"C0153"}}'
 
-JOB_ID=$(docker compose -f "$COMPOSE_FILE" exec -T db \
-  psql -U "$DB_USER" -d "$DB_NAME" -v payload="$PAYLOAD" -tAc \
-  "INSERT INTO scrape_jobs (payload) VALUES (:'payload'::jsonb) RETURNING id;" \
+# psql does not expand -v variables inside -c, so pipe the SQL via stdin.
+JOB_ID=$(echo "INSERT INTO scrape_jobs (payload) VALUES (:'payload'::jsonb) RETURNING id;" \
+  | docker compose -f "$COMPOSE_FILE" exec -T db \
+    psql -U "$DB_USER" -d "$DB_NAME" -v payload="$PAYLOAD" -tA \
   | tr -d '[:space:]') \
   || fail "Could not insert smoke-test job into scrape_jobs"
 [ -n "$JOB_ID" ] || fail "Could not read the inserted job id"
