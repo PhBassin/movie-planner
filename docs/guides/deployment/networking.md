@@ -67,7 +67,7 @@ ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 #                                      Add your server's LAN IP
 
 # Restart the container to apply changes
-docker compose restart server
+docker compose restart web
 ```
 
 ---
@@ -198,7 +198,7 @@ curl ifconfig.me
 ```bash
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000,http://203.0.113.45:3000
 
-docker compose restart server
+docker compose restart web
 ```
 
 ---
@@ -251,7 +251,7 @@ cat .env | grep ALLOWED_ORIGINS
 echo "ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000" >> .env
 
 # 3. Restart container
-docker compose restart server
+docker compose restart web
 
 # 4. Clear browser cache and reload page
 ```
@@ -281,7 +281,7 @@ Add the exact origin (including `http://`) to `ALLOWED_ORIGINS` in `.env`, then 
 # Add the origin shown in the error message
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 
-docker compose restart server
+docker compose restart web
 ```
 
 **Multiple IPs:**
@@ -354,7 +354,7 @@ curl http://192.168.1.100:3000/api/health
 # Update CORS to include LAN IP
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 
-docker compose restart server
+docker compose restart web
 ```
 
 ---

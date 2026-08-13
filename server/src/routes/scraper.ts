@@ -73,7 +73,7 @@ router.post('/trigger', scraperLimiter, requireAuth, async (req: AuthRequest, re
       success: true,
       data: {
         reportId,
-        message: 'Scrape job queued for microservice',
+        message: 'Scrape job queued for worker',
         queueDepth,
       },
     };
@@ -127,7 +127,7 @@ router.post('/resume/:reportId', scraperLimiter, requireAuth, async (req: AuthRe
         reportId: newReportId,
         parentReportId: reportId,
         pendingAttempts: pendingAttempts.length,
-        message: 'Resume job queued for microservice',
+        message: 'Resume job queued for worker',
         queueDepth,
       },
     };

@@ -33,7 +33,7 @@ POST /api/scraper/trigger
   "success": true,
   "data": {
     "reportId": 43,
-    "message": "Scrape job queued for microservice",
+    "message": "Scrape job queued for worker",
     "queueDepth": 2
   }
 }
@@ -284,7 +284,7 @@ POST /api/scraper/resume/:reportId
   "data": {
     "reportId": 124,
     "parentReportId": 123,
-    "message": "Resume job queued for microservice",
+    "message": "Resume job queued for worker",
     "queueDepth": 1,
     "pendingAttempts": [
       { "theater_id": "C0042", "date": "2026-03-26" },
@@ -551,7 +551,7 @@ POST /api/scraper/schedules/:id/trigger
   "success": true,
   "data": {
     "reportId": 43,
-    "message": "Scrape job queued for microservice",
+    "message": "Scrape job queued for worker",
     "queueDepth": 2
   }
 }

@@ -92,7 +92,7 @@ Scraping failures and debugging.
 - HTML structure changes
 - Rate limiting
 - Progress tracking issues
-- Microservice mode problems
+- Worker role problems
 
 **Common Issues:**
 - Theater pages not found (404)
@@ -113,17 +113,17 @@ Scraping failures and debugging.
 docker compose ps
 
 # Logs for specific service
-docker compose logs server
+docker compose logs web
 docker compose logs db
 
 # Follow logs
-docker compose logs -f server
+docker compose logs -f web
 ```
 
 ### Database Access
 ```bash
 # Connect to database
-docker compose exec db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d movie_planner
 
 # Check tables
 \dt

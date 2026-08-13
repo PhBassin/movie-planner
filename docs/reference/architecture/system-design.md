@@ -351,7 +351,7 @@ Browser → GET /api/theme.css
 - **Observability**: Per-service metrics and distributed tracing
 - **Simplicity**: Single code path, no feature flags required
 
-> Prior to v4.x, an in-process mode coexisted with the microservice. It was removed to simplify the architecture.
+> Prior to v4.x, an in-process mode coexisted with the worker role. It was removed to simplify the architecture.
 
 ---
 

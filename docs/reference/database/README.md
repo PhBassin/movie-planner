@@ -344,17 +344,17 @@ cd server
 npm run db:migrate
 
 # Docker Compose (automatic on startup)
-docker compose exec server npm run db:migrate
+docker compose exec web npm run db:migrate
 
 # Production
-docker compose exec server npm run db:migrate
+docker compose exec web npm run db:migrate
 ```
 
 ### Checking Schema
 
 ```bash
 # Connect to PostgreSQL
-docker compose exec db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d movie_planner
 
 # Inside psql:
 \dt                    # List tables

@@ -243,12 +243,12 @@ CREATE INDEX idx_showtimes_date_theater ON showtimes(date, theater_id);
 
 ### Application Metrics
 
-**Prometheus Metrics** (scraper microservice only):
+**Prometheus Metrics** (scraper worker only):
 - `scraper_theater_scrape_duration_seconds` - Scrape duration per theater
 - `scraper_movies_scraped_total` - Total movies scraped
 - `scraper_errors_total` - Total scrape errors
 
-**Access**: `http://localhost:9091/metrics` (scraper container)
+**Access**: `http://localhost:9091/metrics` (worker container)
 
 ### Logging Performance Data
 
@@ -358,10 +358,10 @@ curl -H "Accept-Encoding: gzip" http://localhost:3000/api/movies -I
 **Diagnosis**:
 ```bash
 # Check query logs
-docker compose logs server | grep "duration"
+docker compose logs web | grep "duration"
 
 # Monitor database connections
-docker compose exec db psql -U postgres -d ics -c "SELECT count(*) FROM pg_stat_activity;"
+docker compose exec db psql -U postgres -d movie_planner -c "SELECT count(*) FROM pg_stat_activity;"
 ```
 
 **Common Causes**:
@@ -381,10 +381,10 @@ docker compose exec db psql -U postgres -d ics -c "SELECT count(*) FROM pg_stat_
 **Diagnosis**:
 ```bash
 # Check container memory
-docker stats --no-stream server
+docker stats --no-stream web
 
 # Check Node.js heap
-docker compose exec server node -e "console.log(process.memoryUsage())"
+docker compose exec web node -e "console.log(process.memoryUsage())"
 ```
 
 **Common Causes**:

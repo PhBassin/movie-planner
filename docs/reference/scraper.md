@@ -7,7 +7,7 @@ Complete guide for configuring and managing the theater scraper.
 **Related Documentation:**
 - [Scraper API](./api/scraper.md) - Scraper API endpoints
 - [Database Reference](./database/) - Data storage structure
-- [Docker Deployment](../guides/deployment/docker.md) - Scraper microservice mode
+- [Docker Deployment](../guides/deployment/docker.md) - Scraper worker deployment
 
 ---
 
@@ -137,7 +137,7 @@ git push
 ### Alternative: Manual Edit (Development/Testing)
 
 1. Edit `server/src/config/theaters.json` directly on the host
-2. Restart: `docker compose restart server`
+2. Restart: `docker compose restart web`
 3. Resync DB from JSON: `curl http://localhost:3000/api/theaters/sync`
 4. Commit: `git add server/src/config/theaters.json && git commit -m "feat(theater): add <theater>"`
 
@@ -312,7 +312,7 @@ cron scheduling.
 - Enables horizontal scaling (multiple scraper workers)
 - Better observability (metrics, tracing)
 
-See [Docker Setup](../guides/deployment/docker.md) for scraper microservice deployment.
+See [Docker Setup](../guides/deployment/docker.md) for scraper worker deployment.
 
 ---
 
@@ -373,7 +373,7 @@ See [Troubleshooting Guide](../troubleshooting/common-issues.md) for:
 
 - [Scraper API](./api/scraper.md) - Scraper API endpoints
 - [Database Reference](./database/) - Data storage structure
-- [Docker Deployment](../guides/deployment/docker.md) - Scraper microservice mode
+- [Docker Deployment](../guides/deployment/docker.md) - Scraper worker deployment
 - [Troubleshooting](../troubleshooting/common-issues.md) - Scraper issues
 
 ---

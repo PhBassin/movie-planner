@@ -30,7 +30,7 @@ High-level system architecture and component overview.
 Detailed scraper architecture and design.
 
 **What you'll learn:**
-- In-process vs microservice architecture
+- In-process vs worker-role architecture
 - Job queue system (Postgres `scrape_jobs`)
 - Progress tracking (SSE events)
 - HTML parsing strategy
