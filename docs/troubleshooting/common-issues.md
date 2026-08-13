@@ -46,7 +46,7 @@ docker compose restart db
 docker compose logs db
 
 # Verify connection
-docker compose exec db psql -U postgres -d ics -c "SELECT 1;"
+docker compose exec db psql -U postgres -d movie_planner -c "SELECT 1;"
 ```
 
 ---
@@ -59,10 +59,10 @@ docker compose exec db psql -U postgres -d ics -c "SELECT 1;"
 
 ```bash
 # Run migration manually
-docker compose exec server npm run db:migrate
+docker compose exec web npm run db:migrate
 
 # Or connect to database and run schema manually
-docker compose exec db psql -U postgres -d ics
+docker compose exec db psql -U postgres -d movie_planner
 
 # In psql:
 \i /path/to/schema.sql
@@ -78,13 +78,13 @@ docker compose exec db psql -U postgres -d ics
 
 ```bash
 # Apply migration manually
-docker compose exec -T db psql -U postgres -d ics < migrations/003_add_users_table.sql
+docker compose exec -T db psql -U postgres -d movie_planner < migrations/003_add_users_table.sql
 
 # Verify table exists
-docker compose exec db psql -U postgres -d ics -c "\d users"
+docker compose exec db psql -U postgres -d movie_planner -c "\d users"
 
 # Restart application
-docker compose restart server
+docker compose restart web
 
 # Test authentication
 curl -X POST http://localhost:3000/api/auth/login \
@@ -104,7 +104,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 # The config directory is volume-mounted, so API changes are visible on host immediately.
 
 # If you manually edited theaters.json on the host, restart the server to pick up changes:
-docker compose restart server
+docker compose restart web
 
 # Trigger a new scrape to fetch data for updated theaters:
 curl -X POST http://localhost:3000/api/scraper/trigger
@@ -131,8 +131,8 @@ docker compose up -d
 # Check scraper status
 curl http://localhost:3000/api/scraper/status
 
-# View server logs
-docker compose logs server
+# View web logs
+docker compose logs web
 
 # Check scrape reports
 curl http://localhost:3000/api/reports
@@ -184,13 +184,13 @@ curl http://localhost:3000/api/reports | jq '.data.items[0].errors'
 SCRAPE_THEATER_DELAY_MS=5000  # Increase from 3000
 SCRAPE_MOVIE_DELAY_MS=1000    # Increase from 500
 
-# Restart application
-docker compose restart server
+# Restart the worker (picks up the new scrape delays)
+docker compose restart worker
 
 # Reduce number of days scraped
 SCRAPE_DAYS=3  # Reduce from 7
 
-# Scraper microservice is always included in docker-compose.yaml
+# The worker role is always included in compose.yaml
 ```
 
 ---
@@ -211,7 +211,7 @@ curl http://localhost:3000/api/health
 cat client/.env | grep VITE_API_BASE_URL
 
 # Check server logs for errors
-docker compose logs server -f
+docker compose logs web -f
 
 # Restart services
 docker compose restart
@@ -227,7 +227,7 @@ docker compose restart
 
 ```bash
 # Check if database has data
-docker compose exec db psql -U postgres -d ics -c "SELECT COUNT(*) FROM theaters;"
+docker compose exec db psql -U postgres -d movie_planner -c "SELECT COUNT(*) FROM theaters;"
 
 # Trigger scrape
 curl -X POST http://localhost:3000/api/scraper/trigger
@@ -296,10 +296,10 @@ docker compose build --progress=plain
 
 ```bash
 # View container logs
-docker compose logs server --tail=100
+docker compose logs web --tail=100
 
 # Check health status
-docker inspect server | jq '.[0].State.Health'
+docker inspect movie-planner-web-1 | jq '.[0].State.Health'
 
 # Common causes:
 # - Missing environment variables
@@ -307,10 +307,10 @@ docker inspect server | jq '.[0].State.Health'
 # - Port conflict
 
 # Disable restart policy temporarily
-docker update --restart=no server
+docker update --restart=no movie-planner-web-1
 
 # Fix the issue, then re-enable
-docker update --restart=unless-stopped server
+docker update --restart=unless-stopped movie-planner-web-1
 ```
 
 ---
@@ -323,10 +323,10 @@ docker update --restart=unless-stopped server
 
 ```bash
 # Check volume permissions
-docker compose exec server ls -la /app
+docker compose exec web ls -la /app
 
 # Fix ownership (run as root)
-docker compose exec -u root server chown -R node:node /app
+docker compose exec -u root web chown -R node:node /app
 
 # Or recreate volumes
 docker compose down -v
@@ -352,7 +352,7 @@ cat .env | grep ALLOWED_ORIGINS
 echo "ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000" >> .env
 
 # 3. Restart container
-docker compose restart server
+docker compose restart web
 
 # 4. Clear browser cache and reload page
 ```
@@ -374,7 +374,7 @@ Access to fetch at 'http://192.168.1.100:3000/api/movies' from origin
 ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.100:3000
 
 # Restart
-docker compose restart server
+docker compose restart web
 ```
 
 See [Networking Guide](../guides/deployment/networking.md) for complete network troubleshooting.
@@ -420,7 +420,7 @@ openssl rand -base64 32
 echo "JWT_SECRET=Kx7JhF9mP3nQ8wE2vY5zL1dR6sT4cW0oA9bN8xM7uI=" >> .env
 
 # 3. Restart services
-docker compose restart server
+docker compose restart web
 
 # 4. Verify authentication works
 curl -X POST http://localhost:3000/api/auth/login \
@@ -477,11 +477,11 @@ curl -I http://localhost:3000/api/auth/login \
 # Retry-After: 896  (seconds until reset, ~15 minutes)
 
 # Option 2: Restart server to clear rate limit (development only)
-docker compose restart server
+docker compose restart web
 
 # Option 3: Configure higher limit (in .env)
 RATE_LIMIT_AUTH_MAX=10  # Allow 10 failed attempts instead of 5
-docker compose restart server
+docker compose restart web
 ```
 
 **Note:** Successful logins do NOT count toward rate limit - only failed attempts.
@@ -526,13 +526,13 @@ curl -X POST http://localhost:3000/api/auth/login \
 **Solution:**
 
 ```bash
-# Delete package-lock.json and regenerate
-rm server/package-lock.json client/package-lock.json
-cd server && npm install && cd ..
-cd client && npm install && cd ..
+# Delete the workspace lockfile and regenerate (npm-workspaces repo: a single
+# lockfile at the root; use --legacy-peer-deps per AGENTS.md)
+rm package-lock.json
+npm install --legacy-peer-deps
 
-# Commit new package-lock.json
-git add server/package-lock.json client/package-lock.json
+# Commit the regenerated lockfile
+git add package-lock.json
 git commit -m "chore: regenerate package-lock.json"
 
 # Rebuild Docker image
@@ -590,10 +590,10 @@ docker build -t test .
 docker compose logs -f
 
 # Specific service
-docker compose logs -f server
+docker compose logs -f web
 
 # Last 100 lines
-docker compose logs --tail=100 server
+docker compose logs --tail=100 web
 ```
 
 ### 2. Verify Environment Variables
@@ -613,7 +613,7 @@ grep -E "POSTGRES_|JWT_SECRET|ALLOWED_ORIGINS" .env
 docker compose restart
 
 # Restart specific service
-docker compose restart server
+docker compose restart web
 
 # Full restart (recreate containers)
 docker compose down && docker compose up -d

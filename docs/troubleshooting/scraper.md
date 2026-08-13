@@ -40,7 +40,7 @@ TimeoutError: page.goto: Timeout 60000ms exceeded
 
 ```bash
 # Check network connectivity
-docker compose exec server ping www.allocine.fr
+docker compose exec worker ping www.allocine.fr
 
 # Check if AlloCiné is accessible
 curl -I https://www.allocine.fr/
@@ -74,11 +74,11 @@ Failed to fetch showtimes JSON for C0072 on 2026-03-05: 403 Forbidden
 echo "SCRAPE_THEATER_DELAY_MS=5000" >> .env  # 5 seconds
 echo "SCRAPE_MOVIE_DELAY_MS=1000" >> .env    # 1 second
 
-# Restart scraper
-docker compose restart server
+# Restart the worker (picks up the new scrape delays)
+docker compose restart worker
 
-# Monitor logs for rate limiting
-docker compose logs -f server | grep "Failed to fetch"
+# Monitor worker logs for rate limiting
+docker compose logs -f worker | grep "Failed to fetch"
 ```
 
 **⚠️ No automatic retry on 403** - scraper skips theater and continues.
@@ -105,7 +105,7 @@ Failed to fetch showtimes JSON for C0072 on 2026-03-05: 404 Not Found
 curl https://www.allocine.fr/seance/salle_gen_csalle=C0072.html
 
 # Check theater in database
-docker compose exec db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d movie_planner -c \
   "SELECT theater_id, name, url FROM theaters WHERE theater_id='C0072';"
 
 # Remove invalid theater
@@ -142,8 +142,8 @@ curl http://localhost:3000/api/reports?page=1 \
 echo "SCRAPE_THEATER_DELAY_MS=10000" >> .env  # 10 seconds
 echo "SCRAPE_MOVIE_DELAY_MS=2000" >> .env     # 2 seconds
 
-# Restart server
-docker compose restart server
+# Restart the worker
+docker compose restart worker
 
 # Retry scrape after cooldown period
 curl -X POST http://localhost:3000/api/scraper/trigger \
@@ -262,7 +262,7 @@ Rating out of range (0-5): 6.7
 **Check affected movies:**
 
 ```bash
-docker compose exec db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d movie_planner -c \
   "SELECT title, duration_minutes, press_rating, audience_rating 
    FROM movies 
    WHERE duration_minutes IS NULL 
@@ -603,8 +603,8 @@ await closeBrowser();  // Closes shared browser instance
 **Check logs:**
 
 ```bash
-docker compose logs server | grep -i playwright
-docker compose logs server | grep -i chromium
+docker compose logs worker | grep -i playwright
+docker compose logs worker | grep -i chromium
 ```
 
 ---
@@ -620,18 +620,18 @@ docker compose logs server | grep -i chromium
 
 ```bash
 # Container memory usage
-docker stats server
+docker stats worker
 
 # Check if OOM killed
-docker inspect server --format='{{.State.OOMKilled}}'
+docker inspect movie-planner-worker-1 --format='{{.State.OOMKilled}}'
 ```
 
 **Solution:**
 
 ```bash
-# Add memory limits to docker-compose.yaml
+# Add memory limits to compose.yaml
 services:
-  server:
+  worker:
     deploy:
       resources:
         limits:
@@ -656,7 +656,7 @@ services:
 
 ```bash
 # Check running Chromium processes
-docker compose exec server ps aux | grep chromium
+docker compose exec worker ps aux | grep chromium
 ```
 
 ---
@@ -704,14 +704,11 @@ curl -N http://localhost:3000/api/scraper/progress 2>&1 | \
 ### View Scraper Logs
 
 ```bash
-# In-process mode (default)
-docker compose logs -f server | grep -i scrap
-
-# Microservice mode
-docker compose logs -f scraper
+# The scraper runs as the isolated worker role (ADR 0009)
+docker compose logs -f worker | grep -i scrap
 
 # Filter for errors
-docker compose logs server | grep -E "(Error|Failed|Warning)"
+docker compose logs worker | grep -E "(Error|Failed|Warning)"
 ```
 
 ---
@@ -740,7 +737,7 @@ curl http://localhost:3000/api/reports \
   -H "Authorization: Bearer <token>"
 
 # Database query for scrape history
-docker compose exec db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d movie_planner -c \
   "SELECT id, theater_id, scraped_at, status, movies_count, showtimes_count 
    FROM scrape_reports 
    ORDER BY scraped_at DESC 
@@ -753,15 +750,15 @@ docker compose exec db psql -U postgres -d ics -c \
 
 ```bash
 # Check theaters
-docker compose exec db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d movie_planner -c \
   "SELECT theater_id, name, address FROM theaters;"
 
 # Check movies
-docker compose exec db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d movie_planner -c \
   "SELECT id, title, duration_minutes FROM movies LIMIT 10;"
 
 # Check showtimes
-docker compose exec db psql -U postgres -d ics -c \
+docker compose exec db psql -U postgres -d movie_planner -c \
   "SELECT s.id, c.name, f.title, s.showtime_datetime 
    FROM showtimes s 
    JOIN theaters c ON s.theater_id = c.theater_id 
@@ -867,7 +864,7 @@ docker compose restart web worker
 
 ---
 
-## Metrics (Microservice Mode Only)
+## Metrics (Worker Role Only)
 
 **Prometheus metrics endpoint:** `http://localhost:9091/metrics`
 

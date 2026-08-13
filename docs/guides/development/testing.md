@@ -45,7 +45,7 @@ npm run test:run        # Single run
 npm run test:coverage   # With coverage
 ```
 
-### Scraper Microservice Tests (Vitest)
+### Scraper Worker Tests (Vitest)
 ```bash
 cd scraper
 npm test                # Watch mode
@@ -225,13 +225,13 @@ npx playwright test --headed --debug
 2. **Run tests sequentially** - Config already set to `workers: 1` to avoid scrape conflicts
 3. **Use data-testid selectors** - More stable than text-based selectors
 4. **Handle timing** - Scrapes may complete quickly; use appropriate timeouts
-5. **Clean state** - Restart Docker between test sessions if needed: `docker compose restart server`
+5. **Clean state** - Restart Docker between test sessions if needed: `docker compose restart web worker`
 
 ### Known Limitations
 
 - Scrapes complete quickly in Docker, so some timing-sensitive tests may need adjustments
 - Tests work best when run individually or after a clean Docker restart
-- If tests interfere with each other, restart services: `docker compose restart server`
+- If tests interfere with each other, restart services: `docker compose restart web worker`
 
 ### Test Locations
 
@@ -423,7 +423,7 @@ server/
         └── movie-page.html
 
 scraper/
-└── tests/unit/                            # Scraper microservice tests
+└── tests/unit/                            # Scraper worker tests
     ├── logger.test.ts
     ├── metrics.test.ts
     ├── postgres-notification-bus.test.ts

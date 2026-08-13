@@ -443,7 +443,7 @@ Migrations follow the format: `NNN_description.sql`
 
 ```bash
 # Via Docker
-docker compose restart server
+docker compose restart web
 
 # Migrations auto-apply on startup if AUTO_MIGRATE=true (default)
 ```
@@ -451,7 +451,7 @@ docker compose restart server
 **Manual Migration** (if auto-migrate disabled):
 
 ```bash
-docker compose exec server npm run migrate
+docker compose exec web npm run db:migrate
 ```
 
 ---
@@ -944,9 +944,9 @@ Role assignment is done from the **Users** tab, not the Roles tab:
 1. **Database password reset** (requires database access):
    ```bash
    # Connect to database
-   docker compose exec db psql -U postgres -d ics
+    docker compose exec db psql -U postgres -d movie_planner
 
-   # Reset admin password to 'newpassword'
+    # Reset admin password to 'newpassword'
    # (Generate hash with: bcrypt.hash('newpassword', 10))
    UPDATE users SET password_hash = '$2b$10$...' WHERE username = 'admin';
    ```
@@ -954,9 +954,9 @@ Role assignment is done from the **Users** tab, not the Roles tab:
 2. **Create new admin via database**:
    ```bash
    # Connect to database
-   docker compose exec db psql -U postgres -d ics
+    docker compose exec db psql -U postgres -d movie_planner
 
-   # Create new admin
+    # Create new admin
    INSERT INTO users (username, password_hash, role)
    VALUES ('recovery', '$2b$10$...', 'admin');
    ```

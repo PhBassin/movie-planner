@@ -46,11 +46,11 @@ Express API (web)
                 └─> Express API (SSE streaming)
 ```
 
-**Benefits of the microservice architecture:**
+**Benefits of the worker architecture:**
 - Isolates scraping workload from API server
-- Enables horizontal scaling (multiple scraper workers via `--scale scraper=N`)
+- Enables horizontal scaling (multiple worker replicas via `--scale worker=N`)
 - Independent fault isolation (scraper failures don't affect API availability)
-- Better observability (per-service metrics, distributed tracing)
+- Better observability (per-role metrics, structured logs)
 
 ---
 
@@ -231,7 +231,7 @@ Array<{
 
 ### 4. Database Queries
 
-**File**: `server/src/db/queries.ts` (legacy) or `scraper/src/db/queries.ts` (microservice)
+**File**: `server/src/db/queries.ts` (web role) or `scraper/src/db/queries.ts` (worker role)
 
 **Key Operations**:
 ```typescript
@@ -561,7 +561,7 @@ See [Troubleshooting Scraper](../../troubleshooting/scraper.md) for detailed sol
 
 ---
 
-### Job Queue Failure Recovery (Microservice Mode)
+### Job Queue Failure Recovery (Worker Role)
 
 **Scenario: Scraper crashes during job execution**
 

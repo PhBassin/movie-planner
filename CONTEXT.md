@@ -269,7 +269,7 @@ The structured result of one scrape run, attached to the final `'completed'` (or
 
 ### ScrapeRun
 
-The scraper-internal runtime object that drives one end-to-end scrape run. A `ScrapeRun` owns the mutable run state — the `ScrapeSummary` it builds up, the `ScrapeConfig` read once at construction, and the optional progress publisher — and exposes the run as a deep module: coherent operations (`prepare`, `runTheater`, `runDate`, `loadAvailability`, `filterDates`, `finalize`) plus controlled mutators (`recordError`, `incrementSuccessfulTheater`, …). It lives at `scraper/src/scraper/scrape-run.ts`. The thin `runScraper` entry in `scraper/src/scraper/index.ts` constructs a `ScrapeRun` and drives it; it is not consumed outside the scraper microservice.
+The scraper-internal runtime object that drives one end-to-end scrape run. A `ScrapeRun` owns the mutable run state — the `ScrapeSummary` it builds up, the `ScrapeConfig` read once at construction, and the optional progress publisher — and exposes the run as a deep module: coherent operations (`prepare`, `runTheater`, `runDate`, `loadAvailability`, `filterDates`, `finalize`) plus controlled mutators (`recordError`, `incrementSuccessfulTheater`, …). It lives at `scraper/src/scraper/scrape-run.ts`. The thin `runScraper` entry in `scraper/src/scraper/index.ts` constructs a `ScrapeRun` and drives it; it is not consumed outside the worker role.
 
 **What a ScrapeRun is *not*:**
 - Not a **Session**. "Session" is reserved for user-auth (cookie sessions, SSE subscriber sessions) — see the *Session* entry under Authentication. A ScrapeRun is a single scrape execution, not a user/auth session.
@@ -329,6 +329,10 @@ The **admin-facing shape** `RateLimitAuditInfo` (same file) wraps the flat confi
 - Not the same across services. Only the server has an HTTP surface to rate-limit; the scraper has no equivalent shape.
 
 ## Application delivery
+
+### Web and worker roles
+
+Post-ADR 0009 the backend ships as **two roles of one image**: the `web` role (Express API + SPA) and the `worker` role (scrape-job consumer + cron scheduler). The compose services are `web` and `worker`; the historical names `server` and `scraper` remain as **workspace directory names** (`server/`, `scraper/`) only — they are never compose service names. The retired vocabulary for the worker role is **"microservice"**: docs and API messages say "worker" (e.g. `"Scrape job queued for worker"`), and the wire message is canonical in `server/src/routes/scraper.ts`. Runbook commands must target `web` (API, migrations, app config) or `worker` (scraping, outbound network, Chromium) per context.
 
 ### Web-served SPA
 
