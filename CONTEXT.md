@@ -18,21 +18,23 @@ A User authenticates via a **Session** (see Authentication). One User holds many
 
 A User whose role is `member` — the cinema-goer, the consumer the SaaS exists to serve. A Member is defined by four properties that distinguish it from Staff:
 
-1. **Self-registration by email.** A Member creates their own account through a public sign-up route, identifying by **email** and a password. Staff, by contrast, identify by **username** and are created by an Admin (the existing `POST /auth/register` flow, which is staff-only). A freshly registered Member is **unverified**.
+1. **Self-registration by email.** A Member creates their own account through a public sign-up route (`POST /api/auth/signup` in `server/src/routes/auth.ts`), identifying by **email** and a password. Staff, by contrast, identify by **username** and are created by an Admin (the existing `POST /auth/register` flow, which is staff-only). A freshly registered Member is **unverified**. The login path (`AuthService.login`) accepts either identifier: an identifier containing `@` is looked up by email, everything else by username.
 2. **Email verification.** A Member becomes **verified** by confirming ownership of their email. Verification splits the two Member powers: **selecting** from the catalog is open to any Member; **submitting** a new cinema is open only to a *verified* Member. Verification is the abuse control that complements the per-Member scrape throttle — see TheaterSubmission.
 3. **No administrative reach.** A Member holds none of the scraper / settings / users / system permissions. A Member can read the shared cinema catalog (Theaters, Movies, Showtimes) and act only on their own data.
 4. **Personal data.** A Member owns a **Selection** of Theaters and an **Appearance** (light/dark) for their homepage — concepts Staff do not have.
 
 The Member is the reason movie-planner exists; Staff exist to operate it for them.
 
-**Lifecycle.** A Member moves through a small state machine:
+**Lifecycle.** A Member moves through a small state machine (the `users.status` discriminator: `unverified | active | suspended` — "deleted" = row removed):
 - **unverified** — just registered, email not yet confirmed. May log in, browse, and build a Selection, but cannot submit (see TheaterSubmission).
 - **verified** — email confirmed; enters **active** by default.
 - **active** — verified and not suspended; the steady state. May submit.
 - **suspended** — an Admin revoked access (the reactive abuse control). All Sessions are revoked (the Member cannot log in) and submissions are blocked, but the Selection and Appearance persist for possible reinstatement. `suspended ↔ active` is reversible.
 - **deleted** — the terminal state; the account and its Member-owned data are removed (see **Member erasure**). Reachable by self-deletion from `unverified` or `active`, or by an Admin from any state (a suspended Member is deleted Admin-side only). Irreversible.
 
-`unverified` and `suspended` both block submission; only `suspended` also blocks login (an unverified Member may still log in to read and curate their Selection).
+`unverified` and `suspended` both block submission; only `suspended` also blocks login (an unverified Member may still log in to read and curate their Selection). The suspension check lives in `AuthService.login` and runs only after the password has matched, so the failure ordering cannot be used to enumerate suspended accounts.
+
+The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance); it is the seam the Selection and Appearance tickets extend.
 
 **What a Member is *not*:**
 - Not **Staff**. A Member cannot trigger a scrape, cannot manage other Users, cannot touch admin Settings. Since a User has exactly one Role, a person who is both a Member and Staff does so across two accounts — never one Member that is also Staff.
@@ -361,7 +363,7 @@ The concept is implemented as a single deep module: `server/src/services/session
 
 ### Baseline
 
-The single source of truth for a fresh, empty Movie Planner database: the consolidated `docker/init.sql`. The baseline carries the full schema (all tables, constraints, indexes) **and** all reference data that an instance starts with — the two system **Roles** (`admin`, `operator`), the canonical **permission** set, role/permission grants, the **Branding** singleton defaults, the **RateLimitConfig** singleton, the permission-category labels, and the default weekly **scrape schedule**. It deliberately holds **no static administrator credential**; the first admin is created by application code (see Bootstrap admin).
+The single source of truth for a fresh, empty Movie Planner database: the consolidated `docker/init.sql`. The baseline carries the full schema (all tables, constraints, indexes) **and** all reference data that an instance starts with — the three system **Roles** (`admin`, `operator`, `member`), the canonical **permission** set, role/permission grants, the **Branding** singleton defaults, the **RateLimitConfig** singleton, the permission-category labels, and the default weekly **scrape schedule**. It deliberately holds **no static administrator credential**; the first admin is created by application code (see Bootstrap admin).
 
 The baseline is **not** a migration. It is applied once to a bare database — by the Docker postgres image on first container start, or by the host-side `server:db:init` runner (`server/src/db/init.ts`) for non-Docker development. Forward schema changes thereafter are ordinary numbered files under `migrations/` (starting at `001_*`), tracked in `schema_migrations`; the baseline leaves that table empty so the first real migration is `001`. See `docs/adr/0008-fork-monolith-single-db.md` for the single-DB fork decision.
 

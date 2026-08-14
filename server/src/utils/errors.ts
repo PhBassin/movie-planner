@@ -29,6 +29,12 @@ export class AuthError extends AppError {
   }
 }
 
+export class ForbiddenError extends AppError {
+  constructor(message: string = 'Forbidden') {
+    super(message, 403);
+  }
+}
+
 export class TheaterNotFoundError extends AppError {
   constructor(theaterId: string) {
     super(`Theater not found: ${theaterId}`, 404);

@@ -27,6 +27,7 @@ import reportsRouter from './routes/reports.js';
 import authRouter from './routes/auth.js';
 import settingsRouter from './routes/settings.js';
 import usersRouter from './routes/users.js';
+import meRouter from './routes/me.js';
 import systemRouter from './routes/system.js';
 import rolesRouter from './routes/roles.js';
 import rateLimitsRouter from './routes/admin/rate-limits.js';
@@ -87,7 +88,7 @@ export function createApp(options: AppOptions = {}) {
   app.use((req, res, next) => {
     // Skip CSRF for test environment, login, and refresh endpoints
     if (process.env.NODE_ENV === 'test') return next();
-    if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/auth/logout') return next();
+    if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/auth/logout' || req.path === '/api/auth/signup') return next();
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
     if (!req.path.startsWith('/api/')) return next();
     const cookieToken = req.cookies?.csrf_token;
@@ -116,6 +117,7 @@ export function createApp(options: AppOptions = {}) {
   app.use('/api/reports', reportsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/users', usersRouter);
+  app.use('/api/me', meRouter);
   app.use('/api/system', systemRouter);
   app.use('/api/roles', rolesRouter);
   app.use('/api/admin/rate-limits', rateLimitsRouter);
