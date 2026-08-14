@@ -1,7 +1,9 @@
 import type { DB } from '../db/client.js';
 import {
   getTheaterConfigs,
+  getTheaterConfig,
   getTheaters,
+  activateTheater,
 } from '../db/theater-queries.js';
 import {
   createScrapeAttempt,
@@ -145,7 +147,7 @@ export class ScrapeRun implements ProgressPublisher {
         throw new Error(`Theater not found in database: ${options.theaterId}`);
       }
 
-      const foundTheater = theaters.find(c => c.id === options.theaterId);
+      const foundTheater = await getTheaterConfig(this.db, options.theaterId);
       if (!foundTheater) {
         throw new Error(`Theater not configured for scraping: ${options.theaterId}`);
       }
@@ -245,6 +247,10 @@ export class ScrapeRun implements ProgressPublisher {
       moviesCount: theaterMoviesCount,
       showtimesCount: theaterShowtimesCount,
     });
+
+    if (successfulDates > 0) {
+      await activateTheater(this.db, theater.id);
+    }
 
     return { rateLimited };
   }

@@ -39,6 +39,7 @@ export interface Movie {
 export interface Theater {
   id: string;
   name: string;
+  status?: 'provisioning' | 'active';
   url?: string;
   address?: string;
   postal_code?: string;

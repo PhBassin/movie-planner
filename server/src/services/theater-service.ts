@@ -138,7 +138,14 @@ export class TheaterService {
     validateTheaterUrl(url);
 
     try {
-      return await addTheater(this.db, { id, name, url });
+      const { theater, reportId } = await this.db.transaction(async (transaction) => {
+        const theater = await addTheater(transaction as typeof this.db, { id, name, url });
+        const reportId = await createScrapeReport(transaction as typeof this.db, 'manual');
+        await getBusProducer().enqueueAddTheaterJob(reportId, url, transaction);
+        return { theater, reportId };
+      });
+      logger.info(`🎬 add_theater job queued for ${url} (reportId=${reportId})`);
+      return theater;
     } catch (error: any) {
       if (error.message && error.message.includes('duplicate key')) {
         throw new ValidationError('Theater with this ID already exists');

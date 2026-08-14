@@ -90,6 +90,7 @@ function mapRowToTheater(row: ShowtimeWithTheaterRow): Theater {
   return {
     id: row.theater_id,
     name: row.theater_name,
+    status: 'active',
     address: row.theater_address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
@@ -222,9 +223,10 @@ export async function getShowtimesByTheaterAndWeek(
         f.audience_rating,
         f.source_url,
         f.trailer_url
-      FROM showtimes s
-      JOIN movies f ON s.movie_id = f.id
-      WHERE s.theater_id = $1 AND s.week_start = $2
+       FROM showtimes s
+       JOIN movies f ON s.movie_id = f.id
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.theater_id = $1 AND s.week_start = $2
       ORDER BY s.date, f.title, s.time
     `,
     [theaterId, weekStart]
@@ -252,9 +254,9 @@ export async function getShowtimesByDate(
         c.postal_code,
         c.city,
         c.image_url as theater_image_url
-      FROM showtimes s
-      JOIN theaters c ON s.theater_id = c.id
-      WHERE s.date = $1 AND s.week_start = $2
+       FROM showtimes s
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.date = $1 AND s.week_start = $2
       ORDER BY s.time, c.name
     `,
     [date, weekStart]
@@ -282,9 +284,9 @@ export async function getShowtimesByMovieAndWeek(
         c.postal_code,
         c.city,
         c.image_url as theater_image_url
-      FROM showtimes s
-      JOIN theaters c ON s.theater_id = c.id
-      WHERE s.movie_id = $1 AND s.week_start = $2
+       FROM showtimes s
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.movie_id = $1 AND s.week_start = $2
       ORDER BY s.date, s.time, c.name
     `,
     [movieId, weekStart]
@@ -311,9 +313,9 @@ export async function getWeeklyShowtimes(
         c.postal_code,
         c.city,
         c.image_url as theater_image_url
-      FROM showtimes s
-      JOIN theaters c ON s.theater_id = c.id
-      WHERE s.week_start = $1
+       FROM showtimes s
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.week_start = $1
       ORDER BY s.date, s.time, c.name
     `,
     [weekStart]
@@ -324,4 +326,3 @@ export async function getWeeklyShowtimes(
     theater: mapRowToTheater(row),
   }));
 }
-

@@ -5,6 +5,7 @@ import type { Theater } from '../types/scraper.js';
 interface TheaterRow {
   id: string;
   name: string;
+  status: Theater['status'];
   address: string | null;
   postal_code: string | null;
   city: string | null;
@@ -14,11 +15,12 @@ interface TheaterRow {
 
 // Récupérer tous les theaters
 export async function getTheaters(db: DB): Promise<Theater[]> {
-  const result = await db.query<TheaterRow>('SELECT * FROM theaters ORDER BY name');
+  const result = await db.query<TheaterRow>("SELECT * FROM theaters WHERE status = 'active' ORDER BY name");
   
   return result.rows.map(row => ({
     id: row.id,
     name: row.name,
+    status: row.status,
     address: row.address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
@@ -56,7 +58,7 @@ export async function upsertTheater(db: DB, theater: Theater): Promise<void> {
 // Récupérer les theaters configurés pour le scraping (ceux avec une URL)
 export async function getTheaterConfigs(db: DB): Promise<Array<{ id: string; name: string; url: string }>> {
   const result = await db.query<{ id: string; name: string; url: string }>(
-    'SELECT id, name, url FROM theaters WHERE url IS NOT NULL ORDER BY name'
+    "SELECT id, name, url FROM theaters WHERE url IS NOT NULL ORDER BY name"
   );
   return result.rows;
 }
@@ -66,8 +68,8 @@ export async function addTheater(
   db: DB,
   theater: { id: string; name: string; url: string }
 ): Promise<{ id: string; name: string; url: string }> {
-  const result = await db.query<{ id: string; name: string; url: string }>(
-    `INSERT INTO theaters (id, name, url) VALUES ($1, $2, $3) RETURNING id, name, url`,
+  const result = await db.query<{ id: string; name: string; url: string; status: Theater['status'] }>(
+    `INSERT INTO theaters (id, name, url, status) VALUES ($1, $2, $3, 'provisioning') RETURNING id, name, url, status`,
     [theater.id, theater.name, theater.url]
   );
   return result.rows[0];
@@ -122,6 +124,7 @@ export async function updateTheaterConfig(
   return {
     id: row.id,
     name: row.name,
+    status: row.status,
     address: row.address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,

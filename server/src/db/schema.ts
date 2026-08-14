@@ -64,8 +64,8 @@ export async function seedTheatersIfEmpty(): Promise<void> {
 
     for (const theater of theaters) {
       await db.query(
-        `INSERT INTO theaters (id, name, url)
-         VALUES ($1, $2, $3)
+         `INSERT INTO theaters (id, name, url, status)
+          VALUES ($1, $2, $3, 'active')
          ON CONFLICT (id) DO NOTHING`,
         [theater.id, theater.name, theater.url]
       );

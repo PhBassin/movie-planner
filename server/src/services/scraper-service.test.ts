@@ -28,7 +28,7 @@ describe('ScraperService', () => {
 
   describe('triggerScrape', () => {
     it('should throw error if theaterId provided but not found', async () => {
-      vi.mocked(theaterQueries.getTheaters).mockResolvedValue([{ id: 'C1' }] as any);
+      vi.mocked(theaterQueries.getTheaterConfigs).mockResolvedValue([{ id: 'C1' }] as any);
       await expect(scraperService.triggerScrape({ theaterId: 'UNKNOWN' })).rejects.toThrow('Theater not found');
     });
 
@@ -36,7 +36,7 @@ describe('ScraperService', () => {
       const mockEnqueue = vi.fn().mockResolvedValue(1);
       vi.mocked(busProducer.getBusProducer).mockReturnValue({ enqueueJob: mockEnqueue } as any);
       vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(42 as any);
-      vi.mocked(theaterQueries.getTheaters).mockResolvedValue([{ id: 'C1' }] as any);
+      vi.mocked(theaterQueries.getTheaterConfigs).mockResolvedValue([{ id: 'C1' }] as any);
 
       const result = await scraperService.triggerScrape({ theaterId: 'C1', movieId: 123 });
 

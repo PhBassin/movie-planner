@@ -7,6 +7,7 @@ export type { ProgressEvent, ScrapeSummary } from '@movie-planner/scraper-protoc
 export interface Theater {
   id: string; // Unique theater identifier (e.g., "W7504", "C0072")
   name: string;
+  status: 'provisioning' | 'active';
   address?: string;
   postal_code?: string;
   city?: string;

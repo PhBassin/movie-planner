@@ -33,6 +33,7 @@ Stores theater/theater information scraped from external sources.
 |--------|------|-------------|-------------|
 | `id` | `TEXT` | PRIMARY KEY | Unique theater identifier (extracted from source URL) |
 | `name` | `TEXT` | NOT NULL | Theater name |
+| `status` | `TEXT` | NOT NULL, DEFAULT `provisioning`, CHECK `provisioning` or `active` | Lifecycle state; provisioning theaters are hidden from catalog reads until their first successful add scrape |
 | `address` | `TEXT` | | Street address |
 | `postal_code` | `TEXT` | | Postal/ZIP code |
 | `city` | `TEXT` | | City name |
@@ -48,6 +49,7 @@ None (primary key index on `id`)
 - `id` is typically extracted from the source URL (e.g., `C0053` from AlloCiné URL)
 - Deleting a theater cascades to `showtimes` and `weekly_programs` tables
 - `url` field stores the scraping source URL for updates
+- Fresh baseline seed rows are inserted as `active`; newly added theaters default to `provisioning` and become `active` after a successful first scrape.
 
 **Sample Query:**
 

@@ -58,6 +58,13 @@ describe('MovieService', () => {
       expect(result?.title).toBe('Movie');
       expect(result?.theaters).toBeDefined();
     });
+
+    it('should hide a movie with no active theater showtimes', async () => {
+      vi.mocked(movieQueries.getMovie).mockResolvedValue({ id: 1, title: 'Movie' } as any);
+      vi.mocked(showtimeQueries.getShowtimesByMovieAndWeek).mockResolvedValue([]);
+
+      await expect(movieService.getMovieById(1, '2026-03-11')).resolves.toBeNull();
+    });
   });
 
   describe('search', () => {

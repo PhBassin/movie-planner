@@ -103,6 +103,24 @@ describe.runIf(Boolean(TEST_URL))(
       expect(result.rows).toHaveLength(1);
     });
 
+    it('defines the theater provisioning lifecycle and active default', async () => {
+      const columns = await db.query<{ column_default: string; is_nullable: string }>(`
+        SELECT column_default, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = 'theaters' AND column_name = 'status'
+      `);
+      expect(columns.rows).toEqual([
+        { column_default: "'provisioning'::text", is_nullable: 'NO' },
+      ]);
+      const check = await db.query(
+        `SELECT 1 FROM pg_constraint WHERE conname = 'theaters_status_check'`
+      );
+      expect(check.rows).toHaveLength(1);
+      await expect(
+        db.query(`INSERT INTO theaters (id, name, status) VALUES ('invalid-status', 'Invalid', 'broken')`)
+      ).rejects.toThrow();
+    });
+
     it('preserves the scrape_reports status check (includes rate_limited)', async () => {
       const result = await db.query(
         `SELECT 1 FROM pg_constraint WHERE conname = 'scrape_reports_status_check'`

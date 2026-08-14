@@ -1,7 +1,7 @@
 import { getBusProducer } from './bus-producer.js';
 import { progressTracker } from './progress-tracker.js';
 import { createScrapeReport, getLatestScrapeReport } from '../db/report-queries.js';
-import { getTheaters } from '../db/theater-queries.js';
+import { getTheaterConfigs } from '../db/theater-queries.js';
 import type { DB } from '../db/index.js';
 import { TheaterNotFoundError } from '../utils/errors.js';
 import type { ScrapeAttempt } from '../db/scrape-attempt-queries.js';
@@ -18,7 +18,7 @@ export class ScraperService {
 
     // Validate theaterId exists in database if provided
     if (theaterId) {
-      const theaters = await getTheaters(this.db);
+      const theaters = await getTheaterConfigs(this.db);
       const theaterExists = theaters.some(c => c.id === theaterId);
 
       if (!theaterExists) {
