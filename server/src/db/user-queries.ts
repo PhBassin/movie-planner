@@ -1,5 +1,5 @@
 import { type DB } from './index.js';
-import { type UserPublic } from '../types/user.js';
+import { type UserPublic, type MemberStatus } from '../types/user.js';
 import crypto from 'crypto';
 
 // --- Database Row Interfaces ---
@@ -7,10 +7,13 @@ import crypto from 'crypto';
 export interface UserRow {
   id: number;
   username: string;
+  email: string | null;
   password_hash: string;
   role_id: number;
   role_name: string;
   is_system_role: boolean;
+  status: MemberStatus;
+  email_verified_at: string | null;
   created_at: string;
 }
 
@@ -164,8 +167,9 @@ export async function getAdminCount(db: DB): Promise<number> {
  */
 export async function getUserByUsername(db: DB, username: string): Promise<UserRow | undefined> {
   const result = await db.query<UserRow>(
-    `SELECT u.id, u.username, u.password_hash, u.role_id,
-            r.name AS role_name, r.is_system AS is_system_role, u.created_at
+    `SELECT u.id, u.username, u.email, u.password_hash, u.role_id,
+            r.name AS role_name, r.is_system AS is_system_role,
+            u.status, u.email_verified_at, u.created_at
      FROM users u
      JOIN roles r ON r.id = u.role_id
      WHERE u.username = $1`,

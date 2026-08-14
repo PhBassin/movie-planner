@@ -4,6 +4,7 @@ import { authLimiter, registerLimiter } from '../middleware/rate-limit.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permission.js';
 import { SessionService } from '../services/session-service.js';
+import { AuthService } from '../services/auth-service.js';
 
 const router = express.Router();
 
@@ -12,6 +13,23 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
     try {
         const session = new SessionService(req.app.get('db'), res);
         await session.login(req.body.username, req.body.password);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// POST /api/auth/signup - Public Member self-registration (email + password).
+// Creates an unverified Member; no session is issued — the Member logs in.
+// Distinct from the staff-only /register below (see CONTEXT.md → Member).
+router.post('/signup', registerLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const auth = new AuthService(req.app.get('db'));
+        const user = await auth.registerMember(req.body.email, req.body.password);
+        const response: ApiResponse = {
+            success: true,
+            data: { message: 'Account created successfully', user },
+        };
+        res.status(201).json(response);
     } catch (error) {
         next(error);
     }

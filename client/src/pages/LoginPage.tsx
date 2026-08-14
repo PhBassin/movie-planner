@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import apiClient from '../api/client';
 
@@ -117,6 +117,13 @@ const LoginPage: React.FC = () => {
                         </button>
                     </div>
                 </form>
+
+                <p className="mt-4 text-center text-sm text-gray-600">
+                    No account yet?{' '}
+                    <Link to="/signup" className="text-blue-600 hover:text-blue-800">
+                        Create one
+                    </Link>
+                </p>
             </div>
         </div>
     );

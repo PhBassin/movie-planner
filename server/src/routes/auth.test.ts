@@ -12,6 +12,7 @@ import jwt from 'jsonwebtoken';
 import authRouter from './auth.js';
 import { db } from '../db/internal/client.js';
 import * as queries from '../db/user-queries.js';
+import * as memberQueries from '../db/member-queries.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { assertChangePasswordRejected } from '../test-utils/auth.js';
 
@@ -46,6 +47,12 @@ vi.mock('../db/internal/client.js', () => ({
 }));
 
 vi.mock('../db/user-queries.js');
+
+vi.mock('../db/member-queries.js', () => ({
+    getUserByEmail: vi.fn(),
+    createMember: vi.fn(),
+    getMemberProfile: vi.fn(),
+}));
 
 vi.mock('../db/role-queries.js', () => ({
     getPermissionNamesByRoleId: vi.fn().mockResolvedValue(['settings:read', 'reports:list']),
@@ -229,6 +236,200 @@ describe('Auth Routes', () => {
             expect(response.status).toBe(400);
             expect(response.body.success).toBe(false);
             expect(response.body.error).toBe('Username and password are required');
+        });
+    });
+
+    describe('POST /api/auth/signup (public Member registration)', () => {
+        const signupBody = { email: 'jane@example.com', password: 'Str0ng!Pass' };
+
+        it('should create an unverified Member and return 201', async () => {
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue(undefined);
+            vi.mocked(memberQueries.createMember).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                role_id: 3,
+                role_name: 'member',
+                status: 'unverified',
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send(signupBody);
+
+            expect(response.status).toBe(201);
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.user.email).toBe('jane@example.com');
+            expect(response.body.data.user.role_name).toBe('member');
+            expect(response.body.data.user.status).toBe('unverified');
+            expect(response.body.data.user.password_hash).toBeUndefined();
+            expect(memberQueries.createMember).toHaveBeenCalledWith(
+                db,
+                'jane@example.com',
+                expect.any(String)
+            );
+        });
+
+        it('should not require authentication (public route)', async () => {
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue(undefined);
+            vi.mocked(memberQueries.createMember).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                role_id: 3,
+                role_name: 'member',
+                status: 'unverified',
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send(signupBody);
+
+            expect(response.status).toBe(201);
+        });
+
+        it('should return 400 for a weak password', async () => {
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send({ email: 'jane@example.com', password: 'weak' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(memberQueries.createMember).not.toHaveBeenCalled();
+        });
+
+        it('should return 400 for an invalid email', async () => {
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send({ email: 'not-an-email', password: 'Str0ng!Pass' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(memberQueries.createMember).not.toHaveBeenCalled();
+        });
+
+        it('should return 400 for missing fields', async () => {
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send({ email: 'jane@example.com' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(response.body.error).toBe('Email and password are required');
+        });
+
+        it('should return 400 when the email is already registered', async () => {
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                password_hash: 'hash',
+                role_id: 3,
+                role_name: 'member',
+                is_system_role: true,
+                status: 'unverified',
+                email_verified_at: null,
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send(signupBody);
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(response.body.error).toBe('An account with this email already exists');
+            expect(memberQueries.createMember).not.toHaveBeenCalled();
+        });
+
+        it('should return 400 (not 500) when a concurrent signup loses the unique-index race', async () => {
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue(undefined);
+            vi.mocked(memberQueries.createMember).mockRejectedValue(
+                Object.assign(new Error('duplicate key value violates unique constraint "idx_users_email_member"'), { code: '23505' })
+            );
+
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send(signupBody);
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(response.body.error).toBe('An account with this email already exists');
+        });
+    });
+
+    describe('POST /api/auth/login - Member suspension gate', () => {
+        it('should let an unverified Member log in', async () => {
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                password_hash: await passwordUtils.hashPassword('Str0ng!Pass'),
+                role_id: 3,
+                role_name: 'member',
+                is_system_role: true,
+                status: 'unverified',
+                email_verified_at: null,
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/login')
+                .send({ username: 'jane@example.com', password: 'Str0ng!Pass' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.user.role_name).toBe('member');
+        });
+
+        it('should reject a suspended Member with 401', async () => {
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                password_hash: await passwordUtils.hashPassword('Str0ng!Pass'),
+                role_id: 3,
+                role_name: 'member',
+                is_system_role: true,
+                status: 'suspended',
+                email_verified_at: '2024-01-02T00:00:00Z',
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/login')
+                .send({ username: 'jane@example.com', password: 'Str0ng!Pass' });
+
+            expect(response.status).toBe(401);
+            expect(response.body.success).toBe(false);
+            expect(response.body.error).toBe('Account suspended');
+        });
+
+        it('should reject a suspended Member with a generic 401 when the password is wrong', async () => {
+            // Suspension must not leak through failure ordering: a wrong
+            // password on a suspended account is indistinguishable from any
+            // other credential failure.
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                password_hash: await passwordUtils.hashPassword('Str0ng!Pass'),
+                role_id: 3,
+                role_name: 'member',
+                is_system_role: true,
+                status: 'suspended',
+                email_verified_at: null,
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/login')
+                .send({ username: 'jane@example.com', password: 'WrongPass1!' });
+
+            expect(response.status).toBe(401);
+            expect(response.body.error).toBe('Invalid credentials');
         });
     });
 

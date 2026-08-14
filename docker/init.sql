@@ -51,7 +51,10 @@ CREATE TABLE role_permissions (
 -- System roles.
 INSERT INTO roles (name, description, is_system) VALUES
   ('admin', 'Full access', true),
-  ('operator', 'Scraping and theater management', true);
+  ('operator', 'Scraping and theater management', true),
+  -- Member: the cinema-goer (see CONTEXT.md). System role with NO permissions
+  -- granted below — a Member has no administrative reach by design.
+  ('member', 'Self-registered cinema-goer', true);
 
 -- Canonical permission set.
 INSERT INTO permissions (name, description, category) VALUES
@@ -118,15 +121,38 @@ ON CONFLICT DO NOTHING;
 -- Users
 -- ============================================================================
 
+-- Members identify by email, Staff by username (see CONTEXT.md). `username`
+-- stays NOT NULL (Members get their email mirrored into it to satisfy the
+-- shared-identity shape); `email` is the Member-facing identifier and is
+-- unique among Members only — Staff rows leave it NULL (NULLs are distinct
+-- in a unique index). `status` is the Member lifecycle discriminator
+-- (unverified | active | suspended — "deleted" = row removed, see
+-- CONTEXT.md); Staff rows carry 'active'.
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(255) UNIQUE NOT NULL,
+  email VARCHAR(255),
   password_hash VARCHAR(255) NOT NULL,
   role_id INTEGER NOT NULL REFERENCES roles(id),
+  email_verified_at TIMESTAMPTZ,
+  status VARCHAR(20) NOT NULL DEFAULT 'active'
+    CHECK (status IN ('unverified', 'active', 'suspended')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX idx_users_email_member ON users(LOWER(email))
+  WHERE email IS NOT NULL;
 CREATE INDEX idx_users_role_id ON users(role_id);
+
+-- ============================================================================
+-- Member data (per-Member preferences; see CONTEXT.md → Appearance)
+-- ============================================================================
+
+CREATE TABLE member_preferences (
+  member_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  appearance VARCHAR(10) NOT NULL DEFAULT 'light'
+    CHECK (appearance IN ('light', 'dark'))
+);
 
 -- ============================================================================
 -- Application settings (white-label, singleton)

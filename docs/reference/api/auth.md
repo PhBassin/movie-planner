@@ -95,6 +95,91 @@ curl http://localhost:3000/api/reports \
 
 ---
 
+### Sign Up (Member self-registration)
+
+```http
+POST /api/auth/signup
+```
+
+**Authentication:** None (public route)
+
+**Description:** Create a **Member** account (see `CONTEXT.md` → Member). Members identify by email; Staff identify by username and are created by an Admin via `POST /api/auth/register` below. A freshly registered Member is `unverified` — it may log in, but cannot submit new cinemas until verified. No session is issued by this route; the Member logs in via `POST /api/auth/login` using their email as the username.
+
+**Request Body:**
+```json
+{
+  "email": "jane@example.com",
+  "password": "Str0ng!Pass"
+}
+```
+
+**Response (201 — created):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Account created successfully",
+    "user": {
+      "id": 2,
+      "username": "jane@example.com",
+      "email": "jane@example.com",
+      "role_id": 3,
+      "role_name": "member",
+      "status": "unverified"
+    }
+  }
+}
+```
+
+**Response (400 — weak password / invalid or duplicate email):**
+```json
+{
+  "success": false,
+  "error": "Password must be at least 8 characters"
+}
+```
+```json
+{
+  "success": false,
+  "error": "An account with this email already exists"
+}
+```
+
+---
+
+### Member Profile
+
+```http
+GET /api/me
+```
+
+**Authentication:** Required (cookie or Bearer token)
+
+**Description:** Return the authenticated Member's own profile — the seam the Member tickets hang Selection and Appearance data on. Member-only: a Staff account gets `403`. Distinct from `GET /api/auth/me`, which only validates the session and echoes token claims.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 2,
+      "email": "jane@example.com",
+      "username": "jane@example.com",
+      "role_name": "member",
+      "status": "unverified",
+      "email_verified": false,
+      "appearance": "light",
+      "created_at": "2026-08-14T08:18:09.217Z"
+    }
+  }
+}
+```
+
+**Notes:** `status` is the Member lifecycle discriminator (`unverified | active | suspended`). A `suspended` Member cannot log in (`POST /api/auth/login` returns `401 Account suspended`); an unverified Member can.
+
+---
+
 ### Register New User
 
 ```http

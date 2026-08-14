@@ -122,11 +122,62 @@ describe.runIf(Boolean(TEST_URL))(
       expect(result.rows).toHaveLength(2);
     });
 
-    it('seeds the two system roles', async () => {
+    it('seeds the three system roles', async () => {
       const result = await db.query<{ name: string; is_system: boolean }>(
         `SELECT name, is_system FROM roles WHERE is_system = true ORDER BY name`
       );
-      expect(result.rows.map((r) => r.name)).toEqual(['admin', 'operator']);
+      expect(result.rows.map((r) => r.name)).toEqual(['admin', 'member', 'operator']);
+    });
+
+    it('grants the member role no permissions', async () => {
+      const result = await db.query<{ count: string }>(`
+        SELECT COUNT(*) as count
+        FROM role_permissions rp
+        JOIN roles r ON r.id = rp.role_id
+        WHERE r.name = 'member'
+      `);
+      expect(parseStrictInt(result.rows[0].count)).toBe(0);
+    });
+
+    it('carries the member columns and member_preferences table', async () => {
+      const cols = await db.query<{ column_name: string }>(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name IN ('email', 'email_verified_at', 'status')
+      `);
+      expect(cols.rows.map((r) => r.column_name).sort()).toEqual([
+        'email', 'email_verified_at', 'status',
+      ]);
+
+      // Email is unique among Members only (Staff leave it NULL).
+      await db.query(
+        `INSERT INTO users (username, email, password_hash, role_id, status)
+         VALUES ('m1@example.com', 'm1@example.com', 'x', (SELECT id FROM roles WHERE name = 'member'), 'unverified')`
+      );
+      await expect(
+        db.query(
+          `INSERT INTO users (username, email, password_hash, role_id, status)
+           VALUES ('dup', 'M1@EXAMPLE.COM', 'x', (SELECT id FROM roles WHERE name = 'member'), 'unverified')`
+        )
+      ).rejects.toThrow();
+
+      // The status discriminator rejects unknown states.
+      await expect(
+        db.query(
+          `INSERT INTO users (username, password_hash, role_id, status)
+           VALUES ('bogus', 'x', (SELECT id FROM roles WHERE name = 'member'), 'deleted')`
+        )
+      ).rejects.toThrow();
+
+      // member_preferences cascades on member deletion.
+      const pref = await db.query<{ appearance: string }>(`
+        INSERT INTO member_preferences (member_id, appearance)
+        VALUES ((SELECT id FROM users WHERE email = 'm1@example.com'), 'dark')
+        RETURNING appearance
+      `);
+      expect(pref.rows[0].appearance).toBe('dark');
+      await db.query(`DELETE FROM users WHERE email = 'm1@example.com'`);
+      const leftover = await db.query(`SELECT 1 FROM member_preferences`);
+      expect(leftover.rows).toHaveLength(0);
     });
 
     it('seeds the canonical permission set', async () => {

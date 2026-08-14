@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { getUserByUsername, createUser, updateUserPassword } from '../db/user-queries.js';
+import { getUserByEmail, createMember } from '../db/member-queries.js';
 import { getPermissionNamesByRoleId } from '../db/role-queries.js';
 import type { DB } from '../db/index.js';
 import { validatePasswordStrength } from '../utils/security.js';
@@ -92,17 +93,34 @@ export class AuthService {
     );
   }
 
-  async login(username?: string, password?: string): Promise<AuthResponse> {
-    if (!username || !password) {
+  /**
+   * Authenticate by identifier + password. The identifier is a username for
+   * Staff and an email for Members (see CONTEXT.md → Member); an identifier
+   * containing '@' takes the email lookup path, everything else the username
+   * path. Both paths return the same credential row shape.
+   *
+   * A `suspended` Member cannot log in (only suspension blocks login; an
+   * unverified Member may still log in — see CONTEXT.md → Member lifecycle).
+   * The suspension check runs only after the password has matched, so the
+   * failure ordering cannot be used to enumerate accounts.
+   */
+  async login(identifier?: string, password?: string): Promise<AuthResponse> {
+    if (!identifier || !password) {
       throw new ValidationError('Username and password are required');
     }
 
-    const user = await getUserByUsername(this.db, username);
+    const user = identifier.includes('@')
+      ? await getUserByEmail(this.db, identifier)
+      : await getUserByUsername(this.db, identifier);
     const hashToCompare = user ? user.password_hash : DUMMY_HASH;
     const isMatch = await comparePassword(password, hashToCompare);
 
     if (!user || !isMatch) {
       throw new AuthError('Invalid credentials');
+    }
+
+    if (user.role_name === 'member' && user.status === 'suspended') {
+      throw new AuthError('Account suspended');
     }
 
     const token = await this.mintAccessToken(user, this.db);
@@ -138,6 +156,56 @@ export class AuthService {
       username: user.username,
       role_id: user.role_id,
       role_name: user.role_name,
+    };
+  }
+
+  /**
+   * Register a Member through the public signup route: email + password,
+   * creating an `unverified` account (see CONTEXT.md → Member). No session is
+   * created — the Member obtains one by logging in. Distinct from the
+   * staff-only `register` above.
+   */
+  async registerMember(email?: string, password?: string) {
+    if (!email || !password) {
+      throw new ValidationError('Email and password are required');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      throw new ValidationError('A valid email address is required');
+    }
+
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      throw new ValidationError(passwordError);
+    }
+
+    const existingUser = await getUserByEmail(this.db, normalizedEmail);
+    if (existingUser) {
+      throw new ValidationError('An account with this email already exists');
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    let user;
+    try {
+      user = await createMember(this.db, normalizedEmail, passwordHash);
+    } catch (error: any) {
+      // A concurrent signup with the same email loses the race to the unique
+      // index — surface the same rejection as the check above, never a 500.
+      if (error?.code === '23505') {
+        throw new ValidationError('An account with this email already exists');
+      }
+      throw error;
+    }
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role_id: user.role_id,
+      role_name: user.role_name,
+      status: user.status,
     };
   }
 
