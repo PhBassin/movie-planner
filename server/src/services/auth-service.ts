@@ -14,6 +14,27 @@ import { ValidationError, AuthError, NotFoundError } from '../utils/errors.js';
 // Pre-computed hash for 'dummy' (cost 10) to prevent timing attacks
 const DUMMY_HASH = 'scrypt:16384:8:1:00000000000000000000000000000000:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
 
+// Longest address SMTP accepts (RFC 5321 path length) — caps parsing work.
+const EMAIL_MAX_LENGTH = 254;
+
+/**
+ * Structural email check for the signup boundary: exactly one '@', non-empty
+ * local part, and a domain holding a dot with non-empty labels. Implemented
+ * as linear string scans (not a regex) so adversarial input cannot trigger
+ * super-linear backtracking. Deliberately not full RFC 5322 — the mailbox
+ * provider remains the arbiter of deliverability.
+ */
+function isValidEmail(email: string): boolean {
+  if (email.length === 0 || email.length > EMAIL_MAX_LENGTH) return false;
+
+  const atIndex = email.indexOf('@');
+  if (atIndex <= 0 || atIndex !== email.lastIndexOf('@')) return false;
+
+  const domain = email.slice(atIndex + 1);
+  const dotIndex = domain.indexOf('.');
+  return dotIndex > 0 && dotIndex < domain.length - 1;
+}
+
 /**
  * Minimum user shape required to mint an access token. Both UserRow and
  * UserWithRoleRow extend this — callers pass whichever they already hold.
@@ -171,7 +192,7 @@ export class AuthService {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
       throw new ValidationError('A valid email address is required');
     }
 
