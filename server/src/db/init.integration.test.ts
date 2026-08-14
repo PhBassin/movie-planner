@@ -78,10 +78,43 @@ describe.runIf(Boolean(TEST_URL))(
         'app_settings', 'rate_limit_configs', 'rate_limit_audit_log',
         'scrape_schedules', 'scrape_reports', 'scrape_attempts',
         'scrape_jobs',
-        'refresh_tokens', 'permission_category_labels', 'schema_migrations',
+        'refresh_tokens', 'auth_email_tokens',
+        'permission_category_labels', 'schema_migrations',
       ]) {
         expect(tables, `missing table ${expected}`).toContain(expected);
       }
+    });
+
+    it('carries the auth_email_tokens table (hashed, purpose-scoped tokens)', async () => {
+      const cols = await db.query<{ column_name: string }>(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'auth_email_tokens'
+        ORDER BY column_name
+      `);
+      expect(cols.rows.map((r) => r.column_name)).toEqual([
+        'created_at', 'expires_at', 'id', 'purpose', 'token_hash', 'user_id',
+      ]);
+
+      // The purpose discriminator rejects unknown purposes.
+      await expect(
+        db.query(
+          `INSERT INTO auth_email_tokens (user_id, purpose, token_hash, expires_at)
+           VALUES (1, 'magic_link', 'x', NOW())`
+        )
+      ).rejects.toThrow();
+
+      // Tokens cascade on user deletion.
+      await db.query(
+        `INSERT INTO users (username, email, password_hash, role_id, status)
+         VALUES ('tok@example.com', 'tok@example.com', 'x', (SELECT id FROM roles WHERE name = 'member'), 'unverified')`
+      );
+      await db.query(
+        `INSERT INTO auth_email_tokens (user_id, purpose, token_hash, expires_at)
+         VALUES ((SELECT id FROM users WHERE email = 'tok@example.com'), 'email_verification', 'hash', NOW() + INTERVAL '30 minutes')`
+      );
+      await db.query(`DELETE FROM users WHERE email = 'tok@example.com'`);
+      const leftover = await db.query(`SELECT 1 FROM auth_email_tokens`);
+      expect(leftover.rows).toHaveLength(0);
     });
 
     it('enables the pg_trgm extension and the movie-title trigram index', async () => {
@@ -244,14 +277,17 @@ describe.runIf(Boolean(TEST_URL))(
       expect(parseStrictInt(result.rows[0].count)).toBe(0);
     });
 
-    it('migration runner applies pending 001 migration and records it', async () => {
+    it('migration runner applies pending migrations and records them', async () => {
       await expect(runMigrations(db)).resolves.toBeUndefined();
-      const result = await db.query<{ version: string; count: string }>(`
-        SELECT version, COUNT(*)::text AS count FROM schema_migrations GROUP BY version
+      const result = await db.query<{ version: string }>(`
+        SELECT version FROM schema_migrations ORDER BY version
       `);
-      // The scrape_jobs queue migration is the first recorded migration.
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].version).toBe('001_scrape_jobs_queue.sql');
+      // 001 (scrape_jobs queue) and 002 (auth_email_tokens) — both idempotent
+      // over the baseline.
+      expect(result.rows.map((r) => r.version)).toEqual([
+        '001_scrape_jobs_queue.sql',
+        '002_auth_email_tokens.sql',
+      ]);
 
       // The queue table is present (created by the baseline; the migration is
       // idempotent so re-applying it over the baseline is a no-op).

@@ -232,6 +232,15 @@ npx playwright test --headed --debug
 - Scrapes complete quickly in Docker, so some timing-sensitive tests may need adjustments
 - Tests work best when run individually or after a clean Docker restart
 - If tests interfere with each other, restart services: `docker compose restart web worker`
+- The auth **register rate limiter** (3 signups/hour per IP by default) bounds
+  how many signups one E2E session may perform: `member-signup.spec.ts` alone
+  uses all three. The verification suite (`member-verification.spec.ts`) adds
+  exactly one signup; run it after a `docker compose restart web` (which
+  resets the in-memory limiter) or after the window elapses.
+- The mailer runs on the **in-memory transport** in the dev/test stack (no
+  `SMTP_HOST`); E2E reads captured mail through the test-only
+  `/api/test/mailbox` route (mounted when `NODE_ENV=test` or
+  `ENABLE_TEST_MAILBOX=true`, the latter set in `compose.yaml` only).
 
 ### Test Locations
 

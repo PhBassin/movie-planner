@@ -145,6 +145,72 @@ POST /api/auth/signup
 }
 ```
 
+**Note:** A successful signup dispatches a **verification email** (see *Verify Email* below). The send is best-effort and fire-and-forget — a mailer failure never fails the registration; the Member can request a fresh link via *Resend Verification*.
+
+---
+
+### Verify Email
+
+```http
+POST /api/auth/verify-email
+```
+
+**Authentication:** None (public route — the link is opened from the Member's mailbox)
+
+**Description:** Link target of the verification email. Consumes the token (strictly single-use, 30-minute lifetime, stored hashed) and flips the Member `unverified → active` (`email_verified_at` set; a suspended Member stays suspended). The SPA landing page is `/verify?token=...`.
+
+**Request Body:**
+```json
+{
+  "token": "raw-token-from-the-email"
+}
+```
+
+**Response (200 — verified):**
+```json
+{
+  "success": true,
+  "data": { "message": "Email address verified" }
+}
+```
+
+**Response (400 — unknown, expired, or missing token):**
+```json
+{
+  "success": false,
+  "error": "This verification link is invalid or has expired"
+}
+```
+
+---
+
+### Resend Verification
+
+```http
+POST /api/auth/resend-verification
+```
+
+**Authentication:** None (public route)
+
+**Description:** Issue a fresh verification token (superseding any outstanding one) and send a new link. **Enumeration-safe:** the response is always `200` with the same body whether or not the email belongs to an unverified Member. No-op for Staff accounts and already-verified Members.
+
+**Request Body:**
+```json
+{
+  "email": "jane@example.com"
+}
+```
+
+**Response (200 — always):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "If an unverified account exists for this email, a verification link is on its way."
+  }
+}
+```
+
 ---
 
 ### Member Profile

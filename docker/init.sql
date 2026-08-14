@@ -471,6 +471,27 @@ CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 
 -- ============================================================================
+-- Authentication: one-purpose email tokens (verification, password reset)
+-- ============================================================================
+-- Raw token values are never stored: only the SHA-256 hash of the raw token.
+-- At most one live token per (user, purpose): issuing a fresh token supersedes
+-- (deletes) prior outstanding ones. The 30-minute lifetime is application
+-- policy (`AUTH_TOKEN_TTL_MS`, ADR 0006), not a schema concern.
+
+CREATE TABLE auth_email_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL CHECK (purpose IN ('email_verification', 'password_reset')),
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Lookup is always by (purpose, hash) at consume time.
+CREATE INDEX idx_auth_email_tokens_hash ON auth_email_tokens(purpose, token_hash);
+CREATE INDEX idx_auth_email_tokens_user_id ON auth_email_tokens(user_id);
+
+-- ============================================================================
 -- Migration tracking
 -- ============================================================================
 -- Empty by design: docker/init.sql is the consolidated baseline, so no rows are

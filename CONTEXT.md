@@ -19,7 +19,7 @@ A User authenticates via a **Session** (see Authentication). One User holds many
 A User whose role is `member` — the cinema-goer, the consumer the SaaS exists to serve. A Member is defined by four properties that distinguish it from Staff:
 
 1. **Self-registration by email.** A Member creates their own account through a public sign-up route (`POST /api/auth/signup` in `server/src/routes/auth.ts`), identifying by **email** and a password. Staff, by contrast, identify by **username** and are created by an Admin (the existing `POST /auth/register` flow, which is staff-only). A freshly registered Member is **unverified**. The login path (`AuthService.login`) accepts either identifier: an identifier containing `@` is looked up by email, everything else by username.
-2. **Email verification.** A Member becomes **verified** by confirming ownership of their email. Verification splits the two Member powers: **selecting** from the catalog is open to any Member; **submitting** a new cinema is open only to a *verified* Member. Verification is the abuse control that complements the per-Member scrape throttle — see TheaterSubmission.
+2. **Email verification.** A Member becomes **verified** by confirming ownership of their email — clicking the link the **Mailer** sent to their address (see *Mailer* under Authentication), which flips `email_verified_at` and moves the Member `unverified → active`. Verification splits the two Member powers: **selecting** from the catalog is open to any Member; **submitting** a new cinema is open only to a *verified* Member. Verification is the abuse control that complements the per-Member scrape throttle — see TheaterSubmission. It is load-bearing: there is no bypass flag.
 3. **No administrative reach.** A Member holds none of the scraper / settings / users / system permissions. A Member can read the shared cinema catalog (Theaters, Movies, Showtimes) and act only on their own data.
 4. **Personal data.** A Member owns a **Selection** of Theaters and an **Appearance** (light/dark) for their homepage — concepts Staff do not have.
 
@@ -359,13 +359,27 @@ The concept is implemented as a single deep module: `server/src/services/session
 - Not an **SSE subscriber session**. The word "session" is reused loosely for a live SSE subscriber connection (see `attachProgressStream` in `services/sse-bridge.ts`); that is a transport-lifetime concept, unrelated to user-auth Sessions. The two share only the word.
 - Not a **ScrapeRun** (one scrape execution) or a **Showtime** (a movie showing) — see those entries.
 
+### Mailer
+
+The auth-only outbound email module (`server/src/services/mailer.ts`). It carries exactly two payloads — **email verification** and **password reset** — and nothing else: submission outcomes never go to email (ADR 0005). The sender identity (`SMTP_FROM_NAME` / `SMTP_FROM_ADDRESS`) defaults to the Branding `email_from_*` defaults.
+
+The mailer's **transport is the swappable seam**: with `SMTP_HOST` set it sends through a real SMTP relay; without it, an **in-memory transport** captures every message into a process-wide mailbox. Tests and E2E drive the in-memory transport — no real SMTP in CI — and inspect the mailbox through the test-only `/api/test/mailbox` route (mounted only when `NODE_ENV=test`).
+
+**What the Mailer is *not*:**
+- Not a **notification channel**. Member notifications (TheaterSubmission outcomes) ride the transient `member:notices` SSE path; the mailbox is reserved for auth (see *Member notification*).
+- Not **env-tuned policy**. The auth-token lifetime is the `AUTH_TOKEN_TTL_MS` const (30 minutes, shared by verification and password reset — ADR 0006); only the transport (host, port, credentials) is configuration.
+
+### Auth email token
+
+A one-purpose, single-use credential emailed to a Member for an out-of-band auth proof — today **email verification**, later **password reset** (ADR 0006). Stored in `auth_email_tokens` as a **SHA-256 hash only** (the raw token never touches the database), with a 30-minute expiry read from `AUTH_TOKEN_TTL_MS`. At most **one live token per (Member, purpose)**: issuing a fresh token supersedes the outstanding one, and consuming deletes the row. The verification link lands on the client's `/verify?token=…` page; `POST /api/auth/resend-verification` issues a fresh token through an enumeration-safe, always-200 endpoint.
+
 ## Database initialization
 
 ### Baseline
 
 The single source of truth for a fresh, empty Movie Planner database: the consolidated `docker/init.sql`. The baseline carries the full schema (all tables, constraints, indexes) **and** all reference data that an instance starts with — the three system **Roles** (`admin`, `operator`, `member`), the canonical **permission** set, role/permission grants, the **Branding** singleton defaults, the **RateLimitConfig** singleton, the permission-category labels, and the default weekly **scrape schedule**. It deliberately holds **no static administrator credential**; the first admin is created by application code (see Bootstrap admin).
 
-The baseline is **not** a migration. It is applied once to a bare database — by the Docker postgres image on first container start, or by the host-side `server:db:init` runner (`server/src/db/init.ts`) for non-Docker development. Forward schema changes thereafter are ordinary numbered files under `migrations/` (starting at `001_*`), tracked in `schema_migrations`; the baseline leaves that table empty so the first real migration is `001`. See `docs/adr/0008-fork-monolith-single-db.md` for the single-DB fork decision.
+The baseline is **not** a migration. It is applied once to a bare database — by the Docker postgres image on first container start, or by the host-side `server:db:init` runner (`server/src/db/init.ts`) for non-Docker development. Forward schema changes thereafter are ordinary numbered files under `migrations/` (starting at `001_*`), tracked in `schema_migrations`; the baseline leaves that table empty so the first real migration is `001`. New schema lands in **both** places in the same change: the baseline (for fresh databases) and the next numbered migration (for existing ones). See `docs/adr/0008-fork-monolith-single-db.md` for the single-DB fork decision.
 
 **What the Baseline is *not*:**
 - Not a **migration**. Migrations are deltas applied by the runner against an existing database; the baseline is the full initial state laid down on a bare one. The runner does not read `init.sql`.

@@ -106,6 +106,7 @@ describe('System Queries', () => {
             { version: '024_add_refresh_tokens.sql' },
             { version: '025_drop_screen_count.sql' },
             { version: '001_scrape_jobs_queue.sql' },
+            { version: '002_auth_email_tokens.sql' },
           ],
         }),
       } as unknown as DB;
@@ -131,6 +132,7 @@ describe('System Queries', () => {
 
       expect(result).toEqual([
         { version: '001_scrape_jobs_queue.sql', status: 'pending' },
+        { version: '002_auth_email_tokens.sql', status: 'pending' },
       ]);
     });
 
@@ -160,6 +162,7 @@ describe('System Queries', () => {
 
       expect(result).toEqual([
         { version: '001_scrape_jobs_queue.sql', status: 'pending' },
+        { version: '002_auth_email_tokens.sql', status: 'pending' },
       ]);
     });
   });
