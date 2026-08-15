@@ -4,6 +4,7 @@ import {
   getTheaterConfig,
   getTheaters,
   activateTheater,
+  resetProvisioningTheater,
 } from '../db/theater-queries.js';
 import {
   createScrapeAttempt,
@@ -248,8 +249,10 @@ export class ScrapeRun implements ProgressPublisher {
       showtimesCount: theaterShowtimesCount,
     });
 
-    if (successfulDates > 0) {
+    if (successfulDates > 0 && theaterShowtimesCount > 0) {
       await activateTheater(this.db, theater.id);
+    } else {
+      await resetProvisioningTheater(this.db, theater.id);
     }
 
     return { rateLimited };

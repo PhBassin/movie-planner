@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockUpsertTheater = vi.fn().mockResolvedValue(undefined);
 const mockActivateTheater = vi.fn().mockResolvedValue(undefined);
+const mockResetProvisioningTheater = vi.fn().mockResolvedValue(undefined);
 const mockBrowserTransportFetchPage = vi.fn();
 const mockFetchTransportFetchPage = vi.fn();
 const mockParseTheaterPage = vi.fn();
@@ -22,6 +23,7 @@ vi.mock('../../../src/db/showtime-queries.js', () => ({
 vi.mock('../../../src/db/theater-queries.js', () => ({
   upsertTheater: (...args: any[]) => mockUpsertTheater(...args),
   activateTheater: (...args: any[]) => mockActivateTheater(...args),
+  resetProvisioningTheater: (...args: any[]) => mockResetProvisioningTheater(...args),
   getTheaters: vi.fn(),
   getTheaterConfigs: vi.fn(),
 }));
@@ -156,7 +158,17 @@ describe('addTheaterAndScrape', () => {
     });
     mockParseTheaterPage.mockReturnValue({ theater: parsedTheater, movies: [] });
     mockFetchTransportFetchPage.mockResolvedValue({ html: '{}' });
-    mockParseShowtimesJson.mockReturnValue([]);
+    mockParseShowtimesJson.mockReturnValue([{
+      movie: {
+        id: 123,
+        title: 'Movie',
+        genres: [],
+        actors: [],
+        source_url: 'https://www.allocine.fr/film/fichefilm_gen_cfilm=123.html',
+      },
+      showtimes: [{ week_start: '2026-03-09' }],
+      is_new_this_week: false,
+    }]);
   });
 
   it('should reject invalid Allociné URLs', async () => {
@@ -210,8 +222,8 @@ describe('addTheaterAndScrape', () => {
 
     await addTheaterAndScrape({} as any, VALID_URL);
 
-    // fetchTransport.fetchPage called once per date
-    expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(3);
+    // Each date fetches showtimes and the movie detail page.
+    expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(6);
   });
 
   it('should return the upserted theater data with URL', async () => {
@@ -222,6 +234,7 @@ describe('addTheaterAndScrape', () => {
     expect(result).toMatchObject({ id: 'C0072', name: 'Theater Test' });
     expect(result.url).toBe(VALID_URL);
     expect(mockActivateTheater).toHaveBeenCalledWith(expect.anything(), 'C0072');
+    expect(mockResetProvisioningTheater).not.toHaveBeenCalled();
   });
 
   it('should emit progress events when publisher provided', async () => {
@@ -254,7 +267,9 @@ describe('addTheaterAndScrape', () => {
 
     // Should not throw — errors on individual dates are swallowed
     await expect(addTheaterAndScrape({} as any, VALID_URL)).resolves.toBeDefined();
-    expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(2);
+    // The failed date makes one request; the successful date makes a showtimes
+    // request and a movie detail request.
+    expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(3);
   });
 
   it('should leave the theater provisioning when every date scrape fails', async () => {
@@ -268,5 +283,40 @@ describe('addTheaterAndScrape', () => {
 
     await expect(addTheaterAndScrape({} as any, VALID_URL)).rejects.toThrow('failed');
     expect(mockActivateTheater).not.toHaveBeenCalled();
+    expect(mockResetProvisioningTheater).toHaveBeenCalledWith(expect.anything(), 'C0072');
+  });
+
+  it('should leave the theater provisioning when dates return no showtimes', async () => {
+    const { addTheaterAndScrape } = await import('../../../src/scraper/index.js');
+
+    mockParseShowtimesJson.mockReturnValue([]);
+
+    await expect(addTheaterAndScrape({} as any, VALID_URL)).rejects.toThrow('failed');
+    expect(mockActivateTheater).not.toHaveBeenCalled();
+    expect(mockResetProvisioningTheater).toHaveBeenCalledWith(expect.anything(), 'C0072');
+  });
+
+  it('should leave the theater provisioning when all movies fail to persist', async () => {
+    const { addTheaterAndScrape } = await import('../../../src/scraper/index.js');
+
+    mockParseShowtimesJson.mockReturnValue([{
+      movie: {
+        id: 123,
+        title: 'Movie',
+        genres: [],
+        actors: [],
+        source_url: 'https://www.allocine.fr/film/fichefilm_gen_cfilm=123.html',
+      },
+      showtimes: [{ week_start: '2026-03-09' }],
+      is_new_this_week: false,
+    }]);
+    mockFetchTransportFetchPage.mockImplementation(async (url: string) => {
+      if (url.includes('/film/fichefilm')) return { html: '{}' };
+      throw new Error('showtimes unavailable');
+    });
+
+    await expect(addTheaterAndScrape({} as any, VALID_URL)).rejects.toThrow('failed');
+    expect(mockActivateTheater).not.toHaveBeenCalled();
+    expect(mockResetProvisioningTheater).toHaveBeenCalledWith(expect.anything(), 'C0072');
   });
 });

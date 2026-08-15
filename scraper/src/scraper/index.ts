@@ -7,7 +7,7 @@ import { ScrapeRun } from './scrape-run.js';
 import type { ScrapeOptions, ProgressPublisher } from './scrape-run.js';
 import { createScrapeConfig } from './scrape-config.js';
 import type { ScrapeSummary } from '../types/scraper.js';
-import { activateTheater } from '../db/theater-queries.js';
+import { activateTheater, resetProvisioningTheater } from '../db/theater-queries.js';
 
 export type { ScrapeOptions, ProgressPublisher } from './scrape-run.js';
 
@@ -46,16 +46,25 @@ export async function addTheaterAndScrape(
   logger.info(`Scraping ${availableDates.length} available date(s)...`, { theater: theater.name });
 
   let successfulDates = 0;
+  let scrapedShowtimes = 0;
   for (const date of availableDates) {
     try {
-      await strategy.scrapeTheater(db, tempConfig, date, config.movieDelayMs, progress);
+      const result = await strategy.scrapeTheater(
+        db,
+        tempConfig,
+        date,
+        config.movieDelayMs,
+        progress
+      );
       successfulDates++;
+      scrapedShowtimes += result.showtimesCount;
     } catch (error) {
       logger.error('Failed to scrape date', { date, theater: theater.name, error });
     }
   }
 
-  if (successfulDates === 0) {
+  if (successfulDates === 0 || scrapedShowtimes === 0) {
+    await resetProvisioningTheater(db, theater.id);
     throw new Error(`Theater scrape failed for every available date: ${theater.id}`);
   }
 
