@@ -287,6 +287,7 @@ ON CONFLICT (category_key) DO NOTHING;
 CREATE TABLE theaters (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'provisioning' CHECK (status IN ('provisioning', 'active')),
   address TEXT,
   postal_code TEXT,
   city TEXT,

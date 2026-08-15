@@ -22,6 +22,7 @@ function parseTheaterSection(theaterDataStr: string | undefined, theaterId: stri
   const fallback: Theater = {
     id: theaterId,
     name: '',
+    status: 'provisioning',
     address: '',
     postal_code: '',
     city: '',
@@ -34,6 +35,7 @@ function parseTheaterSection(theaterDataStr: string | undefined, theaterId: stri
     return {
       id: theaterId,
       name: data.name || '',
+      status: 'provisioning',
       address: data.location?.address || '',
       postal_code: data.location?.postalCode || '',
       city: data.location?.city || '',

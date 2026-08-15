@@ -8,8 +8,8 @@ describe('Theater Queries', () => {
       const mockDb = {
         query: vi.fn().mockResolvedValue({
           rows: [
-            { id: '1', name: 'Theater 1' },
-            { id: '2', name: 'Theater 2' }
+            { id: '1', name: 'Theater 1', status: 'active' },
+            { id: '2', name: 'Theater 2', status: 'active' }
           ]
         })
       } as unknown as DB;
@@ -18,6 +18,18 @@ describe('Theater Queries', () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('1');
+    });
+
+    it('should return only active theaters', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getTheaters(mockDb);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE status = 'active'")
+      );
     });
   });
 
@@ -58,18 +70,21 @@ describe('Theater Queries', () => {
       const sql: string = mockDb.query.mock.calls[0][0];
       expect(sql.toLowerCase()).toContain('url is not null');
     });
+
   });
 
   describe('addTheater', () => {
     it('should insert a new theater with id, name and url', async () => {
       const mockDb = {
-        query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0099', name: 'New Theater', url: 'https://example.com' }] })
+        query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0099', name: 'New Theater', status: 'provisioning', url: 'https://example.com' }] })
       } as unknown as DB;
 
       const result = await addTheater(mockDb, { id: 'C0099', name: 'New Theater', url: 'https://example.com' });
 
       expect(mockDb.query).toHaveBeenCalledOnce();
       expect(result.id).toBe('C0099');
+      expect(result.status).toBe('provisioning');
+      expect(mockDb.query.mock.calls[0][0]).toContain('provisioning');
     });
 
     it('should throw if theater id already exists', async () => {
@@ -85,7 +100,7 @@ describe('Theater Queries', () => {
   describe('updateTheaterConfig', () => {
     it('should update theater name and url', async () => {
       const mockDb = {
-        query: vi.fn().mockResolvedValue({ rows: [{ id: 'W7504', name: 'Updated', url: 'https://new-url.com' }] })
+        query: vi.fn().mockResolvedValue({ rows: [{ id: 'W7504', name: 'Updated', status: 'active', url: 'https://new-url.com' }] })
       } as unknown as DB;
 
       const result = await updateTheaterConfig(mockDb, 'W7504', { name: 'Updated', url: 'https://new-url.com' });

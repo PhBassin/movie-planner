@@ -120,6 +120,7 @@ function theaterFromWeeklyRow(row: WeeklyMovieRow): Theater {
   return {
     id: row.theater_id,
     name: row.theater_name,
+    status: 'active',
     address: row.theater_address ?? undefined,
     postal_code: row.postal_code ?? undefined,
     city: row.city ?? undefined,
@@ -248,10 +249,10 @@ export async function getMoviesByDate(
         c.postal_code,
         c.city,
         c.image_url as theater_image_url
-      FROM showtimes s
-      JOIN movies f ON s.movie_id = f.id
-      JOIN theaters c ON s.theater_id = c.id
-      WHERE s.date = $1 AND s.week_start = $2
+       FROM showtimes s
+       JOIN movies f ON s.movie_id = f.id
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.date = $1 AND s.week_start = $2
       ORDER BY f.title
     `,
     [date, weekStart]
@@ -278,10 +279,10 @@ export async function getWeeklyMovies(
         c.postal_code,
         c.city,
         c.image_url as theater_image_url
-      FROM weekly_programs wp
-      JOIN movies f ON wp.movie_id = f.id
-      JOIN theaters c ON wp.theater_id = c.id
-      WHERE wp.week_start = $1
+       FROM weekly_programs wp
+       JOIN movies f ON wp.movie_id = f.id
+       JOIN theaters c ON wp.theater_id = c.id
+       WHERE c.status = 'active' AND wp.week_start = $1
       ORDER BY f.title
     `,
     [weekStart]
@@ -343,11 +344,19 @@ export async function searchMovies(
       trailer_url,
       ${MOVIE_SEARCH_SCORING_SQL} AS score
     FROM movies
-    WHERE
-      similarity(title, $1) > 0.1
-      OR (original_title IS NOT NULL AND similarity(original_title, $1) > 0.1)
-      OR title ILIKE '%' || $1 || '%'
-      OR (original_title IS NOT NULL AND original_title ILIKE '%' || $1 || '%')
+     WHERE
+       EXISTS (
+         SELECT 1
+         FROM showtimes s
+         JOIN theaters c ON c.id = s.theater_id
+         WHERE s.movie_id = movies.id AND c.status = 'active'
+       )
+       AND (
+       similarity(title, $1) > 0.1
+       OR (original_title IS NOT NULL AND similarity(original_title, $1) > 0.1)
+       OR title ILIKE '%' || $1 || '%'
+       OR (original_title IS NOT NULL AND original_title ILIKE '%' || $1 || '%')
+       )
     ORDER BY score DESC, title ASC
     LIMIT $2`,
     [query, limit]

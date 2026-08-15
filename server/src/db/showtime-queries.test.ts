@@ -35,6 +35,7 @@ describe('Showtime Queries', () => {
       expect(result).toHaveLength(1);
       expect(result[0].theater).toBeDefined();
       expect(result[0].theater.name).toBe('Theater 1');
+      expect(result[0].theater.status).toBe('active');
       expect(result[0].experiences).toEqual(['3D']);
     });
 

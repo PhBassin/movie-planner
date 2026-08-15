@@ -80,9 +80,14 @@ describe('TheaterService', () => {
 
   describe('addTheaterManual — field validation through the add() interface', () => {
     it('accepts a valid id + name + url', async () => {
-      vi.mocked(theaterQueries.addTheater).mockResolvedValue({ id: 'C1' } as any);
+      vi.mocked(theaterQueries.addTheater).mockResolvedValue({ id: 'C1', status: 'provisioning' } as any);
+      vi.mocked(reportQueries.createScrapeReport).mockResolvedValue(42 as any);
+      vi.mocked(busProducer.getBusProducer).mockReturnValue({
+        enqueueAddTheaterJob: vi.fn().mockResolvedValue(1),
+      } as any);
       const result = await theaterService.addTheaterManual('C1', 'Grand Rex', 'https://www.allocine.fr/x');
       expect(result.id).toBe('C1');
+      expect(reportQueries.createScrapeReport).toHaveBeenCalled();
     });
 
     it('rejects a non-alphanumeric id', async () => {

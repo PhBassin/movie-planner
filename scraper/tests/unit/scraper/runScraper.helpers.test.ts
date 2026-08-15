@@ -31,6 +31,8 @@ vi.mock('../../../src/scraper/strategy-factory.js', () => ({
 
 const mockGetTheaterConfigs = vi.fn();
 const mockGetTheaters = vi.fn();
+const mockGetTheaterConfig = vi.fn();
+const mockActivateTheater = vi.fn().mockResolvedValue(undefined);
 const mockCreateScrapeAttempt = vi.fn();
 const mockUpdateScrapeAttempt = vi.fn();
 
@@ -38,6 +40,8 @@ vi.mock('../../../src/db/theater-queries.js', () => ({
   upsertTheater: vi.fn(),
   getTheaters: (...args: any[]) => mockGetTheaters(...args),
   getTheaterConfigs: (...args: any[]) => mockGetTheaterConfigs(...args),
+  getTheaterConfig: (...args: any[]) => mockGetTheaterConfig(...args),
+  activateTheater: (...args: any[]) => mockActivateTheater(...args),
 }));
 
 vi.mock('../../../src/db/scrape-attempt-queries.js', () => ({
@@ -98,6 +102,9 @@ describe('ScrapeRun.prepare', () => {
     vi.clearAllMocks();
     mockGetTheaterConfigs.mockResolvedValue([THEATER_A, THEATER_B]);
     mockGetTheaters.mockResolvedValue([THEATER_A, THEATER_B]);
+    mockGetTheaterConfig.mockImplementation(async (_db: unknown, id: string) =>
+      [THEATER_A, THEATER_B].find(theater => theater.id === id)
+    );
   });
 
   it('returns all configured theaters when no theaterId is provided', async () => {
@@ -121,6 +128,7 @@ describe('ScrapeRun.prepare', () => {
   it('throws if requested theaterId is missing from the database', async () => {
     const run = createRun();
     mockGetTheaters.mockResolvedValue([THEATER_B]);
+    mockGetTheaterConfig.mockResolvedValue(undefined);
 
     await expect(run.prepare({ theaterId: 'C0072' })).rejects.toThrow(
       /not found in database/i
@@ -130,6 +138,7 @@ describe('ScrapeRun.prepare', () => {
   it('throws if requested theaterId is in DB but not configured for scraping', async () => {
     const run = createRun();
     mockGetTheaterConfigs.mockResolvedValue([THEATER_B]);
+    mockGetTheaterConfig.mockResolvedValue(undefined);
 
     await expect(run.prepare({ theaterId: 'C0072' })).rejects.toThrow(
       /not configured for scraping/i

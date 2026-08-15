@@ -45,6 +45,7 @@ Stores theater venue information.
 |--------|------|-------------|-------------|
 | `id` | TEXT | PRIMARY KEY | Theater ID from the source website (e.g., `C0089`, `W7504`) |
 | `name` | TEXT | NOT NULL | Theater name |
+| `status` | TEXT | NOT NULL, DEFAULT `provisioning`, CHECK `provisioning` or `active` | Provisioning theaters stay hidden until their first successful scrape |
 | `address` | TEXT | | Street address |
 | `postal_code` | TEXT | | Postal code |
 | `city` | TEXT | | City name |
@@ -53,6 +54,8 @@ Stores theater venue information.
 
 **Indexes:**
 - Primary key on `id`
+
+Newly added theaters start as `provisioning`; the baseline seed path explicitly creates existing reference theaters as `active`.
 
 **Example:**
 ```sql

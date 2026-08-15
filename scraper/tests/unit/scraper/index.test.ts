@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // --- Mocks ---
 
 const mockUpsertTheater = vi.fn().mockResolvedValue(undefined);
+const mockActivateTheater = vi.fn().mockResolvedValue(undefined);
 const mockBrowserTransportFetchPage = vi.fn();
 const mockFetchTransportFetchPage = vi.fn();
 const mockParseTheaterPage = vi.fn();
@@ -20,6 +21,7 @@ vi.mock('../../../src/db/showtime-queries.js', () => ({
 
 vi.mock('../../../src/db/theater-queries.js', () => ({
   upsertTheater: (...args: any[]) => mockUpsertTheater(...args),
+  activateTheater: (...args: any[]) => mockActivateTheater(...args),
   getTheaters: vi.fn(),
   getTheaterConfigs: vi.fn(),
 }));
@@ -150,7 +152,7 @@ describe('addTheaterAndScrape', () => {
     vi.clearAllMocks();
     mockBrowserTransportFetchPage.mockResolvedValue({
       html: '<html></html>',
-      availableDates: [],
+      availableDates: ['2026-03-10'],
     });
     mockParseTheaterPage.mockReturnValue({ theater: parsedTheater, movies: [] });
     mockFetchTransportFetchPage.mockResolvedValue({ html: '{}' });
@@ -219,6 +221,7 @@ describe('addTheaterAndScrape', () => {
 
     expect(result).toMatchObject({ id: 'C0072', name: 'Theater Test' });
     expect(result.url).toBe(VALID_URL);
+    expect(mockActivateTheater).toHaveBeenCalledWith(expect.anything(), 'C0072');
   });
 
   it('should emit progress events when publisher provided', async () => {
@@ -252,5 +255,18 @@ describe('addTheaterAndScrape', () => {
     // Should not throw — errors on individual dates are swallowed
     await expect(addTheaterAndScrape({} as any, VALID_URL)).resolves.toBeDefined();
     expect(mockFetchTransportFetchPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('should leave the theater provisioning when every date scrape fails', async () => {
+    const { addTheaterAndScrape } = await import('../../../src/scraper/index.js');
+
+    mockBrowserTransportFetchPage.mockResolvedValue({
+      html: '<html></html>',
+      availableDates: ['2026-03-10', '2026-03-11'],
+    });
+    mockFetchTransportFetchPage.mockRejectedValue(new Error('Network error'));
+
+    await expect(addTheaterAndScrape({} as any, VALID_URL)).rejects.toThrow('failed');
+    expect(mockActivateTheater).not.toHaveBeenCalled();
   });
 });

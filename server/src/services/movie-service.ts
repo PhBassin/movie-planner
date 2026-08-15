@@ -35,6 +35,10 @@ export class MovieService {
       return null;
     }
 
+    if (showtimes.length === 0) {
+      return null;
+    }
+
     return {
       ...movie,
       theaters: groupShowtimesByTheater(showtimes)
