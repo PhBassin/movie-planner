@@ -2,9 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { DB } from '../db/index.js';
 import type { Mailer } from './mailer.js';
 
-vi.mock('../db/member-queries.js', () => ({
-  getUserByEmail: vi.fn(),
-}));
+vi.mock('../db/member-queries.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../db/member-queries.js')>();
+  return {
+    ...actual,
+    getUserByEmail: vi.fn(),
+  };
+});
 
 vi.mock('../repositories/auth-email-token-repository.js', () => ({
   issueAuthEmailToken: vi.fn(),

@@ -4,6 +4,8 @@ import {
   getUserByEmail,
   createMember,
   getMemberProfile,
+  isPendingVerification,
+  type MemberCredentialRow,
 } from './member-queries.js';
 
 describe('Member Queries', () => {
@@ -73,6 +75,35 @@ describe('Member Queries', () => {
         expect.stringContaining("'unverified'"),
         expect.any(Array)
       );
+    });
+  });
+
+  describe('isPendingVerification', () => {
+    const base: MemberCredentialRow = {
+      id: 7,
+      username: 'jane@example.com',
+      email: 'jane@example.com',
+      password_hash: 'hash',
+      role_id: 3,
+      role_name: 'member',
+      is_system_role: true,
+      status: 'unverified',
+      email_verified_at: null,
+      created_at: '2024-01-01T00:00:00Z',
+    };
+
+    it('is true for an unverified Member', () => {
+      expect(isPendingVerification(base)).toBe(true);
+    });
+
+    it('is false for a Staff account (email-keyed flows are Member-only)', () => {
+      expect(isPendingVerification({ ...base, role_name: 'admin' })).toBe(false);
+    });
+
+    it('is false for an already-verified Member', () => {
+      expect(
+        isPendingVerification({ ...base, status: 'active', email_verified_at: '2024-01-02T00:00:00Z' }),
+      ).toBe(false);
     });
   });
 

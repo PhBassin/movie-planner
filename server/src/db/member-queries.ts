@@ -47,6 +47,15 @@ export interface MemberSignupResult {
 }
 
 /**
+ * True when the row is a Member still awaiting email verification — the
+ * eligibility predicate for (re)sending a verification link. Lives next to
+ * the query so the lifecycle rule stays with the data it reads.
+ */
+export function isPendingVerification(user: MemberCredentialRow): boolean {
+  return user.role_name === 'member' && user.email_verified_at === null;
+}
+
+/**
  * Look up a user by email (case-insensitive). The primary use is the Member
  * login path, so it selects the Member lifecycle columns as well.
  */

@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../utils/logger.js';
+import { parseStrictInt } from '../utils/number.js';
 
 /**
  * Mailer — the auth-only email module (ADR 0005: verification and password
@@ -38,10 +39,15 @@ export interface Mailer {
 export const DEFAULT_FROM_NAME = 'Movie Planner';
 export const DEFAULT_FROM_ADDRESS = 'no-reply@movie-planner.local';
 
-function fromHeader(): string {
+/** The sender identity, resolved once at mailer construction. */
+interface SenderIdentity {
+  readonly header: string;
+}
+
+function resolveSenderIdentity(): SenderIdentity {
   const name = process.env.SMTP_FROM_NAME ?? DEFAULT_FROM_NAME;
   const address = process.env.SMTP_FROM_ADDRESS ?? DEFAULT_FROM_ADDRESS;
-  return `${name} <${address}>`;
+  return { header: `${name} <${address}>` };
 }
 
 // ---------------------------------------------------------------------------
@@ -121,16 +127,25 @@ export function resetMailerForTests(): void {
 
 function createInMemoryMailer(): Mailer {
   const mailbox = getInMemoryMailbox();
+  const sender = resolveSenderIdentity();
   return {
     async send(message: MailMessage): Promise<void> {
-      mailbox.push({ from: fromHeader(), ...message });
+      mailbox.push({ from: sender.header, ...message });
     },
   };
 }
 
 function createSmtpMailer(): Mailer {
   const host = process.env.SMTP_HOST!;
-  const port = Number(process.env.SMTP_PORT ?? 587);
+  const portEnv = process.env.SMTP_PORT ?? '587';
+  const port = parseStrictInt(portEnv);
+  if (Number.isNaN(port)) {
+    logger.error('❌ SMTP_PORT is not a valid integer', { value: portEnv });
+    throw new Error(
+      `FATAL: SMTP_PORT must be an integer (got "${portEnv}"). ` +
+      'Fix SMTP_PORT or unset it to use the default 587.',
+    );
+  }
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
 
@@ -141,9 +156,11 @@ function createSmtpMailer(): Mailer {
     ...(user && pass ? { auth: { user, pass } } : {}),
   });
 
+  const sender = resolveSenderIdentity();
+
   return {
     async send(message: MailMessage): Promise<void> {
-      await transport.sendMail({ from: fromHeader(), ...message });
+      await transport.sendMail({ from: sender.header, ...message });
     },
   };
 }

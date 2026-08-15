@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import type { DB } from '../db/index.js';
 import { AUTH_TOKEN_TTL_MS } from '../services/auth-tokens.js';
+import { parseStrictInt } from '../utils/number.js';
 
 /**
  * One-purpose auth email tokens (email verification, password reset).
@@ -81,5 +82,5 @@ export async function cleanupExpiredAuthEmailTokens(db: DB): Promise<number> {
      )
      SELECT COUNT(*)::text AS count FROM deleted`,
   );
-  return parseInt(result.rows[0].count, 10);
+  return parseStrictInt(result.rows[0].count) || 0;
 }

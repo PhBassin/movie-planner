@@ -1,6 +1,6 @@
 import type { DB } from '../db/index.js';
 import { logger } from '../utils/logger.js';
-import { getUserByEmail } from '../db/member-queries.js';
+import { getUserByEmail, isPendingVerification } from '../db/member-queries.js';
 import { getAllowedOrigins } from '../utils/cors-config.js';
 import {
   issueAuthEmailToken,
@@ -70,7 +70,7 @@ export class VerificationService {
    */
   async sendVerificationEmail(email: string): Promise<void> {
     const user = await getUserByEmail(this.db, email.trim().toLowerCase());
-    if (!user || user.role_name !== 'member' || user.email_verified_at !== null) {
+    if (!user || !isPendingVerification(user)) {
       return;
     }
 

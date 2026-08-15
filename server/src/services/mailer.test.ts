@@ -111,6 +111,13 @@ describe('Mailer', () => {
       expect(getInMemoryMailbox()).toHaveLength(0);
     });
 
+    it('rejects a non-integer SMTP_PORT instead of silently coercing it', () => {
+      process.env.SMTP_HOST = 'smtp.example.com';
+      process.env.SMTP_PORT = '587abc';
+
+      expect(() => createMailer()).toThrow('SMTP_PORT must be an integer');
+    });
+
     it('omits auth when no credentials are configured (local relay)', async () => {
       process.env.SMTP_HOST = 'localhost';
       delete process.env.SMTP_USER;
