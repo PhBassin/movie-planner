@@ -7,6 +7,8 @@ const RATE_LIMIT_ENV_KEYS = [
   'RATE_LIMIT_AUTH_MAX',
   'RATE_LIMIT_REGISTER_MAX',
   'RATE_LIMIT_REGISTER_WINDOW_MS',
+  'RATE_LIMIT_VERIFICATION_MAX',
+  'RATE_LIMIT_VERIFICATION_WINDOW_MS',
   'RATE_LIMIT_PROTECTED_MAX',
   'RATE_LIMIT_SCRAPER_MAX',
   'RATE_LIMIT_PUBLIC_MAX',
@@ -53,6 +55,8 @@ describe('RateLimitSource — env-loaded initial config (consolidation target)',
       authMax: 5,
       registerMax: 3,
       registerWindowMs: 60 * 60 * 1000,
+      verificationMax: 3,
+      verificationWindowMs: 60 * 60 * 1000,
       protectedMax: 60,
       scraperMax: 10,
       publicMax: 100,
@@ -75,6 +79,8 @@ describe('RateLimitSource — env-loaded initial config (consolidation target)',
     process.env.RATE_LIMIT_AUTH_MAX = '10';
     process.env.RATE_LIMIT_REGISTER_MAX = '7';
     process.env.RATE_LIMIT_REGISTER_WINDOW_MS = '1800000';
+    process.env.RATE_LIMIT_VERIFICATION_MAX = '9';
+    process.env.RATE_LIMIT_VERIFICATION_WINDOW_MS = '2400000';
     process.env.RATE_LIMIT_PROTECTED_MAX = '80';
     process.env.RATE_LIMIT_SCRAPER_MAX = '20';
     process.env.RATE_LIMIT_PUBLIC_MAX = '300';
@@ -89,6 +95,8 @@ describe('RateLimitSource — env-loaded initial config (consolidation target)',
     expect(config.authMax).toBe(10);
     expect(config.registerMax).toBe(7);
     expect(config.registerWindowMs).toBe(1800000);
+    expect(config.verificationMax).toBe(9);
+    expect(config.verificationWindowMs).toBe(2400000);
     expect(config.protectedMax).toBe(80);
     expect(config.scraperMax).toBe(20);
     expect(config.publicMax).toBe(300);
@@ -111,6 +119,8 @@ function makeDbRow(overrides: Partial<{
   auth_max: number;
   register_max: number;
   register_window_ms: number;
+  verification_max: number;
+  verification_window_ms: number;
   protected_max: number;
   scraper_max: number;
   public_max: number;
@@ -126,6 +136,8 @@ function makeDbRow(overrides: Partial<{
     auth_max: 5,
     register_max: 3,
     register_window_ms: 3600000,
+    verification_max: 3,
+    verification_window_ms: 3600000,
     protected_max: 60,
     scraper_max: 10,
     public_max: 100,

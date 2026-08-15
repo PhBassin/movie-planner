@@ -107,6 +107,7 @@ describe('System Queries', () => {
             { version: '025_drop_screen_count.sql' },
             { version: '001_scrape_jobs_queue.sql' },
             { version: '002_auth_email_tokens.sql' },
+            { version: '003_verification_rate_limit_arm.sql' },
           ],
         }),
       } as unknown as DB;
@@ -133,6 +134,7 @@ describe('System Queries', () => {
       expect(result).toEqual([
         { version: '001_scrape_jobs_queue.sql', status: 'pending' },
         { version: '002_auth_email_tokens.sql', status: 'pending' },
+        { version: '003_verification_rate_limit_arm.sql', status: 'pending' },
       ]);
     });
 
@@ -163,6 +165,7 @@ describe('System Queries', () => {
       expect(result).toEqual([
         { version: '001_scrape_jobs_queue.sql', status: 'pending' },
         { version: '002_auth_email_tokens.sql', status: 'pending' },
+        { version: '003_verification_rate_limit_arm.sql', status: 'pending' },
       ]);
     });
   });

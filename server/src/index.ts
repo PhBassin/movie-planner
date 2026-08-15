@@ -3,6 +3,7 @@ import { db } from './db/internal/client.js';
 import { initializeDatabase } from './db/schema.js';
 import { logger } from './utils/logger.js';
 import { validateJWTSecret } from './utils/jwt-secret-validator.js';
+import { validateMailerConfiguration } from './services/mailer.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -13,7 +14,11 @@ async function startServer() {
     // Validate JWT secret before proceeding
     logger.info('🔐 Validating JWT configuration...');
     validateJWTSecret();
-    
+
+    // Email verification is load-bearing (ADR 0003): production refuses to
+    // start without an SMTP relay instead of silently never sending mail.
+    validateMailerConfiguration();
+
     // Log JWT configuration
     const jwtExpiration = process.env.JWT_EXPIRES_IN || '1h';
     logger.info(`🔐 JWT expiration set to: ${jwtExpiration}`);

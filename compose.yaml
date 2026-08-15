@@ -41,7 +41,9 @@ services:
       TZ: ${TZ:-Europe/Paris}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       # Auth email (verification, password reset — ADR 0005). Without
-      # SMTP_HOST the dev stack uses the in-memory transport.
+      # SMTP_HOST the dev stack uses the in-memory transport. The test-only
+      # /api/test/mailbox seam is NOT exposed here — layer compose.e2e.yaml
+      # on top for Playwright runs.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -49,9 +51,6 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Movie Planner}
       SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-no-reply@movie-planner.local}
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-}
-      # Mounts the /api/test/mailbox read seam over the in-memory mailer
-      # transport so Playwright E2E can follow verification links.
-      ENABLE_TEST_MAILBOX: "true"
       ROLE: web
     depends_on:
       db:

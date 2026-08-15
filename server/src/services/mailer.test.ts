@@ -3,7 +3,10 @@ import nodemailer from 'nodemailer';
 import {
   createMailer,
   getInMemoryMailbox,
+  clearInMemoryMailbox,
+  isInMemoryMailerActive,
   resetMailerForTests,
+  validateMailerConfiguration,
   type Mailer,
 } from './mailer.js';
 
@@ -127,6 +130,50 @@ describe('Mailer', () => {
       resetMailerForTests();
 
       expect(getInMemoryMailbox()).toEqual([]);
+    });
+
+    it('clearInMemoryMailbox empties the mailbox', async () => {
+      delete process.env.SMTP_HOST;
+      await createMailer().send({ to: 'a@example.com', subject: 'one', text: '1' });
+      await createMailer().send({ to: 'b@example.com', subject: 'two', text: '2' });
+      expect(getInMemoryMailbox()).toHaveLength(2);
+
+      clearInMemoryMailbox();
+
+      expect(getInMemoryMailbox()).toEqual([]);
+    });
+  });
+
+  describe('transport mode (single source of truth)', () => {
+    it('is in-memory without SMTP_HOST and SMTP with it', () => {
+      delete process.env.SMTP_HOST;
+      expect(isInMemoryMailerActive()).toBe(true);
+
+      process.env.SMTP_HOST = 'smtp.example.com';
+      expect(isInMemoryMailerActive()).toBe(false);
+    });
+  });
+
+  describe('validateMailerConfiguration (production gate)', () => {
+    it('refuses to start production without SMTP_HOST (verification is load-bearing)', () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.SMTP_HOST;
+
+      expect(() => validateMailerConfiguration()).toThrow('SMTP_HOST is not set');
+    });
+
+    it('accepts production with SMTP_HOST configured', () => {
+      process.env.NODE_ENV = 'production';
+      process.env.SMTP_HOST = 'smtp.example.com';
+
+      expect(() => validateMailerConfiguration()).not.toThrow();
+    });
+
+    it('accepts development without SMTP_HOST (in-memory transport)', () => {
+      process.env.NODE_ENV = 'development';
+      delete process.env.SMTP_HOST;
+
+      expect(() => validateMailerConfiguration()).not.toThrow();
     });
   });
 });

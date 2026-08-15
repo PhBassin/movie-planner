@@ -8,9 +8,16 @@ import { logger } from '../utils/logger.js';
  * The transport is the swappable seam: with `SMTP_HOST` set the mailer sends
  * through a real SMTP relay (nodemailer); without it, an in-memory transport
  * captures every message into a process-wide mailbox that tests and local
- * development inspect instead of standing up a relay. The default sender
- * identity mirrors the Branding `email_from_*` defaults and can be overridden
- * via `SMTP_FROM_NAME` / `SMTP_FROM_ADDRESS`.
+ * development inspect instead of standing up a relay. Email verification is
+ * load-bearing (ADR 0003), so production refuses to start without `SMTP_HOST`
+ * (`validateMailerConfiguration`, called at boot like `validateJWTSecret`) —
+ * a misconfigured instance must be loud, not a silent no-op that strands
+ * every Member as `unverified`.
+ *
+ * The default sender identity mirrors the Branding `email_from_*` defaults
+ * (see the `app_settings` baseline in `docker/init.sql`; the mirror is pinned
+ * by an integration test) and can be overridden via `SMTP_FROM_NAME` /
+ * `SMTP_FROM_ADDRESS`.
  */
 
 export interface MailMessage {
@@ -28,13 +35,44 @@ export interface Mailer {
   send(message: MailMessage): Promise<void>;
 }
 
-const DEFAULT_FROM_NAME = 'Movie Planner';
-const DEFAULT_FROM_ADDRESS = 'no-reply@movie-planner.local';
+export const DEFAULT_FROM_NAME = 'Movie Planner';
+export const DEFAULT_FROM_ADDRESS = 'no-reply@movie-planner.local';
 
 function fromHeader(): string {
   const name = process.env.SMTP_FROM_NAME ?? DEFAULT_FROM_NAME;
   const address = process.env.SMTP_FROM_ADDRESS ?? DEFAULT_FROM_ADDRESS;
   return `${name} <${address}>`;
+}
+
+// ---------------------------------------------------------------------------
+// Transport resolution — the single source of truth
+// ---------------------------------------------------------------------------
+
+export type MailerTransportMode = 'smtp' | 'memory';
+
+/**
+ * Resolve the transport mode from env. Every question about "which transport
+ * is this process using?" (route mounting, mailbox visibility, mailer
+ * creation) derives from this one function so the answers cannot drift.
+ */
+export function resolveMailerMode(): MailerTransportMode {
+  return process.env.SMTP_HOST ? 'smtp' : 'memory';
+}
+
+/**
+ * Startup validation (ADR 0003: verification is load-bearing). Production
+ * without `SMTP_HOST` refuses to start — same shape as `validateJWTSecret`.
+ * Outside production the in-memory transport takes over.
+ */
+export function validateMailerConfiguration(): void {
+  if (process.env.NODE_ENV === 'production' && !process.env.SMTP_HOST) {
+    logger.error('❌ SMTP_HOST is not set in production');
+    throw new Error(
+      'FATAL: SMTP_HOST is not set. Email verification is load-bearing ' +
+      '(ADR 0003): without an SMTP relay, Members can never verify their ' +
+      'address. Set SMTP_HOST (see .env.example) to start the server.',
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +87,7 @@ let inMemoryMailbox: SentMailMessage[] | null = null;
  * alongside a real SMTP transport.
  */
 export function isInMemoryMailerActive(): boolean {
-  return !process.env.SMTP_HOST && process.env.NODE_ENV !== 'production';
+  return resolveMailerMode() === 'memory';
 }
 
 /**
@@ -66,6 +104,11 @@ export function getInMemoryMailbox(): SentMailMessage[] {
   return inMemoryMailbox;
 }
 
+/** Test seam: empty the in-memory mailbox without reaching into its state. */
+export function clearInMemoryMailbox(): void {
+  getInMemoryMailbox().length = 0;
+}
+
 /** Test hook: drop the cached mailer/mailbox so each test re-resolves env. */
 export function resetMailerForTests(): void {
   cachedMailer = null;
@@ -77,12 +120,10 @@ export function resetMailerForTests(): void {
 // ---------------------------------------------------------------------------
 
 function createInMemoryMailer(): Mailer {
-  if (inMemoryMailbox === null) {
-    inMemoryMailbox = [];
-  }
+  const mailbox = getInMemoryMailbox();
   return {
     async send(message: MailMessage): Promise<void> {
-      inMemoryMailbox!.push({ from: fromHeader(), ...message });
+      mailbox.push({ from: fromHeader(), ...message });
     },
   };
 }
@@ -114,23 +155,12 @@ function createSmtpMailer(): Mailer {
 let cachedMailer: Mailer | null = null;
 
 /**
- * Resolve the process-wide mailer. SMTP when configured; in-memory in test
- * and development so the verification flow works end-to-end with no relay;
- * a logged no-op in production without SMTP (email is load-bearing — the
- * warning exists so a misconfigured instance is visible in logs).
+ * Resolve the process-wide mailer from the single transport-mode source of
+ * truth: SMTP when configured, in-memory otherwise (production is guaranteed
+ * to have SMTP_HOST by `validateMailerConfiguration` at boot).
  */
 export function createMailer(): Mailer {
-  if (process.env.SMTP_HOST) {
-    return createSmtpMailer();
-  }
-  if (process.env.NODE_ENV !== 'production') {
-    return createInMemoryMailer();
-  }
-  logger.warn(
-    'SMTP_HOST is not set: outgoing auth email (verification, password reset) is disabled. ' +
-    'Members cannot verify their address until SMTP is configured.',
-  );
-  return { async send() { /* no-op: see warning above */ } };
+  return resolveMailerMode() === 'smtp' ? createSmtpMailer() : createInMemoryMailer();
 }
 
 /**

@@ -11,6 +11,8 @@ export interface RateLimitConfig {
   authMax: number;
   registerMax: number;
   registerWindowMs: number;
+  verificationMax: number;
+  verificationWindowMs: number;
   protectedMax: number;
   scraperMax: number;
   publicMax: number;

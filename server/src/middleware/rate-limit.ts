@@ -87,10 +87,11 @@ const limiterSpecs = {
   generalLimiter: { windowKey: 'windowMs', maxKey: 'generalMax', options: { skip: skipTest, standardHeaders: true } },
   authLimiter: { windowKey: 'windowMs', maxKey: 'authMax', options: { skip: skipTest, skipSuccessfulRequests: true } },
   registerLimiter: { windowKey: 'registerWindowMs', maxKey: 'registerMax', options: { skip: skipTest } },
-  // Verification/resend mail: the register-shaped hourly bucket as a *separate*
-  // store, so resends cannot strand an unverified Member behind a signup that
-  // exhausted the shared budget (and a signup flood cannot starve resends).
-  verificationLimiter: { windowKey: 'registerWindowMs', maxKey: 'registerMax', options: { skip: skipTest } },
+  // Verification mail (verify-email + resend): a dedicated arm (peer of
+  // register, ADR 0006 sub-decision 6) so resends cannot strand an
+  // unverified Member behind a signup that exhausted the register budget
+  // (and a signup flood cannot starve resends).
+  verificationLimiter: { windowKey: 'verificationWindowMs', maxKey: 'verificationMax', options: { skip: skipTest } },
   protectedLimiter: { windowKey: 'windowMs', maxKey: 'protectedMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator, standardHeaders: true } },
   scraperLimiter: { windowKey: 'windowMs', maxKey: 'scraperMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator } },
   publicLimiter: { windowKey: 'windowMs', maxKey: 'publicMax', options: { skip: skipTest } },

@@ -69,9 +69,11 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${TZ:-Europe/Paris}
-      # Auth email (verification, password reset — ADR 0005). Production
-      # should set SMTP_HOST; without it outbound auth mail is a logged no-op.
-      SMTP_HOST: ${SMTP_HOST:-}
+      # Auth email (verification, password reset — ADR 0005). REQUIRED in
+      # production: email verification is load-bearing (ADR 0003), so the
+      # web role refuses to start without SMTP_HOST rather than silently
+      # never sending mail.
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}

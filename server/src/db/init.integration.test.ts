@@ -282,11 +282,12 @@ describe.runIf(Boolean(TEST_URL))(
       const result = await db.query<{ version: string }>(`
         SELECT version FROM schema_migrations ORDER BY version
       `);
-      // 001 (scrape_jobs queue) and 002 (auth_email_tokens) — both idempotent
-      // over the baseline.
+      // 001 (scrape_jobs queue), 002 (auth_email_tokens) and 003
+      // (verification rate-limit arm) — all idempotent over the baseline.
       expect(result.rows.map((r) => r.version)).toEqual([
         '001_scrape_jobs_queue.sql',
         '002_auth_email_tokens.sql',
+        '003_verification_rate_limit_arm.sql',
       ]);
 
       // The queue table is present (created by the baseline; the migration is
@@ -304,6 +305,37 @@ describe.runIf(Boolean(TEST_URL))(
       expect(indexes.rows).toHaveLength(1);
 
       await expect(runMigrations(db)).resolves.toBeUndefined();
+    });
+
+    it('carries the verification rate-limit arm (baseline columns, register-shaped defaults)', async () => {
+      const columns = await db.query<{ column_name: string; column_default: string }>(`
+        SELECT column_name, column_default
+        FROM information_schema.columns
+        WHERE table_name = 'rate_limit_configs'
+          AND column_name IN ('verification_max', 'verification_window_ms')
+      `);
+      expect(columns.rows.map((c) => c.column_name).sort()).toEqual([
+        'verification_max',
+        'verification_window_ms',
+      ]);
+
+      const row = await db.query<{ verification_max: number; verification_window_ms: number }>(`
+        SELECT verification_max, verification_window_ms FROM rate_limit_configs WHERE id = 1
+      `);
+      expect(row.rows[0].verification_max).toBe(3);
+      expect(row.rows[0].verification_window_ms).toBe(3600000);
+    });
+
+    it('pins the mailer DEFAULT_FROM_* mirror to the Branding email_from_* baseline defaults', async () => {
+      const { DEFAULT_FROM_NAME, DEFAULT_FROM_ADDRESS } = await import('../services/mailer.js');
+      const branding = await db.query<{ email_from_name: string; email_from_address: string }>(`
+        SELECT email_from_name, email_from_address FROM app_settings WHERE id = 1
+      `);
+      // The mailer's hardcoded sender fallback documents that it mirrors the
+      // Branding defaults; this pins the mirror so a change to one side
+      // without the other fails here instead of drifting silently.
+      expect(branding.rows[0].email_from_name).toBe(DEFAULT_FROM_NAME);
+      expect(branding.rows[0].email_from_address).toBe(DEFAULT_FROM_ADDRESS);
     });
 
     it('bootstraps a secure initial administrator when none exists', async () => {

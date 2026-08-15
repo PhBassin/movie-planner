@@ -11,7 +11,12 @@ vi.mock('../repositories/auth-email-token-repository.js', () => ({
   consumeAuthEmailToken: vi.fn(),
 }));
 
-import { VerificationService } from './verification-service.js';
+vi.mock('../utils/logger.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import { VerificationService, dispatchVerificationEmail } from './verification-service.js';
+import { logger } from '../utils/logger.js';
 import { getUserByEmail } from '../db/member-queries.js';
 import {
   issueAuthEmailToken,
@@ -138,6 +143,33 @@ describe('VerificationService', () => {
     it('rejects an empty token without hitting the store', async () => {
       expect(await service.verifyEmail('')).toBe(false);
       expect(consumeAuthEmailToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dispatchVerificationEmail (fire-and-forget seam)', () => {
+    it('logs and swallows an infrastructure failure instead of throwing', async () => {
+      vi.mocked(getUserByEmail).mockResolvedValue(unverifiedMember);
+      vi.mocked(issueAuthEmailToken).mockRejectedValue(new Error('token store down'));
+
+      expect(() => dispatchVerificationEmail(mockDb, 'jane@example.com')).not.toThrow();
+
+      await vi.waitFor(() => {
+        expect(logger.error).toHaveBeenCalledWith(
+          'Verification email dispatch failed',
+          expect.objectContaining({ email: 'jane@example.com' }),
+        );
+      });
+    });
+
+    it('does not log an error on the happy path (the send settles silently)', async () => {
+      vi.mocked(getUserByEmail).mockResolvedValue(undefined);
+
+      dispatchVerificationEmail(mockDb, 'nobody@example.com');
+
+      await vi.waitFor(() => {
+        expect(getUserByEmail).toHaveBeenCalledWith(mockDb, 'nobody@example.com');
+      });
+      expect(logger.error).not.toHaveBeenCalled();
     });
   });
 });

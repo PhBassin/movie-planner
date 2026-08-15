@@ -5,7 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permission.js';
 import { SessionService } from '../services/session-service.js';
 import { AuthService } from '../services/auth-service.js';
-import { VerificationService } from '../services/verification-service.js';
+import { VerificationService, dispatchVerificationEmail } from '../services/verification-service.js';
 import { ValidationError } from '../utils/errors.js';
 
 const router = express.Router();
@@ -36,9 +36,7 @@ router.post('/signup', registerLimiter, async (req: Request, res: Response, next
         // Fire-and-forget after the response: the Member can resend from the
         // UI if the mail never arrives, and a mailer hiccup must not surface
         // as a failed registration.
-        void new VerificationService(req.app.get('db'))
-            .sendVerificationEmail(req.body.email)
-            .catch(() => {});
+        dispatchVerificationEmail(req.app.get('db'), req.body.email);
     } catch (error) {
         next(error);
     }
@@ -69,14 +67,17 @@ router.post('/verify-email', verificationLimiter, async (req: Request, res: Resp
 });
 
 // POST /api/auth/resend-verification - Issue a fresh verification token.
-// Public and enumeration-safe: always 200 with the same body, whether or not
-// the email belongs to an unverified Member. Rate-limited on its own bucket
-// (verificationLimiter) so resends cannot be starved by signup volume.
+// Public and enumeration-safe: always 200 with the same body, and the send
+// is dispatched fire-and-forget so the response latency cannot reveal
+// whether the email matched a Member (ADR 0006, sub-decision 6 — the
+// no-match and match-and-send paths must be timing-indistinguishable).
+// Rate-limited on its own verification bucket so resends cannot be starved
+// by signup volume.
 router.post('/resend-verification', verificationLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const email = req.body?.email;
         if (typeof email === 'string' && email.length > 0) {
-            await new VerificationService(req.app.get('db')).sendVerificationEmail(email);
+            dispatchVerificationEmail(req.app.get('db'), email);
         }
 
         res.json({

@@ -130,9 +130,11 @@ export function createApp(options: AppOptions = {}) {
 
   // Test-only seam over the in-memory mailer transport: lets E2E tests read
   // the mailbox the verification flow wrote into. Mounted in the test
-  // environment, or when the dev compose stack opts in (ENABLE_TEST_MAILBOX)
-  // — but only ever when the in-memory transport is actually active, so the
-  // seam can never be reachable alongside a real SMTP transport.
+  // environment, or when a compose stack explicitly opts in
+  // (ENABLE_TEST_MAILBOX — set by the compose.e2e.yaml overlay, never by the
+  // default dev or prod stacks) — but only ever when the in-memory transport
+  // is actually active, so the seam can never be reachable alongside a real
+  // SMTP transport.
   if (
     (process.env.NODE_ENV === 'test' || process.env.ENABLE_TEST_MAILBOX === 'true') &&
     isInMemoryMailerActive()

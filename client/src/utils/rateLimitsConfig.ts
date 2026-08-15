@@ -5,6 +5,7 @@ export type RateLimitFieldKey =
   | 'generalMax'
   | 'authMax'
   | 'registerMax'
+  | 'verificationMax'
   | 'protectedMax'
   | 'scraperMax'
   | 'publicMax'
@@ -55,6 +56,14 @@ export const RATE_LIMIT_FIELDS: ReadonlyArray<RateLimitFieldDef> = [
     key: 'registerMax',
     label: 'Registration Limit',
     description: 'Max registration attempts per hour',
+    min: 1,
+    max: 20,
+    defaultValue: 3,
+  },
+  {
+    key: 'verificationMax',
+    label: 'Verification Mail Limit',
+    description: 'Max verification-email requests per hour (verify link + resend)',
     min: 1,
     max: 20,
     defaultValue: 3,

@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { getInMemoryMailbox } from '../services/mailer.js';
+import { getInMemoryMailbox, clearInMemoryMailbox } from '../services/mailer.js';
 
 /**
  * `/api/test/mailbox` — the E2E seam over the in-memory mailer transport
@@ -21,7 +21,7 @@ router.get('/', (req: Request, res: Response) => {
 
 // POST /api/test/mailbox/clear - empty the mailbox between tests
 router.post('/clear', (_req: Request, res: Response) => {
-    getInMemoryMailbox().length = 0;
+    clearInMemoryMailbox();
     res.json({ success: true, data: { cleared: true } });
 });
 

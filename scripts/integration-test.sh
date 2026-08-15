@@ -11,7 +11,7 @@ echo ""
 cleanup() {
   echo ""
   echo "🧹 Cleaning up..."
-  docker compose down
+  docker compose -f compose.yaml -f compose.e2e.yaml down
   echo "✅ Cleanup complete"
 }
 trap cleanup EXIT
@@ -22,9 +22,11 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Step 1: Build and start Docker stack
+# Step 1: Build and start Docker stack. The compose.e2e.yaml overlay opts the
+# web role into the test-only /api/test/mailbox seam the verification E2E
+# suite reads captured mail through.
 echo "📦 Building and starting Docker stack..."
-if docker compose up --build -d; then
+if docker compose -f compose.yaml -f compose.e2e.yaml up --build -d; then
   echo -e "${GREEN}✅ Docker stack started${NC}"
 else
   echo -e "${RED}❌ Failed to start Docker stack${NC}"

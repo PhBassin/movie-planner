@@ -157,7 +157,7 @@ POST /api/auth/verify-email
 
 **Authentication:** None (public route — the link is opened from the Member's mailbox)
 
-**Description:** Link target of the verification email. Consumes the token (strictly single-use, 30-minute lifetime, stored hashed) and flips the Member `unverified → active` (`email_verified_at` set; a suspended Member stays suspended). The SPA landing page is `/verify?token=...`.
+**Description:** Link target of the verification email. Consumes the token (strictly single-use, 30-minute lifetime, stored hashed) and flips the Member `unverified → active` (`email_verified_at` set; a suspended Member stays suspended). The SPA landing page is `/verify?token=...`. Rate-limited on the dedicated **verification** arm of RateLimitConfig (default 3/hour per IP).
 
 **Request Body:**
 ```json
@@ -192,7 +192,7 @@ POST /api/auth/resend-verification
 
 **Authentication:** None (public route)
 
-**Description:** Issue a fresh verification token (superseding any outstanding one) and send a new link. **Enumeration-safe:** the response is always `200` with the same body whether or not the email belongs to an unverified Member. No-op for Staff accounts and already-verified Members.
+**Description:** Issue a fresh verification token (superseding any outstanding one) and send a new link. **Enumeration-safe:** the response is always `200` with the same body whether or not the email belongs to an unverified Member, and the send is dispatched **fire-and-forget** so the response latency cannot reveal whether the email matched (ADR 0006, sub-decision 6). No-op for Staff accounts and already-verified Members. Rate-limited on the dedicated **verification** arm of RateLimitConfig (default 3/hour per IP) — a separate budget from signup, so a Member is never stranded behind an exhausted register bucket.
 
 **Request Body:**
 ```json

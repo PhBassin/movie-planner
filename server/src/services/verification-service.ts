@@ -1,6 +1,7 @@
 import type { DB } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 import { getUserByEmail } from '../db/member-queries.js';
+import { getAllowedOrigins } from '../utils/cors-config.js';
 import {
   issueAuthEmailToken,
   consumeAuthEmailToken,
@@ -23,14 +24,14 @@ const VERIFY_PATH = '/verify?token=';
 
 /**
  * The public origin used to build absolute verification links in emails.
- * Defaults to the first ALLOWED_ORIGINS entry (the canonical web origin).
+ * Defaults to the first ALLOWED_ORIGINS entry (the canonical web origin),
+ * parsed by the same helper the CORS middleware uses.
  */
 export function getPublicWebOrigin(): string {
   if (process.env.PUBLIC_WEB_ORIGIN) {
     return process.env.PUBLIC_WEB_ORIGIN.replace(/\/$/, '');
   }
-  const firstOrigin = process.env.ALLOWED_ORIGINS?.split(',')[0]?.trim();
-  return (firstOrigin || 'http://localhost:3000').replace(/\/$/, '');
+  return getAllowedOrigins()[0].replace(/\/$/, '');
 }
 
 /** Build the email copy for a verification link. Kept plain and text-first. */
@@ -113,4 +114,25 @@ export class VerificationService {
     logger.info(`Email verified for user ${userId}`);
     return true;
   }
+}
+
+/**
+ * Fire-and-forget dispatch of a verification email. Both public entry points
+ * (signup, resend) use it so that neither response ever waits on — or fails
+ * on — the send path. For resend this is also the ADR 0006 (sub-decision 6)
+ * timing-oracle closure: the no-match path (one lookup) and the
+ * match-and-send path (lookup + token write + SMTP) produce the same
+ * response latency because the send happens after the response. Rejections
+ * on this path are infrastructure failures (token store, mailer); they are
+ * logged with context, never surfaced to the caller.
+ */
+export function dispatchVerificationEmail(db: DB, email: string): void {
+  void new VerificationService(db)
+    .sendVerificationEmail(email)
+    .catch((error: unknown) => {
+      logger.error('Verification email dispatch failed', {
+        email,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 }

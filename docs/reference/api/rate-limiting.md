@@ -60,6 +60,7 @@ Different endpoint types have different rate limits to balance security and usab
 | **General** | `/api/*` (all endpoints) | 15 min | 100 | `RATE_LIMIT_GENERAL_MAX` |
 | **Authentication** | `/api/auth/login` | 15 min | 5 failed attempts¹ | `RATE_LIMIT_AUTH_MAX` |
 | **Registration** | `/api/auth/register` | 1 hour | 3 | `RATE_LIMIT_REGISTER_MAX` |
+| **Verification mail** | `/api/auth/verify-email`, `/api/auth/resend-verification` | 1 hour | 3 | `RATE_LIMIT_VERIFICATION_MAX` |
 | **Protected** | `/api/reports/*` | 15 min | 60 | `RATE_LIMIT_PROTECTED_MAX` |
 | **Scraper** | `/api/scraper/trigger` | 15 min | 10 | `RATE_LIMIT_SCRAPER_MAX` |
 | **Public** | `/api/movies/*`, `/api/theaters/*` | 15 min | 100 | `RATE_LIMIT_PUBLIC_MAX` |

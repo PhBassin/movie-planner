@@ -217,6 +217,11 @@ CREATE TABLE rate_limit_configs (
   register_max INTEGER NOT NULL DEFAULT 3 CHECK (register_max >= 1 AND register_max <= 20),
   register_window_ms INTEGER NOT NULL DEFAULT 3600000 CHECK (register_window_ms >= 300000 AND register_window_ms <= 86400000),
 
+  -- Verification mail (verify-email link target + resend) rides its own arm
+  -- (ADR 0006 sub-decision 6): register-shaped numbers, separate budget.
+  verification_max INTEGER NOT NULL DEFAULT 3 CHECK (verification_max >= 1 AND verification_max <= 20),
+  verification_window_ms INTEGER NOT NULL DEFAULT 3600000 CHECK (verification_window_ms >= 300000 AND verification_window_ms <= 86400000),
+
   protected_max INTEGER NOT NULL DEFAULT 60 CHECK (protected_max >= 10 AND protected_max <= 500),
 
   scraper_max INTEGER NOT NULL DEFAULT 10 CHECK (scraper_max >= 5 AND scraper_max <= 100),

@@ -119,14 +119,23 @@ vi.mock('../middleware/permission.js', () => ({
 vi.mock('../services/verification-service.js', () => {
     const sendVerificationEmail = vi.fn().mockResolvedValue(undefined);
     const verifyEmail = vi.fn();
+    // Mirrors the real fire-and-forget dispatch: the send settles on a
+    // microtask, after the response, and rejections are swallowed.
+    const dispatchVerificationEmail = vi.fn((_db: unknown, email: string) => {
+        void Promise.resolve()
+            .then(() => sendVerificationEmail(email))
+            .catch(() => {});
+    });
     return {
         // A real class (not an arrow): the route constructs it with `new`.
         VerificationService: class {
             sendVerificationEmail = sendVerificationEmail;
             verifyEmail = verifyEmail;
         },
+        dispatchVerificationEmail,
         __mockSendVerificationEmail: sendVerificationEmail,
         __mockVerifyEmail: verifyEmail,
+        __mockDispatchVerificationEmail: dispatchVerificationEmail,
     };
 });
 
@@ -469,7 +478,7 @@ describe('Auth Routes', () => {
     });
 
     describe('POST /api/auth/resend-verification', () => {
-        it('should return 200 and send a fresh link for a known email', async () => {
+        it('should return 200 and dispatch a fresh link for a known email', async () => {
             const { mockSend } = await getVerificationMocks();
 
             const response = await request(app)
@@ -479,7 +488,23 @@ describe('Auth Routes', () => {
             expect(response.status).toBe(200);
             expect(response.body.success).toBe(true);
             expect(response.body.data.message).toMatch(/verification link/i);
-            expect(mockSend).toHaveBeenCalledWith('jane@example.com');
+            // Fire-and-forget (timing-oracle closure, ADR 0006 §6): the send
+            // settles after the response.
+            await vi.waitFor(() => {
+                expect(mockSend).toHaveBeenCalledWith('jane@example.com');
+            });
+        });
+
+        it('should still return 200 when the background dispatch fails', async () => {
+            const { mockSend } = await getVerificationMocks();
+            mockSend.mockRejectedValueOnce(new Error('token store down'));
+
+            const response = await request(app)
+                .post('/api/auth/resend-verification')
+                .send({ email: 'jane@example.com' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.success).toBe(true);
         });
 
         it('should return the identical 200 body for an unknown email (enumeration-safe)', async () => {

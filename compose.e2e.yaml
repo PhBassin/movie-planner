@@ -1,0 +1,14 @@
+# E2E overlay for the dev stack (see docs/guides/development/testing.md).
+#
+#   docker compose -f compose.yaml -f compose.e2e.yaml up -d --build
+#
+# It opts the `web` service into the test-only `/api/test/mailbox` read seam
+# over the in-memory mailer transport, so Playwright can follow verification
+# links without real SMTP. The route is additionally guarded server-side: it
+# mounts only while the in-memory transport is actually active
+# (`isInMemoryMailerActive`), so it can never be reachable alongside a real
+# SMTP transport, and it is never part of the default dev or prod stacks.
+services:
+  web:
+    environment:
+      ENABLE_TEST_MAILBOX: "true"
