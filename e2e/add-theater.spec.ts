@@ -77,6 +77,42 @@ test.describe('Add Theater flow', () => {
     await page.goto('/');
   });
 
+  test('hides provisioning theaters until the first scrape succeeds', async ({ page }) => {
+    let theaterStatus: 'provisioning' | 'active' = 'provisioning';
+
+    await page.route('**/api/movies', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: { movies: [], weekStart: '2023-10-25' },
+        }),
+      })
+    );
+    await page.route('**/api/theaters', route => {
+      const theaters = [
+        { id: 'C0001', name: 'Theater One', status: 'active' },
+        ...(theaterStatus === 'active'
+          ? [{ id: 'C0002', name: 'Theater Two', status: 'active' }]
+          : []),
+      ];
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: theaters }),
+      });
+    });
+
+    await page.goto('/');
+    await expect(page.getByText('Theater One')).toBeVisible();
+    await expect(page.getByText('Theater Two')).not.toBeVisible();
+
+    theaterStatus = 'active';
+    await page.reload();
+    await expect(page.getByText('Theater Two')).toBeVisible();
+  });
+
   test('"Ajouter un theater" button is visible on the home page', async ({ page }) => {
     const addButton = page.getByRole('button', { name: /ajouter un theater/i });
     await expect(addButton).toBeVisible();

@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getMovie, searchMovies, upsertMovie, formatMovieRow } from './movie-queries.js';
+import {
+  getMovie,
+  getMoviesByDate,
+  getWeeklyMovies,
+  searchMovies,
+  upsertMovie,
+  formatMovieRow,
+} from './movie-queries.js';
 import { type DB } from './index.js';
 import { resetJSONParseCache } from '../utils/json-parse-cache.js';
 
@@ -42,6 +49,7 @@ describe('Movie Queries - Movie Search', () => {
         expect.stringContaining('similarity'),
         ['Matrix', 10]
       );
+      expect(mockDb.query.mock.calls[0][0]).toContain("c.status = 'active'");
     });
 
     it('should return movies with typos using fuzzy matching', async () => {
@@ -224,6 +232,21 @@ describe('Movie Queries - Movie Search', () => {
         ['test', 10]
       );
     });
+  });
+});
+
+describe('Movie Queries - Catalog visibility', () => {
+  it.each([
+    ['getMoviesByDate', (db: DB) => getMoviesByDate(db, '2026-02-18', '2026-02-18')],
+    ['getWeeklyMovies', (db: DB) => getWeeklyMovies(db, '2026-02-18')],
+  ])('filters provisioning theaters from %s', async (_name, query) => {
+    const mockDb = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    } as unknown as DB;
+
+    await query(mockDb);
+
+    expect(mockDb.query.mock.calls[0][0]).toContain("c.status = 'active'");
   });
 });
 

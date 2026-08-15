@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getShowtimesByMovieAndWeek, upsertShowtimes } from './showtime-queries.js';
+import {
+  getShowtimesByDate,
+  getShowtimesByMovieAndWeek,
+  getShowtimesByTheaterAndWeek,
+  getWeeklyShowtimes,
+  upsertShowtimes,
+} from './showtime-queries.js';
 import { type DB } from './index.js';
 import type { Showtime } from '../types/scraper.js';
 
@@ -46,6 +52,29 @@ describe('Showtime Queries', () => {
 
       const result = await getShowtimesByMovieAndWeek(mockDb, 999, '2026-02-18');
       expect(result).toEqual([]);
+    });
+
+    it.each([
+      ['getShowtimesByTheaterAndWeek', getShowtimesByTheaterAndWeek],
+      ['getShowtimesByDate', getShowtimesByDate],
+      ['getShowtimesByMovieAndWeek', getShowtimesByMovieAndWeek],
+      ['getWeeklyShowtimes', getWeeklyShowtimes],
+    ])('filters provisioning theaters in %s', async (_name, query) => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      if (query === getShowtimesByTheaterAndWeek) {
+        await query(mockDb, 'C0001', '2026-02-18');
+      } else if (query === getShowtimesByDate) {
+        await query(mockDb, '2026-02-18', '2026-02-18');
+      } else if (query === getShowtimesByMovieAndWeek) {
+        await query(mockDb, 123, '2026-02-18');
+      } else {
+        await query(mockDb, '2026-02-18');
+      }
+
+      expect(mockDb.query.mock.calls[0][0]).toContain("c.status = 'active'");
     });
 
     it('should handle malformed experiences JSON', async () => {

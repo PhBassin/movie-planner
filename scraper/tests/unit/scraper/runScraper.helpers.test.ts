@@ -33,6 +33,7 @@ const mockGetTheaterConfigs = vi.fn();
 const mockGetTheaters = vi.fn();
 const mockGetTheaterConfig = vi.fn();
 const mockActivateTheater = vi.fn().mockResolvedValue(undefined);
+const mockResetProvisioningTheater = vi.fn().mockResolvedValue(undefined);
 const mockCreateScrapeAttempt = vi.fn();
 const mockUpdateScrapeAttempt = vi.fn();
 
@@ -42,6 +43,7 @@ vi.mock('../../../src/db/theater-queries.js', () => ({
   getTheaterConfigs: (...args: any[]) => mockGetTheaterConfigs(...args),
   getTheaterConfig: (...args: any[]) => mockGetTheaterConfig(...args),
   activateTheater: (...args: any[]) => mockActivateTheater(...args),
+  resetProvisioningTheater: (...args: any[]) => mockResetProvisioningTheater(...args),
 }));
 
 vi.mock('../../../src/db/scrape-attempt-queries.js', () => ({
@@ -220,6 +222,25 @@ describe('ScrapeRun.runTheater', () => {
     expect(run.summary.failed_theaters).toBe(1);
     expect(run.summary.successful_theaters).toBe(0);
     expect(run.summary.errors.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not activate a provisioning theater when dates contain no showtimes', async () => {
+    mockStrategy.scrapeTheater.mockResolvedValue({ moviesCount: 0, showtimesCount: 0 });
+    const run = createRun();
+
+    await run.runTheater(THEATER_A, 0, [THEATER_A], ['2026-03-10']);
+
+    expect(mockActivateTheater).not.toHaveBeenCalled();
+    expect(mockResetProvisioningTheater).toHaveBeenCalledWith(MOCK_DB, 'C0072');
+  });
+
+  it('activates a provisioning theater after showtimes are persisted', async () => {
+    const run = createRun();
+
+    await run.runTheater(THEATER_A, 0, [THEATER_A], ['2026-03-10']);
+
+    expect(mockActivateTheater).toHaveBeenCalledWith(MOCK_DB, 'C0072');
+    expect(mockResetProvisioningTheater).not.toHaveBeenCalled();
   });
 
   it('returns rateLimited=true and sets summary.status on RateLimitError', async () => {

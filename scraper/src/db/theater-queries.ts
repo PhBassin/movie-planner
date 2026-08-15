@@ -85,3 +85,19 @@ export async function activateTheater(db: DB, theaterId: string): Promise<void> 
     [theaterId]
   );
 }
+
+export async function resetProvisioningTheater(db: DB, theaterId: string): Promise<void> {
+  await db.query(
+    `
+      UPDATE theaters
+      SET name = id,
+          address = NULL,
+          postal_code = NULL,
+          city = NULL,
+          image_url = NULL,
+          status = 'provisioning'
+      WHERE id = $1 AND status = 'provisioning'
+    `,
+    [theaterId]
+  );
+}

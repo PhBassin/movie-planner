@@ -26,6 +26,8 @@ containerized with Docker.
 
 - **Automated scraping** of theater showtimes from the source website, via the
   isolated worker role consuming a PostgreSQL job queue.
+- **Theater provisioning lifecycle** — newly added theaters stay hidden until
+  their first scrape produces showtimes.
 - **Scraper resilience** with automatic HTTP 429 detection and graceful shutdown.
 - **RESTful API** built with Express.js and TypeScript.
 - **React SPA** (Vite) with a member-facing homepage driven by a personal
