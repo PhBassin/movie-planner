@@ -69,6 +69,19 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${TZ:-Europe/Paris}
+      # Auth email (verification, password reset — ADR 0005). REQUIRED in
+      # production: email verification is load-bearing (ADR 0003), so the
+      # web role refuses to start without SMTP_HOST rather than silently
+      # never sending mail.
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Movie Planner}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-no-reply@movie-planner.local}
+      # Absolute origin for email links (e.g. /verify?token=...). Defaults to
+      # the first ALLOWED_ORIGINS entry when unset.
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-}
     depends_on:
       db:
         condition: service_healthy

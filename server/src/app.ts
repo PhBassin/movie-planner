@@ -31,9 +31,26 @@ import meRouter from './routes/me.js';
 import systemRouter from './routes/system.js';
 import rolesRouter from './routes/roles.js';
 import rateLimitsRouter from './routes/admin/rate-limits.js';
+import testMailboxRouter from './routes/test-mailbox.js';
+import { isInMemoryMailerActive } from './services/mailer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Public auth endpoints exempt from the CSRF double-submit check: they are
+ * reached without a session cookie to ride — login/refresh/logout are the
+ * credential issuance edge, signup is pre-auth, and the email-verification
+ * pair is opened unauthenticated from the Member's mailbox.
+ */
+const CSRF_EXEMPT_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+  '/api/auth/signup',
+  '/api/auth/verify-email',
+  '/api/auth/resend-verification',
+]);
 
 // ---------------------------------------------------------------------------
 // Prometheus registry for the backend
@@ -88,7 +105,7 @@ export function createApp(options: AppOptions = {}) {
   app.use((req, res, next) => {
     // Skip CSRF for test environment, login, and refresh endpoints
     if (process.env.NODE_ENV === 'test') return next();
-    if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/auth/logout' || req.path === '/api/auth/signup') return next();
+    if (CSRF_EXEMPT_PATHS.has(req.path)) return next();
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
     if (!req.path.startsWith('/api/')) return next();
     const cookieToken = req.cookies?.csrf_token;
@@ -110,6 +127,21 @@ export function createApp(options: AppOptions = {}) {
 
   // All other API routes use lenient CORS (allows curl/mobile requests without Origin header)
   app.use('/api', cors(getCorsOptions()));
+
+  // Test-only seam over the in-memory mailer transport: lets E2E tests read
+  // the mailbox the verification flow wrote into. Mounted in the test
+  // environment, or when a compose stack explicitly opts in
+  // (ENABLE_TEST_MAILBOX — set by the compose.e2e.yaml overlay, never by the
+  // default dev or prod stacks) — but only ever when the in-memory transport
+  // is actually active, so the seam can never be reachable alongside a real
+  // SMTP transport.
+  if (
+    (process.env.NODE_ENV === 'test' || process.env.ENABLE_TEST_MAILBOX === 'true') &&
+    isInMemoryMailerActive()
+  ) {
+    app.use('/api/test/mailbox', testMailboxRouter);
+  }
+
   app.use('/api/movies', moviesRouter);
   app.use('/api/theaters', theatersRouter);
   app.use('/api/scraper', scraperRouter);

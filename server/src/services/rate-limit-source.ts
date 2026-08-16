@@ -6,6 +6,8 @@ export interface RateLimitConfig {
   authMax: number;
   registerMax: number;
   registerWindowMs: number;
+  verificationMax: number;
+  verificationWindowMs: number;
   protectedMax: number;
   scraperMax: number;
   publicMax: number;
@@ -19,6 +21,8 @@ export interface RateLimitConfigRow {
   auth_max: number;
   register_max: number;
   register_window_ms: number;
+  verification_max: number;
+  verification_window_ms: number;
   protected_max: number;
   scraper_max: number;
   public_max: number;
@@ -43,6 +47,12 @@ export const DEFAULT_CONFIG: RateLimitConfig = {
   authMax: 5,
   registerMax: 3,
   registerWindowMs: 60 * 60 * 1000,
+  // Verification mail (verify-email link target + resend): register-shaped
+  // hourly numbers on its own arm (ADR 0006, sub-decision 6) so resends
+  // cannot be starved by signup volume, nor strand an unverified Member
+  // behind a signup that exhausted the shared budget.
+  verificationMax: 3,
+  verificationWindowMs: 60 * 60 * 1000,
   protectedMax: 60,
   scraperMax: 10,
   publicMax: 100,
@@ -56,6 +66,8 @@ const RATE_LIMIT_ENV_KEYS = [
   'RATE_LIMIT_AUTH_MAX',
   'RATE_LIMIT_REGISTER_MAX',
   'RATE_LIMIT_REGISTER_WINDOW_MS',
+  'RATE_LIMIT_VERIFICATION_MAX',
+  'RATE_LIMIT_VERIFICATION_WINDOW_MS',
   'RATE_LIMIT_PROTECTED_MAX',
   'RATE_LIMIT_SCRAPER_MAX',
   'RATE_LIMIT_PUBLIC_MAX',
@@ -77,6 +89,8 @@ function readFromEnv(): RateLimitConfig {
     authMax: parseEnvInt('RATE_LIMIT_AUTH_MAX', DEFAULT_CONFIG.authMax),
     registerMax: parseEnvInt('RATE_LIMIT_REGISTER_MAX', DEFAULT_CONFIG.registerMax),
     registerWindowMs: parseEnvInt('RATE_LIMIT_REGISTER_WINDOW_MS', DEFAULT_CONFIG.registerWindowMs),
+    verificationMax: parseEnvInt('RATE_LIMIT_VERIFICATION_MAX', DEFAULT_CONFIG.verificationMax),
+    verificationWindowMs: parseEnvInt('RATE_LIMIT_VERIFICATION_WINDOW_MS', DEFAULT_CONFIG.verificationWindowMs),
     protectedMax: parseEnvInt('RATE_LIMIT_PROTECTED_MAX', DEFAULT_CONFIG.protectedMax),
     scraperMax: parseEnvInt('RATE_LIMIT_SCRAPER_MAX', DEFAULT_CONFIG.scraperMax),
     publicMax: parseEnvInt('RATE_LIMIT_PUBLIC_MAX', DEFAULT_CONFIG.publicMax),
@@ -98,6 +112,8 @@ function rowToConfig(row: RateLimitConfigRow): RateLimitConfig {
     authMax: row.auth_max,
     registerMax: row.register_max,
     registerWindowMs: row.register_window_ms,
+    verificationMax: row.verification_max,
+    verificationWindowMs: row.verification_window_ms,
     protectedMax: row.protected_max,
     scraperMax: row.scraper_max,
     publicMax: row.public_max,

@@ -50,7 +50,9 @@ const SignupPage: React.FC = () => {
                 <div className="bg-white p-8 rounded-lg shadow-md text-center">
                     <h2 className="text-2xl font-bold mb-4 text-gray-800">Account created</h2>
                     <p className="text-gray-600 mb-6">
-                        Your account has been created. You can now sign in with your email address.
+                        Your account has been created. Check your inbox — we sent you a link to
+                        confirm your email address. You can already sign in, but confirming your
+                        email is required to submit new cinemas.
                     </p>
                     <button
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"

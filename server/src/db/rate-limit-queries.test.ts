@@ -27,6 +27,8 @@ describe('rate-limit-queries', () => {
     auth_max: 5,
     register_max: 3,
     register_window_ms: 3600000,
+    verification_max: 3,
+    verification_window_ms: 3600000,
     protected_max: 60,
     scraper_max: 10,
     public_max: 100,
@@ -340,6 +342,8 @@ describe('rate-limit-queries', () => {
       expect(constraints.generalMax).toEqual({ min: 10, max: 1000, unit: 'requests' });
       expect(constraints.authMax).toEqual({ min: 3, max: 50, unit: 'requests' });
       expect(constraints.registerMax).toEqual({ min: 1, max: 20, unit: 'requests' });
+      expect(constraints.verificationMax).toEqual({ min: 1, max: 20, unit: 'requests' });
+      expect(constraints.verificationWindowMs).toEqual({ min: 300000, max: 86400000, unit: 'milliseconds' });
       expect(constraints.healthWindowMs).toEqual({ min: 60000, max: 60000, unit: 'milliseconds' });
     });
 
@@ -351,6 +355,8 @@ describe('rate-limit-queries', () => {
         'authMax',
         'registerMax',
         'registerWindowMs',
+        'verificationMax',
+        'verificationWindowMs',
         'protectedMax',
         'scraperMax',
         'publicMax',

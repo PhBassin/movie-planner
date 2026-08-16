@@ -44,6 +44,12 @@ export async function initializeDatabase() {
   // no static credential lives in SQL.
   await ensureInitialAdmin(db);
 
+  // Sweep expired one-purpose auth email tokens (verification, password
+  // reset). Tokens are deleted on consume/supersede; this clears rows whose
+  // owner never followed the link — the shape of the refresh-token cleanup.
+  const { cleanupExpiredAuthEmailTokens } = await import('../repositories/auth-email-token-repository.js');
+  await cleanupExpiredAuthEmailTokens(db);
+
   // Seed theaters from theaters.json if DB is empty
   await seedTheatersIfEmpty();
 }

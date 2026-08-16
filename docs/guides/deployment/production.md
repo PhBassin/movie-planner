@@ -41,7 +41,7 @@ git clone https://github.com/PhBassin/movie-planner.git
 cd movie-planner
 
 cp .env.prod.example .env
-# Edit .env: set POSTGRES_PASSWORD, JWT_SECRET, ALLOWED_ORIGINS
+# Edit .env: set POSTGRES_PASSWORD, JWT_SECRET, ALLOWED_ORIGINS, SMTP_HOST
 
 docker compose -f compose.prod.yaml up -d --build
 ```
@@ -126,12 +126,14 @@ All configuration flows through `.env` (gitignored). Required:
 | `POSTGRES_PASSWORD` | Any strong value. |
 | `JWT_SECRET` | ≥ 32 chars. `openssl rand -base64 64`. |
 | `ALLOWED_ORIGINS` | The exact public origin browsers reach `web` at. Same-origin POST requests still send an `Origin` header and the auth routes reject origins missing from this list. |
+| `SMTP_HOST` | Outbound relay for auth email (verification, password reset — ADR 0005). Email verification is load-bearing (ADR 0003): the `web` role refuses to start without it. See `SMTP_*` optional overrides below for port/credentials/sender. |
 
 Optional overrides (see [Configuration](../../getting-started/configuration.md)):
 
 `SERVER_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_SCRAPE_CRON`,
 `COOKIE_SECURE` (default `true`, correct behind TLS), `JWT_EXPIRES_IN`,
-`LOG_LEVEL`, `TZ`, `IMAGE_TAG`.
+`SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_NAME`,
+`SMTP_FROM_ADDRESS`, `PUBLIC_WEB_ORIGIN`, `LOG_LEVEL`, `TZ`, `IMAGE_TAG`.
 
 Set `ENABLE_SCRAPE_CRON=true` to let the worker fire external scheduled
 scrapes. The worker always registers schedules from the database; this gates
@@ -143,6 +145,10 @@ whether they execute.
 
 - **Compose refuses to start with "`ALLOWED_ORIGINS is required`"** — set it in
   `.env` to the exact origin browsers use (scheme + host + optional port).
+- **Compose refuses to start with "`SMTP_HOST is required`" (or the server
+  exits with "`FATAL: SMTP_HOST is not set`")** — email verification is
+  load-bearing; set `SMTP_HOST` (plus `SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` if
+  the relay needs credentials) in `.env`.
 - **403 "CSRF token missing or invalid" over HTTP** — `COOKIE_SECURE=true`
   (default) makes browsers silently drop the auth cookies over plain HTTP. Use
   a TLS reverse proxy, or set `COOKIE_SECURE=false` only for a throwaway

@@ -87,6 +87,11 @@ const limiterSpecs = {
   generalLimiter: { windowKey: 'windowMs', maxKey: 'generalMax', options: { skip: skipTest, standardHeaders: true } },
   authLimiter: { windowKey: 'windowMs', maxKey: 'authMax', options: { skip: skipTest, skipSuccessfulRequests: true } },
   registerLimiter: { windowKey: 'registerWindowMs', maxKey: 'registerMax', options: { skip: skipTest } },
+  // Verification mail (verify-email + resend): a dedicated arm (peer of
+  // register, ADR 0006 sub-decision 6) so resends cannot strand an
+  // unverified Member behind a signup that exhausted the register budget
+  // (and a signup flood cannot starve resends).
+  verificationLimiter: { windowKey: 'verificationWindowMs', maxKey: 'verificationMax', options: { skip: skipTest } },
   protectedLimiter: { windowKey: 'windowMs', maxKey: 'protectedMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator, standardHeaders: true } },
   scraperLimiter: { windowKey: 'windowMs', maxKey: 'scraperMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator } },
   publicLimiter: { windowKey: 'windowMs', maxKey: 'publicMax', options: { skip: skipTest } },
@@ -129,6 +134,11 @@ const registerLimiterMiddleware = createRefreshableLimiter(
   () => getCurrentConfig()[limiterSpecs.registerLimiter.maxKey],
   limiterSpecs.registerLimiter.options,
 );
+const verificationLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.verificationLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.verificationLimiter.maxKey],
+  limiterSpecs.verificationLimiter.options,
+);
 const protectedLimiterMiddleware = createRefreshableLimiter(
   () => getCurrentConfig()[limiterSpecs.protectedLimiter.windowKey],
   () => getCurrentConfig()[limiterSpecs.protectedLimiter.maxKey],
@@ -154,6 +164,7 @@ const allMiddleware: Record<LimiterName, { handler: RequestHandler; refresh: () 
   generalLimiter: generalLimiterMiddleware,
   authLimiter: authLimiterMiddleware,
   registerLimiter: registerLimiterMiddleware,
+  verificationLimiter: verificationLimiterMiddleware,
   protectedLimiter: protectedLimiterMiddleware,
   scraperLimiter: scraperLimiterMiddleware,
   publicLimiter: publicLimiterMiddleware,
@@ -163,6 +174,7 @@ const allMiddleware: Record<LimiterName, { handler: RequestHandler; refresh: () 
 export const generalLimiter = generalLimiterMiddleware.handler;
 export const authLimiter = authLimiterMiddleware.handler;
 export const registerLimiter = registerLimiterMiddleware.handler;
+export const verificationLimiter = verificationLimiterMiddleware.handler;
 export const protectedLimiter = protectedLimiterMiddleware.handler;
 export const scraperLimiter = scraperLimiterMiddleware.handler;
 export const publicLimiter = publicLimiterMiddleware.handler;

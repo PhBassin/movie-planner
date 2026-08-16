@@ -114,6 +114,39 @@ vi.mock('../middleware/permission.js', () => ({
     requirePermission: (..._perms: string[]) => vi.fn((req: any, res: any, next: any) => next()),
 }));
 
+// Verification service: mocked at the class seam — its own unit tests cover
+// the token/mailer interplay.
+vi.mock('../services/verification-service.js', () => {
+    const sendVerificationEmail = vi.fn().mockResolvedValue(undefined);
+    const verifyEmail = vi.fn();
+    // Mirrors the real fire-and-forget dispatch: the send settles on a
+    // microtask, after the response, and rejections are swallowed.
+    const dispatchVerificationEmail = vi.fn((_db: unknown, email: string) => {
+        void Promise.resolve()
+            .then(() => sendVerificationEmail(email))
+            .catch(() => {});
+    });
+    return {
+        // A real class (not an arrow): the route constructs it with `new`.
+        VerificationService: class {
+            sendVerificationEmail = sendVerificationEmail;
+            verifyEmail = verifyEmail;
+        },
+        dispatchVerificationEmail,
+        __mockSendVerificationEmail: sendVerificationEmail,
+        __mockVerifyEmail: verifyEmail,
+        __mockDispatchVerificationEmail: dispatchVerificationEmail,
+    };
+});
+
+async function getVerificationMocks() {
+    const mod = await import('../services/verification-service.js');
+    return {
+        mockSend: (mod as any).__mockSendVerificationEmail as ReturnType<typeof vi.fn>,
+        mockVerify: (mod as any).__mockVerifyEmail as ReturnType<typeof vi.fn>,
+    };
+}
+
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
@@ -344,6 +377,52 @@ describe('Auth Routes', () => {
             expect(memberQueries.createMember).not.toHaveBeenCalled();
         });
 
+        it('should dispatch a verification email after a successful signup', async () => {
+            const { mockSend } = await getVerificationMocks();
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue(undefined);
+            vi.mocked(memberQueries.createMember).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                role_id: 3,
+                role_name: 'member',
+                status: 'unverified',
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send(signupBody);
+
+            expect(response.status).toBe(201);
+            // Fire-and-forget: the microtask must settle before we assert.
+            await vi.waitFor(() => {
+                expect(mockSend).toHaveBeenCalledWith('jane@example.com');
+            });
+        });
+
+        it('should still return 201 when the verification email fails to send', async () => {
+            const { mockSend } = await getVerificationMocks();
+            mockSend.mockRejectedValueOnce(new Error('SMTP down'));
+            vi.mocked(memberQueries.getUserByEmail).mockResolvedValue(undefined);
+            vi.mocked(memberQueries.createMember).mockResolvedValue({
+                id: 7,
+                username: 'jane@example.com',
+                email: 'jane@example.com',
+                role_id: 3,
+                role_name: 'member',
+                status: 'unverified',
+                created_at: '2024-01-01T00:00:00Z',
+            });
+
+            const response = await request(app)
+                .post('/api/auth/signup')
+                .send(signupBody);
+
+            expect(response.status).toBe(201);
+            expect(response.body.success).toBe(true);
+        });
+
         it('should return 400 (not 500) when a concurrent signup loses the unique-index race', async () => {
             vi.mocked(memberQueries.getUserByEmail).mockResolvedValue(undefined);
             vi.mocked(memberQueries.createMember).mockRejectedValue(
@@ -357,6 +436,98 @@ describe('Auth Routes', () => {
             expect(response.status).toBe(400);
             expect(response.body.success).toBe(false);
             expect(response.body.error).toBe('An account with this email already exists');
+        });
+    });
+
+    describe('POST /api/auth/verify-email', () => {
+        it('should verify a valid token', async () => {
+            const { mockVerify } = await getVerificationMocks();
+            mockVerify.mockResolvedValue(true);
+
+            const response = await request(app)
+                .post('/api/auth/verify-email')
+                .send({ token: 'raw-token-abc' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.success).toBe(true);
+            expect(mockVerify).toHaveBeenCalledWith('raw-token-abc');
+        });
+
+        it('should reject an expired or unknown token with 400', async () => {
+            const { mockVerify } = await getVerificationMocks();
+            mockVerify.mockResolvedValue(false);
+
+            const response = await request(app)
+                .post('/api/auth/verify-email')
+                .send({ token: 'stale-token' });
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(response.body.error).toBe('This verification link is invalid or has expired');
+        });
+
+        it('should reject a missing token with 400', async () => {
+            const response = await request(app)
+                .post('/api/auth/verify-email')
+                .send({});
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(response.body.error).toBe('A verification token is required');
+        });
+    });
+
+    describe('POST /api/auth/resend-verification', () => {
+        it('should return 200 and dispatch a fresh link for a known email', async () => {
+            const { mockSend } = await getVerificationMocks();
+
+            const response = await request(app)
+                .post('/api/auth/resend-verification')
+                .send({ email: 'jane@example.com' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.message).toMatch(/verification link/i);
+            // Fire-and-forget (timing-oracle closure, ADR 0006 §6): the send
+            // settles after the response.
+            await vi.waitFor(() => {
+                expect(mockSend).toHaveBeenCalledWith('jane@example.com');
+            });
+        });
+
+        it('should still return 200 when the background dispatch fails', async () => {
+            const { mockSend } = await getVerificationMocks();
+            mockSend.mockRejectedValueOnce(new Error('token store down'));
+
+            const response = await request(app)
+                .post('/api/auth/resend-verification')
+                .send({ email: 'jane@example.com' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.success).toBe(true);
+        });
+
+        it('should return the identical 200 body for an unknown email (enumeration-safe)', async () => {
+            const known = await request(app)
+                .post('/api/auth/resend-verification')
+                .send({ email: 'jane@example.com' });
+            const unknown = await request(app)
+                .post('/api/auth/resend-verification')
+                .send({ email: 'nobody@example.com' });
+
+            expect(unknown.status).toBe(200);
+            expect(unknown.body).toEqual(known.body);
+        });
+
+        it('should return 200 without sending when the email field is missing', async () => {
+            const { mockSend } = await getVerificationMocks();
+
+            const response = await request(app)
+                .post('/api/auth/resend-verification')
+                .send({});
+
+            expect(response.status).toBe(200);
+            expect(mockSend).not.toHaveBeenCalled();
         });
     });
 

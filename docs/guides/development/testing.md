@@ -200,8 +200,9 @@ Run Playwright E2E tests when you modify:
 ./scripts/integration-test.sh
 
 # Or run manually:
-# 1. Ensure Docker is running
-docker compose up --build -d
+# 1. Ensure Docker is running. Layer the E2E overlay so the verification
+#    suite can read captured mail via /api/test/mailbox (see below).
+docker compose -f compose.yaml -f compose.e2e.yaml up --build -d
 
 # 2. Wait for services to be ready
 sleep 10
@@ -232,6 +233,20 @@ npx playwright test --headed --debug
 - Scrapes complete quickly in Docker, so some timing-sensitive tests may need adjustments
 - Tests work best when run individually or after a clean Docker restart
 - If tests interfere with each other, restart services: `docker compose restart web worker`
+- The auth **register rate limiter** (3 signups/hour per IP by default) bounds
+  how many signups one E2E session may perform: `member-signup.spec.ts` alone
+  uses all three. The verification suite (`member-verification.spec.ts`) adds
+  two signups and several verify/resend calls against the **dedicated
+  verification arm** (also 3/hour); run it after a `docker compose restart
+  web` (which resets the in-memory limiter) or after the window elapses.
+- The mailer runs on the **in-memory transport** in the dev/test stack (no
+  `SMTP_HOST`); E2E reads captured mail through the test-only
+  `/api/test/mailbox` route. That seam is **not** part of the default dev
+  stack — start the stack with the E2E overlay first:
+  `docker compose -f compose.yaml -f compose.e2e.yaml up -d --build`
+  (the overlay sets `ENABLE_TEST_MAILBOX=true`; the route additionally mounts
+  only while the in-memory transport is active, so it can never expose a
+  real SMTP deployment).
 
 ### Test Locations
 

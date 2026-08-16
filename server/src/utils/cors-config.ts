@@ -4,12 +4,20 @@ export interface CorsConfigOptions {
   strict?: boolean;
 }
 
-export const getCorsOptions = (opts: CorsConfigOptions = {}): CorsOptions => {
-  const { strict = false } = opts;
+/**
+ * The parsed CORS allow-list. Single source of truth for everything that
+ * reads `ALLOWED_ORIGINS` (CORS checks, email link origins).
+ */
+export function getAllowedOrigins(): string[] {
   const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
-  const allowedOrigins = allowedOriginsEnv
+  return allowedOriginsEnv
     ? allowedOriginsEnv.split(',').map((origin) => origin.trim())
     : ['http://localhost:3000', 'http://localhost:5173']; // Web and Vite dev server
+}
+
+export const getCorsOptions = (opts: CorsConfigOptions = {}): CorsOptions => {
+  const { strict = false } = opts;
+  const allowedOrigins = getAllowedOrigins();
 
   return {
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {

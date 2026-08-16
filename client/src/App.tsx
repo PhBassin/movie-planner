@@ -6,6 +6,7 @@ import TheaterPage from './pages/TheaterPage';
 import MoviePage from './pages/MoviePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import AdminPage from './pages/admin/AdminPage';
 import { AuthContext } from './contexts/AuthContext';
@@ -107,6 +108,7 @@ function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/verify" element={<VerifyEmailPage />} />
         <Route
           path="/change-password"
           element={
