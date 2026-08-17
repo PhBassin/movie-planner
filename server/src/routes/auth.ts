@@ -1,11 +1,18 @@
 import express, { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '../types/api.js';
-import { authLimiter, registerLimiter, verificationLimiter } from '../middleware/rate-limit.js';
+import {
+    authLimiter,
+    registerLimiter,
+    verificationLimiter,
+    passwordResetLimiter,
+    passwordResetEmailLimiter,
+} from '../middleware/rate-limit.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permission.js';
 import { SessionService } from '../services/session-service.js';
 import { AuthService } from '../services/auth-service.js';
 import { VerificationService, dispatchVerificationEmail } from '../services/verification-service.js';
+import { PasswordResetService, dispatchPasswordResetEmail } from '../services/password-reset-service.js';
 import { ValidationError } from '../utils/errors.js';
 
 const router = express.Router();
@@ -84,6 +91,53 @@ router.post('/resend-verification', verificationLimiter, async (req: Request, re
             success: true,
             data: {
                 message: 'If an unverified account exists for this email, a verification link is on its way.',
+            },
+        } satisfies ApiResponse);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// POST /api/auth/password-reset/request - Request a Member password reset.
+// Both limiters run before the handler: one is keyed by IP and one by the
+// normalized email, preventing both source spraying and inbox bombing.
+router.post('/password-reset/request', passwordResetLimiter, passwordResetEmailLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const email = req.body?.email;
+        if (typeof email === 'string' && email.length > 0) {
+            dispatchPasswordResetEmail(req.app.get('db'), email);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                message: 'If a Member account exists for this email, a password reset link is on its way.',
+            },
+        } satisfies ApiResponse);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// POST /api/auth/password-reset/confirm - Consume a reset token and change the
+// password. The service revokes every Session and never issues a new one.
+router.post('/password-reset/confirm', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const token = req.body?.token;
+        const newPassword = req.body?.newPassword;
+        if (typeof token !== 'string' || token.length === 0 || typeof newPassword !== 'string' || newPassword.length === 0) {
+            throw new ValidationError('Reset token and new password are required');
+        }
+
+        const reset = await new PasswordResetService(req.app.get('db')).confirmPasswordReset(token, newPassword);
+        if (!reset) {
+            throw new ValidationError('This password reset link is invalid or has expired');
+        }
+
+        res.json({
+            success: true,
+            data: {
+                message: 'Password reset successfully. Please sign in again.',
             },
         } satisfies ApiResponse);
     } catch (error) {

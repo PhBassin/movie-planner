@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import type { RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
 import { getSecrets, verifyWithMultipleSecrets } from '../utils/jwt-secrets.js';
 import { logger } from '../utils/logger.js';
 import { getCurrentConfig, subscribe, type RateLimitConfig } from '../services/rate-limit-source.js';
@@ -73,6 +74,15 @@ export const authenticatedKeyGenerator = (req: Request): string => {
   return ipKeyGenerator(req.ip ?? 'unknown');
 };
 
+/** Hash the normalized email so limiter keys do not retain mailbox addresses. */
+export const passwordResetEmailKeyGenerator = (req: Request): string => {
+  const email = typeof req.body?.email === 'string'
+    ? req.body.email.trim().toLowerCase()
+    : '';
+  const digest = crypto.createHash('sha256').update(email, 'utf8').digest('hex');
+  return `password-reset-email:${digest}`;
+};
+
 interface LimiterSpec {
   windowKey: keyof RateLimitConfig;
   maxKey: keyof RateLimitConfig;
@@ -92,6 +102,8 @@ const limiterSpecs = {
   // unverified Member behind a signup that exhausted the register budget
   // (and a signup flood cannot starve resends).
   verificationLimiter: { windowKey: 'verificationWindowMs', maxKey: 'verificationMax', options: { skip: skipTest } },
+  passwordResetLimiter: { windowKey: 'passwordResetWindowMs', maxKey: 'passwordResetMax', options: { skip: skipTest, standardHeaders: true } },
+  passwordResetEmailLimiter: { windowKey: 'passwordResetEmailWindowMs', maxKey: 'passwordResetEmailMax', options: { skip: skipTest, keyGenerator: passwordResetEmailKeyGenerator, standardHeaders: true } },
   protectedLimiter: { windowKey: 'windowMs', maxKey: 'protectedMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator, standardHeaders: true } },
   scraperLimiter: { windowKey: 'windowMs', maxKey: 'scraperMax', options: { skip: skipTest, keyGenerator: authenticatedKeyGenerator } },
   publicLimiter: { windowKey: 'windowMs', maxKey: 'publicMax', options: { skip: skipTest } },
@@ -139,6 +151,16 @@ const verificationLimiterMiddleware = createRefreshableLimiter(
   () => getCurrentConfig()[limiterSpecs.verificationLimiter.maxKey],
   limiterSpecs.verificationLimiter.options,
 );
+const passwordResetLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.passwordResetLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.passwordResetLimiter.maxKey],
+  limiterSpecs.passwordResetLimiter.options,
+);
+const passwordResetEmailLimiterMiddleware = createRefreshableLimiter(
+  () => getCurrentConfig()[limiterSpecs.passwordResetEmailLimiter.windowKey],
+  () => getCurrentConfig()[limiterSpecs.passwordResetEmailLimiter.maxKey],
+  limiterSpecs.passwordResetEmailLimiter.options,
+);
 const protectedLimiterMiddleware = createRefreshableLimiter(
   () => getCurrentConfig()[limiterSpecs.protectedLimiter.windowKey],
   () => getCurrentConfig()[limiterSpecs.protectedLimiter.maxKey],
@@ -165,6 +187,8 @@ const allMiddleware: Record<LimiterName, { handler: RequestHandler; refresh: () 
   authLimiter: authLimiterMiddleware,
   registerLimiter: registerLimiterMiddleware,
   verificationLimiter: verificationLimiterMiddleware,
+  passwordResetLimiter: passwordResetLimiterMiddleware,
+  passwordResetEmailLimiter: passwordResetEmailLimiterMiddleware,
   protectedLimiter: protectedLimiterMiddleware,
   scraperLimiter: scraperLimiterMiddleware,
   publicLimiter: publicLimiterMiddleware,
@@ -175,6 +199,8 @@ export const generalLimiter = generalLimiterMiddleware.handler;
 export const authLimiter = authLimiterMiddleware.handler;
 export const registerLimiter = registerLimiterMiddleware.handler;
 export const verificationLimiter = verificationLimiterMiddleware.handler;
+export const passwordResetLimiter = passwordResetLimiterMiddleware.handler;
+export const passwordResetEmailLimiter = passwordResetEmailLimiterMiddleware.handler;
 export const protectedLimiter = protectedLimiterMiddleware.handler;
 export const scraperLimiter = scraperLimiterMiddleware.handler;
 export const publicLimiter = publicLimiterMiddleware.handler;

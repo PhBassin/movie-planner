@@ -82,6 +82,10 @@ services:
       # Absolute origin for email links (e.g. /verify?token=...). Defaults to
       # the first ALLOWED_ORIGINS entry when unset.
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-}
+      RATE_LIMIT_PASSWORD_RESET_MAX: ${RATE_LIMIT_PASSWORD_RESET_MAX:-3}
+      RATE_LIMIT_PASSWORD_RESET_WINDOW_MS: ${RATE_LIMIT_PASSWORD_RESET_WINDOW_MS:-3600000}
+      RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX: ${RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX:-3}
+      RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_MS: ${RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_MS:-3600000}
     depends_on:
       db:
         condition: service_healthy

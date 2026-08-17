@@ -9,6 +9,8 @@ User authentication and JWT token management.
 
 **Endpoints:**
 - `POST /api/auth/login` - Login and get JWT token
+- `POST /api/auth/password-reset/request` - Request a Member password reset email
+- `POST /api/auth/password-reset/confirm` - Confirm a password reset token
 - `POST /api/auth/logout` - Logout (invalidate token)
 - `GET /api/auth/me` - Get current user info
 

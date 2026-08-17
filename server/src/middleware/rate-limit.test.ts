@@ -10,10 +10,13 @@ import {
   generalLimiter,
   authLimiter,
   registerLimiter,
+  passwordResetLimiter,
+  passwordResetEmailLimiter,
   protectedLimiter,
   scraperLimiter,
   publicLimiter,
   healthCheckLimiter,
+  passwordResetEmailKeyGenerator,
 } from './rate-limit.js';
 import rateLimit from 'express-rate-limit';
 
@@ -102,6 +105,21 @@ describe('Rate Limiting Middleware', () => {
       const response = await request(app).post('/register').send({});
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
+    });
+  });
+
+  describe('passwordResetEmailKeyGenerator', () => {
+    it('normalizes email addresses and does not put the address in the key', () => {
+      const first = passwordResetEmailKeyGenerator({
+        body: { email: ' Jane@Example.com ' },
+      } as Request);
+      const second = passwordResetEmailKeyGenerator({
+        body: { email: 'jane@example.com' },
+      } as Request);
+
+      expect(first).toBe(second);
+      expect(first).toMatch(/^password-reset-email:[0-9a-f]{64}$/);
+      expect(first).not.toContain('jane@example.com');
     });
   });
 
@@ -487,10 +505,14 @@ describe('Rate Limiting Middleware', () => {
         general_max: 1,
         auth_max: 5,
         register_max: 3,
-        register_window_ms: 3600000,
-        verification_max: 3,
-        verification_window_ms: 3600000,
-        protected_max: 60,
+         register_window_ms: 3600000,
+         verification_max: 3,
+         verification_window_ms: 3600000,
+         password_reset_max: 3,
+         password_reset_window_ms: 3600000,
+         password_reset_email_max: 3,
+         password_reset_email_window_ms: 3600000,
+         protected_max: 60,
         scraper_max: 10,
         public_max: 100,
         health_max: 10,
@@ -549,9 +571,13 @@ describe('Rate Limiting Middleware', () => {
       auth_max: 100,
       register_max: 100,
       register_window_ms: 3600000,
-      verification_max: 100,
-      verification_window_ms: 3600000,
-      protected_max: 100,
+       verification_max: 100,
+       verification_window_ms: 3600000,
+       password_reset_max: 100,
+       password_reset_window_ms: 3600000,
+       password_reset_email_max: 100,
+       password_reset_email_window_ms: 3600000,
+       protected_max: 100,
       scraper_max: 100,
       public_max: 100,
       health_max: 100,
@@ -571,6 +597,8 @@ describe('Rate Limiting Middleware', () => {
       { exportName: 'authLimiter', maxKey: 'auth_max', method: 'post' as const, handlerStatus: 401 },
       { exportName: 'registerLimiter', maxKey: 'register_max', method: 'post' as const, handlerStatus: 201 },
       { exportName: 'verificationLimiter', maxKey: 'verification_max', method: 'post' as const, handlerStatus: 200 },
+      { exportName: 'passwordResetLimiter', maxKey: 'password_reset_max', method: 'post' as const, handlerStatus: 200 },
+      { exportName: 'passwordResetEmailLimiter', maxKey: 'password_reset_email_max', method: 'post' as const, handlerStatus: 200 },
       { exportName: 'protectedLimiter', maxKey: 'protected_max', method: 'get' as const, handlerStatus: 200 },
       { exportName: 'scraperLimiter', maxKey: 'scraper_max', method: 'post' as const, handlerStatus: 200 },
       { exportName: 'publicLimiter', maxKey: 'public_max', method: 'get' as const, handlerStatus: 200 },

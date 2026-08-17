@@ -6,6 +6,8 @@ export type RateLimitFieldKey =
   | 'authMax'
   | 'registerMax'
   | 'verificationMax'
+  | 'passwordResetMax'
+  | 'passwordResetEmailMax'
   | 'protectedMax'
   | 'scraperMax'
   | 'publicMax'
@@ -64,6 +66,22 @@ export const RATE_LIMIT_FIELDS: ReadonlyArray<RateLimitFieldDef> = [
     key: 'verificationMax',
     label: 'Verification Mail Limit',
     description: 'Max verification-email requests per hour (verify link + resend)',
+    min: 1,
+    max: 20,
+    defaultValue: 3,
+  },
+  {
+    key: 'passwordResetMax',
+    label: 'Password Reset IP Limit',
+    description: 'Max password-reset requests per IP per hour',
+    min: 1,
+    max: 20,
+    defaultValue: 3,
+  },
+  {
+    key: 'passwordResetEmailMax',
+    label: 'Password Reset Email Limit',
+    description: 'Max password-reset emails per address per hour',
     min: 1,
     max: 20,
     defaultValue: 3,

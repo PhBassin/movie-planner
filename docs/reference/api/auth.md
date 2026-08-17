@@ -213,6 +213,86 @@ POST /api/auth/resend-verification
 
 ---
 
+### Request Password Reset
+
+```http
+POST /api/auth/password-reset/request
+```
+
+**Authentication:** None (public route)
+
+**Description:** Request a password-reset email for a Member account. The
+response is always `200` with the same body for known, unknown, unverified, or
+suspended email addresses. The work is dispatched after the response so email
+delivery cannot be used as a timing oracle. The request is limited independently
+by source IP and normalized email address to prevent both spraying and inbox
+bombing.
+
+**Request Body:**
+```json
+{
+  "email": "jane@example.com"
+}
+```
+
+**Response (200 — always):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "If a Member account exists for this email, a password reset link is on its way."
+  }
+}
+```
+
+The email contains a link to `/reset-password?token=...`. Reset tokens are
+hashed in storage, expire after 30 minutes, are single-use, and a new request
+supersedes the previous outstanding token.
+
+---
+
+### Confirm Password Reset
+
+```http
+POST /api/auth/password-reset/confirm
+```
+
+**Authentication:** None (public route — the token from the Member's mailbox
+is the credential)
+
+**Request Body:**
+```json
+{
+  "token": "raw-token-from-the-email",
+  "newPassword": "NewStr0ng!Pass"
+}
+```
+
+**Response (200 — success):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Password reset successfully. Please sign in again."
+  }
+}
+```
+
+The new password must satisfy the normal password-strength policy. A
+successful reset revokes every Session and sends a token-less confirmation
+email. It never issues a Session; the Member must sign in through
+`POST /api/auth/login`.
+
+**Response (400 — invalid, expired, reused, or superseded token):**
+```json
+{
+  "success": false,
+  "error": "This password reset link is invalid or has expired"
+}
+```
+
+---
+
 ### Member Profile
 
 ```http

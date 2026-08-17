@@ -29,6 +29,10 @@ describe('rate-limit-queries', () => {
     register_window_ms: 3600000,
     verification_max: 3,
     verification_window_ms: 3600000,
+    password_reset_max: 3,
+    password_reset_window_ms: 3600000,
+    password_reset_email_max: 3,
+    password_reset_email_window_ms: 3600000,
     protected_max: 60,
     scraper_max: 10,
     public_max: 100,
@@ -344,6 +348,10 @@ describe('rate-limit-queries', () => {
       expect(constraints.registerMax).toEqual({ min: 1, max: 20, unit: 'requests' });
       expect(constraints.verificationMax).toEqual({ min: 1, max: 20, unit: 'requests' });
       expect(constraints.verificationWindowMs).toEqual({ min: 300000, max: 86400000, unit: 'milliseconds' });
+      expect(constraints.passwordResetMax).toEqual({ min: 1, max: 20, unit: 'requests' });
+      expect(constraints.passwordResetWindowMs).toEqual({ min: 300000, max: 86400000, unit: 'milliseconds' });
+      expect(constraints.passwordResetEmailMax).toEqual({ min: 1, max: 20, unit: 'requests' });
+      expect(constraints.passwordResetEmailWindowMs).toEqual({ min: 300000, max: 86400000, unit: 'milliseconds' });
       expect(constraints.healthWindowMs).toEqual({ min: 60000, max: 60000, unit: 'milliseconds' });
     });
 
@@ -357,6 +365,10 @@ describe('rate-limit-queries', () => {
         'registerWindowMs',
         'verificationMax',
         'verificationWindowMs',
+        'passwordResetMax',
+        'passwordResetWindowMs',
+        'passwordResetEmailMax',
+        'passwordResetEmailWindowMs',
         'protectedMax',
         'scraperMax',
         'publicMax',

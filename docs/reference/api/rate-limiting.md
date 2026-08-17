@@ -30,6 +30,7 @@ Movie Planner uses **`express-rate-limit`** middleware to protect the API from a
 ### Key Features
 
 - **Per-IP rate limiting**: Limits are tracked by client IP address
+- **Per-email password-reset limiting**: Reset emails are also capped per normalized email address
 - **Sliding window**: Requests counted within a rolling time window
 - **Standard headers**: `X-RateLimit-*` headers included in all responses
 - **Configurable**: All limits adjustable via environment variables
@@ -61,6 +62,8 @@ Different endpoint types have different rate limits to balance security and usab
 | **Authentication** | `/api/auth/login` | 15 min | 5 failed attempts¹ | `RATE_LIMIT_AUTH_MAX` |
 | **Registration** | `/api/auth/register` | 1 hour | 3 | `RATE_LIMIT_REGISTER_MAX` |
 | **Verification mail** | `/api/auth/verify-email`, `/api/auth/resend-verification` | 1 hour | 3 | `RATE_LIMIT_VERIFICATION_MAX` |
+| **Password-reset IP** | `/api/auth/password-reset/request` | 1 hour | 3 | `RATE_LIMIT_PASSWORD_RESET_MAX` |
+| **Password-reset email** | `/api/auth/password-reset/request` | 1 hour | 3 | `RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX` |
 | **Protected** | `/api/reports/*` | 15 min | 60 | `RATE_LIMIT_PROTECTED_MAX` |
 | **Scraper** | `/api/scraper/trigger` | 15 min | 10 | `RATE_LIMIT_SCRAPER_MAX` |
 | **Public** | `/api/movies/*`, `/api/theaters/*` | 15 min | 100 | `RATE_LIMIT_PUBLIC_MAX` |
@@ -336,6 +339,10 @@ RATE_LIMIT_GENERAL_MAX=100          # General API
 RATE_LIMIT_AUTH_MAX=5               # Authentication (failed attempts)
 RATE_LIMIT_REGISTER_MAX=3           # Registration
 RATE_LIMIT_REGISTER_WINDOW_MS=3600000  # Registration window (1 hour)
+RATE_LIMIT_PASSWORD_RESET_MAX=3     # Password-reset requests per IP
+RATE_LIMIT_PASSWORD_RESET_WINDOW_MS=3600000
+RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX=3  # Password-reset emails per address
+RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_MS=3600000
 RATE_LIMIT_PROTECTED_MAX=60         # Protected endpoints
 RATE_LIMIT_SCRAPER_MAX=10           # Scraper trigger
 RATE_LIMIT_PUBLIC_MAX=100           # Public endpoints
