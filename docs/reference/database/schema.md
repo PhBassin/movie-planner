@@ -12,6 +12,7 @@ The database uses **PostgreSQL 15** with the following tables:
 - **movies** - Movie metadata
 - **showtimes** - Individual screening times
 - **weekly_programs** - Weekly movie schedules per theater
+- **member_selections** - Member-to-Theater Selection relationships
 - **scrape_reports** - Scraping job execution logs
 - **scrape_jobs** - Postgres-backed scrape queue
 - **users** - Authentication and user management
@@ -59,6 +60,32 @@ SELECT * FROM theaters
 WHERE city = 'Paris' 
 ORDER BY name;
 ```
+
+---
+
+### member_selections
+
+Member-owned relationships to the shared Theater catalog. A Selection row is
+not a copy of Theater data and is removed automatically when either its Member
+or Theater is deleted.
+
+**Columns:**
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `member_id` | `INTEGER` | NOT NULL, FK -> `users(id)` ON DELETE CASCADE | Member owning the relationship |
+| `theater_id` | `TEXT` | NOT NULL, FK -> `theaters(id)` ON DELETE CASCADE | Shared Theater in the Selection |
+
+**Primary key:** `(member_id, theater_id)`
+
+**Indexes:**
+
+| Index | Columns | Purpose |
+|-------|---------|---------|
+| `idx_member_selections_theater_id` | `theater_id` | Efficient cascade and catalog relationship lookups |
+
+The Selection service enforces the product limit of 50 rows transactionally by
+locking the Member's `users` row before counting and inserting.
 
 ---
 

@@ -3,6 +3,7 @@ import type { ApiResponse } from '../types/api.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { getMemberProfile } from '../db/member-queries.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { MAX_SELECTION_SIZE } from '../services/selection-service.js';
 
 /**
  * `/api/me` — the authenticated Member's own profile (email, lifecycle
@@ -38,6 +39,8 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
                     status: profile.status,
                     email_verified: profile.email_verified_at !== null,
                     appearance: profile.appearance,
+                    selectionCount: profile.selection_count,
+                    selectionLimit: MAX_SELECTION_SIZE,
                     created_at: profile.created_at,
                 },
             },

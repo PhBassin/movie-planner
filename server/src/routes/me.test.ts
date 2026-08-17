@@ -78,9 +78,10 @@ describe('GET /api/me', () => {
             username: 'jane@example.com',
             role_name: 'member',
             status: 'unverified',
-            email_verified_at: null,
-            appearance: 'light',
-            created_at: '2024-01-01T00:00:00Z',
+             email_verified_at: null,
+             appearance: 'light',
+             selection_count: 0,
+             created_at: '2024-01-01T00:00:00Z',
         });
 
         const response = await request(app)
@@ -97,6 +98,8 @@ describe('GET /api/me', () => {
             status: 'unverified',
             email_verified: false,
             appearance: 'light',
+            selectionCount: 0,
+            selectionLimit: 50,
             created_at: '2024-01-01T00:00:00Z',
         });
         expect(memberQueries.getMemberProfile).toHaveBeenCalledWith(db, 7);
@@ -111,6 +114,7 @@ describe('GET /api/me', () => {
             status: 'active',
             email_verified_at: '2024-01-02T00:00:00Z',
             appearance: 'dark',
+            selection_count: 3,
             created_at: '2024-01-01T00:00:00Z',
         });
 
@@ -133,6 +137,7 @@ describe('GET /api/me', () => {
             status: 'unverified',
             email_verified_at: null,
             appearance: 'light',
+            selection_count: 0,
             created_at: '2024-01-01T00:00:00Z',
         });
 

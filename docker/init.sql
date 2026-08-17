@@ -301,6 +301,15 @@ CREATE TABLE theaters (
   source VARCHAR(50) NOT NULL DEFAULT 'allocine'
 );
 
+-- Member Selection: references shared active Theaters, never a data copy.
+CREATE TABLE member_selections (
+  theater_id TEXT NOT NULL REFERENCES theaters(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (member_id, theater_id)
+);
+
+CREATE INDEX idx_member_selections_theater_id ON member_selections(theater_id);
+
 CREATE TABLE movies (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL,

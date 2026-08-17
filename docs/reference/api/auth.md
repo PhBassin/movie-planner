@@ -236,6 +236,8 @@ GET /api/me
       "status": "unverified",
       "email_verified": false,
       "appearance": "light",
+      "selectionCount": 0,
+      "selectionLimit": 50,
       "created_at": "2026-08-14T08:18:09.217Z"
     }
   }

@@ -9,30 +9,42 @@ test.describe('Member registration flow', () => {
         // The signup page is linked from the login page.
         await page.goto('/login');
         await page.waitForLoadState('networkidle');
-        await page.getByRole('link', { name: /create one/i }).click();
+        await page.locator('[data-testid="login-signup-link"]').click();
 
-        await expect(page.locator('h2').filter({ hasText: /create an account/i })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('signup-heading')).toBeVisible({ timeout: 10000 });
 
         // Fill the signup form.
         await page.fill('#email', email);
         await page.fill('#password', password);
         await page.fill('#confirm-password', password);
-        await page.click('button[type="submit"]');
+        await page.getByTestId('signup-submit').click();
 
         // Success confirmation is shown.
-        await expect(page.locator('h2').filter({ hasText: /account created/i })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('signup-complete-heading')).toBeVisible({ timeout: 10000 });
 
         // Navigate to login and sign in as the freshly registered
         // (unverified) Member — unverified Members may log in.
-        await page.getByRole('button', { name: /go to sign in/i }).click();
-        await expect(page.locator('h2').filter({ hasText: /login/i })).toBeVisible({ timeout: 10000 });
+        await page.getByTestId('signup-go-to-login').click();
+        await expect(page.getByTestId('login-heading')).toBeVisible({ timeout: 10000 });
 
         await page.fill('#username', email);
         await page.fill('#password', password);
-        await page.click('button[type="submit"]');
+        await page.getByTestId('login-submit').click();
 
         // Login succeeds and lands on the home page.
         await page.waitForSelector('header nav', { timeout: 10000 });
+
+        await page.goto('/cinemas');
+        await expect(page.getByTestId('add-selection-C0153')).toBeVisible({ timeout: 10000 });
+        await page.getByTestId('add-selection-C0153').click();
+        await expect(page.getByTestId('selected-C0153')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('selection-counter')).toContainText('1 / 50');
+
+        const selectionResponse = await page.evaluate(async () => {
+            const response = await fetch('/api/me/selection');
+            return response.json();
+        });
+        expect(selectionResponse.data.some((theater: { id: string }) => theater.id === 'C0153')).toBe(true);
     });
 
     test('signup rejects mismatched passwords client-side', async ({ page }) => {
@@ -42,7 +54,7 @@ test.describe('Member registration flow', () => {
         await page.fill('#email', `e2e-mismatch-${Date.now()}@example.com`);
         await page.fill('#password', 'Str0ng!Pass');
         await page.fill('#confirm-password', 'Different1!');
-        await page.click('button[type="submit"]');
+        await page.getByTestId('signup-submit').click();
 
         await expect(page.getByRole('alert')).toContainText(/passwords do not match/i);
     });
@@ -56,15 +68,15 @@ test.describe('Member registration flow', () => {
         await page.fill('#email', email);
         await page.fill('#password', password);
         await page.fill('#confirm-password', password);
-        await page.click('button[type="submit"]');
-        await expect(page.locator('h2').filter({ hasText: /account created/i })).toBeVisible({ timeout: 10000 });
+        await page.getByTestId('signup-submit').click();
+        await expect(page.getByTestId('signup-complete-heading')).toBeVisible({ timeout: 10000 });
 
         // Second registration with the same email is rejected.
         await page.goto('/signup');
         await page.fill('#email', email);
         await page.fill('#password', password);
         await page.fill('#confirm-password', password);
-        await page.click('button[type="submit"]');
+        await page.getByTestId('signup-submit').click();
 
         await expect(page.getByRole('alert')).toContainText(/already exists/i, { timeout: 10000 });
     });

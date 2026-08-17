@@ -67,6 +67,7 @@ function Header({ appName, logo, isAuthenticated, username, hasAdminAccess, onLo
           <BrandLink appName={appName} logo={logo} />
           <nav className="flex items-center gap-6">
             <Link to="/" className="hover:text-primary transition">Accueil</Link>
+            <Link to="/cinemas" className="hover:text-primary transition">Cinémas</Link>
             {hasAdminAccess && (
               <Link to="/admin?tab=theaters" className="hover:text-primary transition">Admin</Link>
             )}

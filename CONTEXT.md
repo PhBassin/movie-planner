@@ -73,6 +73,7 @@ A Member's personal set of Theaters — the Theaters whose Showtimes that Member
 
 - **Adding an existing Theater to a Selection does not scrape.** The data is already shared; this is a private, side-effect-free mutation of the Member's homepage.
 - **Removing a Theater from a Selection is private.** It drops the Theater from that Member's homepage only; it never deletes the Theater from the catalog.
+- **Selection size is capped at 50 Theaters.** The cap counts only persisted Selection relationships; provisioning Theaters and pending TheaterSubmissions do not count. A new add at the cap is rejected with a conflict, while adding an already-selected Theater remains idempotent.
 
 **What a Selection is *not*:**
 - Not a **copy** of Theater data. The shared catalog is the single source of truth; a Selection only points at rows.

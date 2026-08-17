@@ -75,3 +75,14 @@ export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction)
         return res.status(401).json(response);
     }
 };
+
+export const requireMember = (req: AuthRequest, res: Response, next: NextFunction): void | Response => {
+    if (req.user?.role_name !== 'member') {
+        return res.status(403).json({
+            success: false,
+            error: 'This endpoint is for member accounts',
+        });
+    }
+
+    next();
+};

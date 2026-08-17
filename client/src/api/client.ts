@@ -15,6 +15,13 @@ export {
 } from './theaters';
 
 export {
+  getMemberProfile,
+  getSelection,
+  addToSelection,
+  removeFromSelection,
+} from './me.js';
+
+export {
   triggerScrape,
   triggerTheaterScrape,
   getScrapeStatus,

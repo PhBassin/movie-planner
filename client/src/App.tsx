@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import CinemasPage from './pages/CinemasPage.js';
 import AdminPage from './pages/admin/AdminPage';
 import { AuthContext } from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthProvider';
@@ -106,6 +107,7 @@ function AppRoutes() {
     <Layout>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/cinemas" element={<CinemasPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/verify" element={<VerifyEmailPage />} />

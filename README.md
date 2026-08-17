@@ -39,7 +39,8 @@ containerized with Docker.
 - **Role-based access control** with granular, permission-based role management.
 - **JWT authentication** with rotating refresh tokens and CSRF protection.
 - **Member accounts** — self-registration by email, verification, member
-  selection, member submission of new theaters (see [CONTEXT.md](CONTEXT.md)).
+  Selection, searchable catalog at `/cinemas`, a fixed 50-theater Selection cap,
+  and member submission of new theaters (see [CONTEXT.md](CONTEXT.md)).
 - **Rate limiting** per endpoint type, dynamically configurable via the admin
   panel.
 - **Prometheus metrics** at the authenticated `/metrics` endpoint.

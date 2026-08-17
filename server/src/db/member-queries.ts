@@ -32,6 +32,7 @@ export interface MemberProfileRow {
   status: MemberStatus;
   email_verified_at: string | null;
   appearance: 'light' | 'dark';
+  selection_count: number;
   created_at: string;
 }
 
@@ -107,9 +108,10 @@ export async function getMemberProfile(
 ): Promise<MemberProfileRow | undefined> {
   const result = await db.query<MemberProfileRow>(
     `SELECT u.id, u.email, u.username, r.name AS role_name,
-            u.status, u.email_verified_at,
-            COALESCE(mp.appearance, 'light') AS appearance,
-            u.created_at
+             u.status, u.email_verified_at,
+             COALESCE(mp.appearance, 'light') AS appearance,
+             (SELECT COUNT(*)::int FROM member_selections ms WHERE ms.member_id = u.id) AS selection_count,
+             u.created_at
      FROM users u
      JOIN roles r ON r.id = u.role_id
      LEFT JOIN member_preferences mp ON mp.member_id = u.id
