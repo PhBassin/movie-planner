@@ -53,4 +53,13 @@ describe('LoginPage', () => {
 
     expect(screen.queryByText('Your session expired. Please sign in again.')).not.toBeInTheDocument();
   });
+
+  it('links Members to password recovery', () => {
+    renderLoginWithState();
+
+    expect(screen.getByRole('link', { name: /forgot your password/i })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
+  });
 });

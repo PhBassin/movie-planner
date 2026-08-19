@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { DB } from './index.js';
 import {
   getUserByEmail,
+  getMemberById,
   createMember,
   getMemberProfile,
   isPendingVerification,
@@ -74,6 +75,30 @@ describe('Member Queries', () => {
       expect(mockDb.query).toHaveBeenCalledWith(
         expect.stringContaining("'unverified'"),
         expect.any(Array)
+      );
+    });
+  });
+
+  describe('getMemberById', () => {
+    it('returns only a Member credential row', async () => {
+      const row = {
+        id: 7,
+        username: 'jane@example.com',
+        email: 'jane@example.com',
+        password_hash: 'hash',
+        role_id: 3,
+        role_name: 'member',
+        is_system_role: true,
+        status: 'active',
+        email_verified_at: '2024-01-02T00:00:00Z',
+        created_at: '2024-01-01T00:00:00Z',
+      };
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [row], rowCount: 1 } as any);
+
+      await expect(getMemberById(mockDb, 7)).resolves.toEqual(row);
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("r.name = 'member'"),
+        [7],
       );
     });
   });

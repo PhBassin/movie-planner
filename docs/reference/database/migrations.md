@@ -41,8 +41,9 @@ The application migration runner (`server/src/db/migrations.ts`) applies pending
 3. Applies pending `.sql` files in lexical order, recording each with its checksum.
 
 The `migrations/` directory contains only forward changes — the historical
-numbered migrations were folded into the baseline. New schema changes begin at
-`001_*`.
+numbered migrations were folded into the baseline. The current sequence runs
+through `005_auth_email_token_uniqueness.sql`; future schema changes continue
+from the next free number.
 
 The first forward migration, `001_scrape_jobs_queue.sql`, adds the
 Postgres-backed `scrape_jobs` queue and its `enqueued_at` index. It is safe to

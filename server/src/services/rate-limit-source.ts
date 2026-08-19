@@ -8,6 +8,10 @@ export interface RateLimitConfig {
   registerWindowMs: number;
   verificationMax: number;
   verificationWindowMs: number;
+  passwordResetMax: number;
+  passwordResetWindowMs: number;
+  passwordResetEmailMax: number;
+  passwordResetEmailWindowMs: number;
   protectedMax: number;
   scraperMax: number;
   publicMax: number;
@@ -23,6 +27,10 @@ export interface RateLimitConfigRow {
   register_window_ms: number;
   verification_max: number;
   verification_window_ms: number;
+  password_reset_max: number;
+  password_reset_window_ms: number;
+  password_reset_email_max: number;
+  password_reset_email_window_ms: number;
   protected_max: number;
   scraper_max: number;
   public_max: number;
@@ -53,6 +61,12 @@ export const DEFAULT_CONFIG: RateLimitConfig = {
   // behind a signup that exhausted the shared budget.
   verificationMax: 3,
   verificationWindowMs: 60 * 60 * 1000,
+  // Password-reset request is protected on two independent axes: source IP
+  // and normalized email address, both with register-shaped defaults.
+  passwordResetMax: 3,
+  passwordResetWindowMs: 60 * 60 * 1000,
+  passwordResetEmailMax: 3,
+  passwordResetEmailWindowMs: 60 * 60 * 1000,
   protectedMax: 60,
   scraperMax: 10,
   publicMax: 100,
@@ -68,6 +82,10 @@ const RATE_LIMIT_ENV_KEYS = [
   'RATE_LIMIT_REGISTER_WINDOW_MS',
   'RATE_LIMIT_VERIFICATION_MAX',
   'RATE_LIMIT_VERIFICATION_WINDOW_MS',
+  'RATE_LIMIT_PASSWORD_RESET_MAX',
+  'RATE_LIMIT_PASSWORD_RESET_WINDOW_MS',
+  'RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX',
+  'RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_MS',
   'RATE_LIMIT_PROTECTED_MAX',
   'RATE_LIMIT_SCRAPER_MAX',
   'RATE_LIMIT_PUBLIC_MAX',
@@ -91,6 +109,10 @@ function readFromEnv(): RateLimitConfig {
     registerWindowMs: parseEnvInt('RATE_LIMIT_REGISTER_WINDOW_MS', DEFAULT_CONFIG.registerWindowMs),
     verificationMax: parseEnvInt('RATE_LIMIT_VERIFICATION_MAX', DEFAULT_CONFIG.verificationMax),
     verificationWindowMs: parseEnvInt('RATE_LIMIT_VERIFICATION_WINDOW_MS', DEFAULT_CONFIG.verificationWindowMs),
+    passwordResetMax: parseEnvInt('RATE_LIMIT_PASSWORD_RESET_MAX', DEFAULT_CONFIG.passwordResetMax),
+    passwordResetWindowMs: parseEnvInt('RATE_LIMIT_PASSWORD_RESET_WINDOW_MS', DEFAULT_CONFIG.passwordResetWindowMs),
+    passwordResetEmailMax: parseEnvInt('RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX', DEFAULT_CONFIG.passwordResetEmailMax),
+    passwordResetEmailWindowMs: parseEnvInt('RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_MS', DEFAULT_CONFIG.passwordResetEmailWindowMs),
     protectedMax: parseEnvInt('RATE_LIMIT_PROTECTED_MAX', DEFAULT_CONFIG.protectedMax),
     scraperMax: parseEnvInt('RATE_LIMIT_SCRAPER_MAX', DEFAULT_CONFIG.scraperMax),
     publicMax: parseEnvInt('RATE_LIMIT_PUBLIC_MAX', DEFAULT_CONFIG.publicMax),
@@ -114,6 +136,10 @@ function rowToConfig(row: RateLimitConfigRow): RateLimitConfig {
     registerWindowMs: row.register_window_ms,
     verificationMax: row.verification_max,
     verificationWindowMs: row.verification_window_ms,
+    passwordResetMax: row.password_reset_max,
+    passwordResetWindowMs: row.password_reset_window_ms,
+    passwordResetEmailMax: row.password_reset_email_max,
+    passwordResetEmailWindowMs: row.password_reset_email_window_ms,
     protectedMax: row.protected_max,
     scraperMax: row.scraper_max,
     publicMax: row.public_max,

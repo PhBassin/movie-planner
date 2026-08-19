@@ -84,6 +84,19 @@ Never commit this value.
 | `VITE_API_BASE_URL` | `/api` | Same-origin API base. Vite proxies this path to `web` during local development; the production image bakes the same value into the SPA. |
 | `VITE_DEV_API_TARGET` | `http://localhost:3000` | Vite-only proxy target. The Dockerized client overrides this to `http://web:3000`; host-run Vite keeps the localhost default. |
 
+### Rate limiting
+
+Rate-limit values can be overridden with environment variables or managed from
+the admin panel. Password-reset requests have independent per-IP and per-email
+budgets; both default to 3 requests per hour.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `RATE_LIMIT_PASSWORD_RESET_MAX` | `3` | Password-reset requests per IP. |
+| `RATE_LIMIT_PASSWORD_RESET_WINDOW_MS` | `3600000` | Per-IP reset window in milliseconds. |
+| `RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX` | `3` | Password-reset emails per normalized email address. |
+| `RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_MS` | `3600000` | Per-email reset window in milliseconds. |
+
 ### Scraper
 
 | Variable | Default | Notes |

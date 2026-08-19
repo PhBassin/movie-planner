@@ -12,3 +12,9 @@ services:
   web:
     environment:
       ENABLE_TEST_MAILBOX: "true"
+      # The suite deliberately exercises failed auth paths (invalid logins,
+      # incorrect current passwords, invalid/reused reset tokens) which all
+      # share the auth failed-attempt bucket; keep it generous so those
+      # assertions never trip a cross-spec 429. The password-reset arms under
+      # test keep their real values.
+      RATE_LIMIT_AUTH_MAX: "25"

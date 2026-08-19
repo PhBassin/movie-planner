@@ -300,12 +300,15 @@ describe.runIf(Boolean(TEST_URL))(
       const result = await db.query<{ version: string }>(`
         SELECT version FROM schema_migrations ORDER BY version
       `);
-      // 001 (scrape_jobs queue), 002 (auth_email_tokens) and 003
-      // (verification rate-limit arm) — all idempotent over the baseline.
+       // 001 (scrape_jobs queue), 002 (auth_email_tokens), 003 (verification
+       // rate-limit arm), 004 (password-reset rate-limit arms), and 005
+       // (auth-email-token uniqueness) — all idempotent over the baseline.
       expect(result.rows.map((r) => r.version)).toEqual([
         '001_scrape_jobs_queue.sql',
         '002_auth_email_tokens.sql',
         '003_verification_rate_limit_arm.sql',
+        '004_password_reset_rate_limit_arms.sql',
+        '005_auth_email_token_uniqueness.sql',
       ]);
 
       // The queue table is present (created by the baseline; the migration is
@@ -342,6 +345,51 @@ describe.runIf(Boolean(TEST_URL))(
       `);
       expect(row.rows[0].verification_max).toBe(3);
       expect(row.rows[0].verification_window_ms).toBe(3600000);
+    });
+
+    it('carries both password-reset rate-limit arms with register-shaped defaults', async () => {
+      const columns = await db.query<{ column_name: string }>(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'rate_limit_configs'
+          AND column_name IN (
+            'password_reset_max', 'password_reset_window_ms',
+            'password_reset_email_max', 'password_reset_email_window_ms'
+          )
+      `);
+      expect(columns.rows.map((c) => c.column_name).sort()).toEqual([
+        'password_reset_email_max',
+        'password_reset_email_window_ms',
+        'password_reset_max',
+        'password_reset_window_ms',
+      ]);
+
+      const row = await db.query<{
+        password_reset_max: number;
+        password_reset_window_ms: number;
+        password_reset_email_max: number;
+        password_reset_email_window_ms: number;
+      }>(`
+        SELECT password_reset_max, password_reset_window_ms,
+               password_reset_email_max, password_reset_email_window_ms
+        FROM rate_limit_configs WHERE id = 1
+      `);
+      expect(row.rows[0]).toEqual({
+        password_reset_max: 3,
+        password_reset_window_ms: 3600000,
+        password_reset_email_max: 3,
+        password_reset_email_window_ms: 3600000,
+      });
+    });
+
+    it('enforces one live auth-email token per Member and purpose', async () => {
+      const index = await db.query<{ indexname: string }>(`
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename = 'auth_email_tokens'
+          AND indexname = 'idx_auth_email_tokens_user_purpose'
+      `);
+      expect(index.rows).toHaveLength(1);
     });
 
     it('pins the mailer DEFAULT_FROM_* mirror to the Branding email_from_* baseline defaults', async () => {

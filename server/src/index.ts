@@ -6,6 +6,8 @@ import { validateJWTSecret } from './utils/jwt-secret-validator.js';
 import { validateMailerConfiguration } from './services/mailer.js';
 
 const PORT = process.env.PORT || 3000;
+const AUTH_EMAIL_TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let authEmailTokenCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 async function startServer() {
   try {
@@ -31,6 +33,22 @@ async function startServer() {
     // Initialize database
     logger.info('📦 Initializing database...');
     await initializeDatabase();
+
+    // Keep abandoned verification/reset rows bounded after the startup sweep.
+    // Consumption and supersession delete rows immediately; this catches only
+    // tokens whose owners never followed the link.
+    const { cleanupExpiredAuthEmailTokens } = await import('./repositories/auth-email-token-repository.js');
+    const cleanupAuthEmailTokens = async () => {
+      try {
+        await cleanupExpiredAuthEmailTokens(db);
+      } catch (error) {
+        logger.warn('Failed to clean up expired auth email tokens', { error });
+      }
+    };
+    authEmailTokenCleanupInterval = setInterval(() => {
+      void cleanupAuthEmailTokens();
+    }, AUTH_EMAIL_TOKEN_CLEANUP_INTERVAL_MS);
+    authEmailTokenCleanupInterval.unref();
 
     // Subscribe to PostgreSQL progress notifications and forward to SSE clients
     const { getBusProducer } = await import('./services/bus-producer.js');
@@ -66,6 +84,11 @@ async function startServer() {
     // Graceful shutdown
     const shutdown = async () => {
       logger.info('\n⏹️  Shutting down gracefully...');
+
+      if (authEmailTokenCleanupInterval) {
+        clearInterval(authEmailTokenCleanupInterval);
+        authEmailTokenCleanupInterval = null;
+      }
 
       // Disconnect the Postgres-backed bus
       const { getBusProducer: getProducer } = await import('./services/bus-producer.js');

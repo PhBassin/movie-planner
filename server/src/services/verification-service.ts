@@ -1,12 +1,9 @@
 import type { DB } from '../db/index.js';
 import { logger } from '../utils/logger.js';
-import { getUserByEmail, isPendingVerification } from '../db/member-queries.js';
-import { getAllowedOrigins } from '../utils/cors-config.js';
-import {
-  issueAuthEmailToken,
-  consumeAuthEmailToken,
-} from '../repositories/auth-email-token-repository.js';
+import { isPendingVerification } from '../db/member-queries.js';
+import { consumeAuthEmailToken } from '../repositories/auth-email-token-repository.js';
 import { getMailer, type Mailer } from './mailer.js';
+import { dispatchAuthEmail, sendAuthLinkEmail, type AuthLinkEmailSpec } from './auth-email.js';
 
 /**
  * Email verification — the Member lifecycle transition `unverified → active`
@@ -17,22 +14,11 @@ import { getMailer, type Mailer } from './mailer.js';
  * The request paths (signup, resend) are enumeration-safe: they never reveal
  * whether an email belongs to a Member, and every failure in the best-effort
  * send path is logged and swallowed so account creation never 500s on a
- * mailer hiccup.
+ * mailer hiccup. The send/dispatch shape itself lives in the shared
+ * auth-email pipeline (`./auth-email.js`).
  */
 
 const VERIFY_PATH = '/verify?token=';
-
-/**
- * The public origin used to build absolute verification links in emails.
- * Defaults to the first ALLOWED_ORIGINS entry (the canonical web origin),
- * parsed by the same helper the CORS middleware uses.
- */
-export function getPublicWebOrigin(): string {
-  if (process.env.PUBLIC_WEB_ORIGIN) {
-    return process.env.PUBLIC_WEB_ORIGIN.replace(/\/$/, '');
-  }
-  return getAllowedOrigins()[0].replace(/\/$/, '');
-}
 
 /** Build the email copy for a verification link. Kept plain and text-first. */
 function buildVerificationEmail(verifyUrl: string): { subject: string; text: string; html: string } {
@@ -56,6 +42,16 @@ function buildVerificationEmail(verifyUrl: string): { subject: string; text: str
   };
 }
 
+const verificationLinkSpec: AuthLinkEmailSpec = {
+  purpose: 'email_verification',
+  path: VERIFY_PATH,
+  label: 'Verification',
+  // Only a Member still awaiting verification gets a (re)sent link.
+  eligible: isPendingVerification,
+  ineligibleReason: 'not_pending_verification',
+  buildEmail: buildVerificationEmail,
+};
+
 export class VerificationService {
   constructor(
     private db: DB,
@@ -64,28 +60,12 @@ export class VerificationService {
 
   /**
    * Issue a fresh verification token for `email` and send the link. No-op
-   * when the email does not belong to a Member or the Member is already
-   * verified — the caller's response must not depend on which case fired
-   * (enumeration safety).
+   * when the email does not belong to a pending-verification Member — the
+   * caller's response must not depend on which case fired (enumeration
+   * safety).
    */
   async sendVerificationEmail(email: string): Promise<void> {
-    const user = await getUserByEmail(this.db, email.trim().toLowerCase());
-    if (!user || !isPendingVerification(user)) {
-      return;
-    }
-
-    const rawToken = await issueAuthEmailToken(this.db, user.id, 'email_verification');
-    const verifyUrl = `${getPublicWebOrigin()}${VERIFY_PATH}${rawToken}`;
-    const { subject, text, html } = buildVerificationEmail(verifyUrl);
-
-    try {
-      await this.mailer.send({ to: user.email, subject, text, html });
-    } catch (error) {
-      logger.error('Verification email send failed', {
-        userId: user.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await sendAuthLinkEmail(this.db, this.mailer, email, verificationLinkSpec);
   }
 
   /**
@@ -122,17 +102,9 @@ export class VerificationService {
  * on — the send path. For resend this is also the ADR 0006 (sub-decision 6)
  * timing-oracle closure: the no-match path (one lookup) and the
  * match-and-send path (lookup + token write + SMTP) produce the same
- * response latency because the send happens after the response. Rejections
- * on this path are infrastructure failures (token store, mailer); they are
- * logged with context, never surfaced to the caller.
+ * response latency because the send happens after the response.
  */
 export function dispatchVerificationEmail(db: DB, email: string): void {
-  void new VerificationService(db)
-    .sendVerificationEmail(email)
-    .catch((error: unknown) => {
-      logger.error('Verification email dispatch failed', {
-        email,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+  dispatchAuthEmail('Verification email', email, () =>
+    new VerificationService(db).sendVerificationEmail(email));
 }
