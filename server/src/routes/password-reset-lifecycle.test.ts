@@ -31,7 +31,6 @@ vi.mock('../services/auth-service.js', () => ({ AuthService: class {} }));
 vi.mock('../services/verification-service.js', () => ({
   VerificationService: class {},
   dispatchVerificationEmail: vi.fn(),
-  getPublicWebOrigin: () => 'http://localhost:3000',
 }));
 vi.mock('../db/member-queries.js', () => ({
   getUserByEmail: vi.fn(),

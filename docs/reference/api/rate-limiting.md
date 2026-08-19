@@ -59,7 +59,7 @@ Different endpoint types have different rate limits to balance security and usab
 | Tier | Endpoint Pattern | Window | Max Requests | Env Variable |
 |------|-----------------|--------|--------------|--------------|
 | **General** | `/api/*` (all endpoints) | 15 min | 100 | `RATE_LIMIT_GENERAL_MAX` |
-| **Authentication** | `/api/auth/login` | 15 min | 5 failed attempts¹ | `RATE_LIMIT_AUTH_MAX` |
+| **Authentication** | `/api/auth/login`, `/api/auth/password-reset/confirm` | 15 min | 5 failed attempts¹ | `RATE_LIMIT_AUTH_MAX` |
 | **Registration** | `/api/auth/register` | 1 hour | 3 | `RATE_LIMIT_REGISTER_MAX` |
 | **Verification mail** | `/api/auth/verify-email`, `/api/auth/resend-verification` | 1 hour | 3 | `RATE_LIMIT_VERIFICATION_MAX` |
 | **Password-reset IP** | `/api/auth/password-reset/request` | 1 hour | 3 | `RATE_LIMIT_PASSWORD_RESET_MAX` |

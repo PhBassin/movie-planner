@@ -291,6 +291,11 @@ email. It never issues a Session; the Member must sign in through
 }
 ```
 
+The endpoint shares the authentication failed-attempt budget (see
+[Rate Limiting](./rate-limiting.md)): repeated failed confirmations from one
+source IP are throttled with `429`, while successful resets do not consume
+the budget.
+
 ---
 
 ### Member Profile

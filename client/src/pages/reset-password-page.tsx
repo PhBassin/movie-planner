@@ -1,7 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmPasswordReset } from '../api/auth.js';
-import { ApiError } from '../api/client.js';
+import { getApiErrorMessage } from '../api/client.js';
 import PasswordRequirements from '../components/PasswordRequirements.js';
 import { validatePassword } from '../utils/userValidators.js';
 import { AuthContext } from '../contexts/AuthContext.js';
@@ -53,11 +53,7 @@ const ResetPasswordPage: React.FC = () => {
             await logout();
             navigate('/login', { replace: true });
         } catch (err: unknown) {
-            if (err instanceof ApiError && err.data?.error) {
-                setError(err.data.error);
-            } else {
-                setError('Could not reset your password. Please request a new link.');
-            }
+            setError(getApiErrorMessage(err, 'Could not reset your password. Please request a new link.'));
         } finally {
             setIsLoading(false);
         }

@@ -160,8 +160,12 @@ describe('VerificationService', () => {
       await vi.waitFor(() => {
         expect(logger.error).toHaveBeenCalledWith(
           'Verification email dispatch failed',
-          expect.objectContaining({ email: 'jane@example.com' }),
+          expect.objectContaining({ emailHash: expect.any(String) }),
         );
+        const call = vi.mocked(logger.error).mock.calls.find(
+          ([message]) => message === 'Verification email dispatch failed',
+        );
+        expect(JSON.stringify(call?.[1])).not.toContain('jane@example.com');
       });
     });
 

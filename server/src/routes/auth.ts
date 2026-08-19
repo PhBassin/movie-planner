@@ -121,7 +121,10 @@ router.post('/password-reset/request', passwordResetLimiter, passwordResetEmailL
 
 // POST /api/auth/password-reset/confirm - Consume a reset token and change the
 // password. The service revokes every Session and never issues a new one.
-router.post('/password-reset/confirm', async (req: Request, res: Response, next: NextFunction) => {
+// Shares the auth (failed-attempt) budget: token entropy makes brute force
+// infeasible, but a per-IP cap keeps a shared-IP source from hammering the
+// endpoint — and skipSuccessfulRequests means legitimate resets are free.
+router.post('/password-reset/confirm', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const token = req.body?.token;
         const newPassword = req.body?.newPassword;

@@ -373,6 +373,8 @@ The mailer's **transport is the swappable seam**, resolved from one source of tr
 
 A one-purpose, single-use credential emailed to a Member for an out-of-band auth proof — **email verification** or **password reset**. Stored in `auth_email_tokens` as a **SHA-256 hash only** (the raw token never touches the database), with a 30-minute expiry read from `AUTH_TOKEN_TTL_MS`. At most **one live token per (Member, purpose)**: issuing a fresh token supersedes the outstanding one, and consuming deletes the row. The verification link lands on the client's `/verify?token=…` page; the reset link lands on `/reset-password?token=…`. `POST /api/auth/resend-verification` and `POST /api/auth/password-reset/request` are enumeration-safe, always-200 endpoints whose sends are dispatched **fire-and-forget**; the reset request has independent per-IP and per-email RateLimitConfig arms (ADR 0006, sub-decision 6).
 
+The shared send/dispatch pipeline both services delegate to lives in `server/src/services/auth-email.ts` (`sendAuthLinkEmail` / `dispatchAuthEmail`): lookup → eligibility → token issue → link → best-effort send, with each service supplying its purpose, link path, copy, and eligibility predicate. Its **canonical email hash** (`sha256NormalizedEmail`, full digest; `hashEmailForLog`, short log prefix) is the only email-derived value in logs or limiter keys — no code path logs or throttles on the raw address.
+
 ## Database initialization
 
 ### Baseline

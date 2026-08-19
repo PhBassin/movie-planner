@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { requestPasswordReset } from '../api/auth.js';
-import { ApiError } from '../api/client.js';
+import { getApiErrorMessage } from '../api/client.js';
 
 const ForgotPasswordPage: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -93,10 +93,5 @@ const ForgotPasswordPage: React.FC = () => {
         </div>
     );
 };
-
-function getApiErrorMessage(error: unknown, fallback: string): string {
-    if (error instanceof ApiError && error.data?.error) return error.data.error;
-    return fallback;
-}
 
 export default ForgotPasswordPage;

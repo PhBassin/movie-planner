@@ -1,10 +1,10 @@
 import type { Request } from 'express';
 import type { RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
-import crypto from 'crypto';
 import { getSecrets, verifyWithMultipleSecrets } from '../utils/jwt-secrets.js';
 import { logger } from '../utils/logger.js';
 import { getCurrentConfig, subscribe, type RateLimitConfig } from '../services/rate-limit-source.js';
+import { sha256NormalizedEmail } from '../services/auth-email.js';
 
 function ipKeyGenerator(ip: string): string {
   return ip;
@@ -77,10 +77,9 @@ export const authenticatedKeyGenerator = (req: Request): string => {
 /** Hash the normalized email so limiter keys do not retain mailbox addresses. */
 export const passwordResetEmailKeyGenerator = (req: Request): string => {
   const email = typeof req.body?.email === 'string'
-    ? req.body.email.trim().toLowerCase()
+    ? req.body.email
     : '';
-  const digest = crypto.createHash('sha256').update(email, 'utf8').digest('hex');
-  return `password-reset-email:${digest}`;
+  return `password-reset-email:${sha256NormalizedEmail(email)}`;
 };
 
 interface LimiterSpec {

@@ -62,6 +62,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Prefer the server-provided error message (`data.error` from the API's
+ * error envelope); fall back to a caller-supplied friendly default.
+ */
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.data?.error) return String(error.data.error);
+  return fallback;
+}
+
 function buildUrl(endpoint: string): string {
   return `${API_BASE_URL}${endpoint}`;
 }

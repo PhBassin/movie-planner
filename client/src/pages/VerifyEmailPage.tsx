@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { verifyEmail, resendVerification } from '../api/auth';
-import { ApiError } from '../api/client';
+import { getApiErrorMessage } from '../api/client';
 
 type VerifyState = 'verifying' | 'missing' | 'success' | 'error';
 
@@ -30,11 +30,7 @@ const VerifyEmailPage: React.FC = () => {
         verifyEmail(token)
             .then(() => setState('success'))
             .catch((err: unknown) => {
-                if (err instanceof ApiError && err.data?.error) {
-                    setError(err.data.error);
-                } else {
-                    setError('This verification link is invalid or has expired.');
-                }
+                setError(getApiErrorMessage(err, 'This verification link is invalid or has expired.'));
                 setState('error');
             });
     }, [searchParams]);

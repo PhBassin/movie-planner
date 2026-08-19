@@ -1,24 +1,16 @@
-import crypto from 'crypto';
 import type { DB } from '../db/index.js';
-import { getMemberById, getUserByEmail } from '../db/member-queries.js';
+import { getMemberById } from '../db/member-queries.js';
 import { updateUserPassword } from '../db/user-queries.js';
-import {
-  consumeAuthEmailToken,
-  issueAuthEmailToken,
-} from '../repositories/auth-email-token-repository.js';
+import { consumeAuthEmailToken } from '../repositories/auth-email-token-repository.js';
 import { revokeAllUserTokens } from '../repositories/refresh-token-repository.js';
 import { hashPassword } from '../utils/password.js';
 import { validatePasswordStrength } from '../utils/security.js';
 import { ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { getPublicWebOrigin } from './verification-service.js';
 import { getMailer, type Mailer } from './mailer.js';
+import { dispatchAuthEmail, sendAuthLinkEmail, type AuthLinkEmailSpec } from './auth-email.js';
 
 const RESET_PATH = '/reset-password?token=';
-
-function hashEmailForLog(email: string): string {
-  return crypto.createHash('sha256').update(email, 'utf8').digest('hex').slice(0, 16);
-}
 
 function buildPasswordResetEmail(resetUrl: string): { subject: string; text: string; html: string } {
   return {
@@ -51,6 +43,15 @@ function buildPasswordChangedEmail(): { subject: string; text: string; html: str
   };
 }
 
+const passwordResetEmailSpec: AuthLinkEmailSpec = {
+  purpose: 'password_reset',
+  path: RESET_PATH,
+  label: 'Password reset',
+  eligible: (user) => user.role_name === 'member',
+  ineligibleReason: 'not_member',
+  buildEmail: buildPasswordResetEmail,
+};
+
 /**
  * Member-only password recovery. The request side is intentionally safe to
  * dispatch asynchronously; the confirmation side is the only place that
@@ -64,33 +65,7 @@ export class PasswordResetService {
 
   /** Issue and send a reset link, or silently no-op for non-Member emails. */
   async sendPasswordResetEmail(email: string): Promise<void> {
-    const normalizedEmail = email.trim().toLowerCase();
-    const emailHash = hashEmailForLog(normalizedEmail);
-    const user = await getUserByEmail(this.db, normalizedEmail);
-    if (!user || user.role_name !== 'member') {
-      logger.info('Password reset request ignored', {
-        emailHash,
-        reason: user ? 'not_member' : 'unknown_email',
-      });
-      return;
-    }
-
-    const rawToken = await issueAuthEmailToken(this.db, user.id, 'password_reset');
-    const resetUrl = `${getPublicWebOrigin()}${RESET_PATH}${rawToken}`;
-    const { subject, text, html } = buildPasswordResetEmail(resetUrl);
-
-    try {
-      await this.mailer.send({ to: user.email, subject, text, html });
-      logger.info('Password reset email sent', {
-        userId: user.id,
-        emailHash,
-      });
-    } catch (error) {
-      logger.error('Password reset email send failed', {
-        userId: user.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await sendAuthLinkEmail(this.db, this.mailer, email, passwordResetEmailSpec);
   }
 
   /**
@@ -146,12 +121,6 @@ export class PasswordResetService {
 
 /** Fire-and-forget reset dispatch used by the enumeration-safe request route. */
 export function dispatchPasswordResetEmail(db: DB, email: string): void {
-  void Promise.resolve()
-    .then(() => new PasswordResetService(db).sendPasswordResetEmail(email))
-    .catch((error: unknown) => {
-      logger.error('Password reset email dispatch failed', {
-        email,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+  dispatchAuthEmail('Password reset email', email, () =>
+    new PasswordResetService(db).sendPasswordResetEmail(email));
 }

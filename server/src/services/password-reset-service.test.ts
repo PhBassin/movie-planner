@@ -115,7 +115,7 @@ describe('PasswordResetService', () => {
       expect(issueAuthEmailToken).not.toHaveBeenCalled();
       expect(sentMail).toHaveLength(0);
       expect(logger.info).toHaveBeenCalledWith(
-        'Password reset request ignored',
+        'Password reset email request ignored',
         expect.objectContaining({ reason: 'not_member', emailHash: expect.any(String) }),
       );
     });
@@ -200,8 +200,12 @@ describe('PasswordResetService', () => {
       await vi.waitFor(() => {
         expect(logger.error).toHaveBeenCalledWith(
           'Password reset email dispatch failed',
-          expect.objectContaining({ email: 'jane@example.com' }),
+          expect.objectContaining({ emailHash: expect.any(String) }),
         );
+        const call = vi.mocked(logger.error).mock.calls.find(
+          ([message]) => message === 'Password reset email dispatch failed',
+        );
+        expect(JSON.stringify(call?.[1])).not.toContain('jane@example.com');
       });
     });
   });
