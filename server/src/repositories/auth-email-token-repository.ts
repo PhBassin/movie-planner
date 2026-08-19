@@ -23,6 +23,7 @@ function hashToken(rawToken: string): string {
   // repository; bcrypt is for low-entropy secrets). CodeQL only sees a
   // password-ish path because the lifecycle tests chain issue→consume —
   // production code never feeds one function's output to the other.
+
   // codeql[js/insufficient-password-hash]
   return crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
 }
