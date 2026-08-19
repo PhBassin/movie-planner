@@ -42,7 +42,7 @@ function buildVerificationEmail(verifyUrl: string): { subject: string; text: str
   };
 }
 
-const verificationEmailSpec: AuthLinkEmailSpec = {
+const verificationLinkSpec: AuthLinkEmailSpec = {
   purpose: 'email_verification',
   path: VERIFY_PATH,
   label: 'Verification',
@@ -65,7 +65,7 @@ export class VerificationService {
    * safety).
    */
   async sendVerificationEmail(email: string): Promise<void> {
-    await sendAuthLinkEmail(this.db, this.mailer, email, verificationEmailSpec);
+    await sendAuthLinkEmail(this.db, this.mailer, email, verificationLinkSpec);
   }
 
   /**
