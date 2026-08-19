@@ -18,6 +18,12 @@ import { parseStrictInt } from '../utils/number.js';
 export type AuthEmailTokenPurpose = 'email_verification' | 'password_reset';
 
 function hashToken(rawToken: string): string {
+  // Not a password: the raw token is 256 bits of crypto-random data, so a
+  // fast hash is the correct storage (same shape as the refresh-token
+  // repository; bcrypt is for low-entropy secrets). CodeQL only sees a
+  // password-ish path because the lifecycle tests chain issue→consume —
+  // production code never feeds one function's output to the other.
+  // codeql[js/insufficient-password-hash]
   return crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
 }
 
