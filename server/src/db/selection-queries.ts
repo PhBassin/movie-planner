@@ -18,7 +18,7 @@ export async function lockMemberForSelection(
      FROM users u
      JOIN roles r ON r.id = u.role_id
      WHERE u.id = $1
-     FOR UPDATE`,
+      FOR UPDATE OF u`,
     [memberId],
   );
   return result.rows[0];

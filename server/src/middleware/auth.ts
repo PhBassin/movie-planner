@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '../types/api.js';
-import type { PermissionName } from '../types/role.js';
+import { MEMBER_ONLY_ENDPOINT_MESSAGE, type PermissionName } from '../types/role.js';
 import { getSecrets, verifyWithMultipleSecrets } from '../utils/jwt-secrets.js';
 
 // Fail-fast: validate secrets at module load
@@ -80,7 +80,7 @@ export const requireMember = (req: AuthRequest, res: Response, next: NextFunctio
     if (req.user?.role_name !== 'member') {
         return res.status(403).json({
             success: false,
-            error: 'This endpoint is for member accounts',
+            error: MEMBER_ONLY_ENDPOINT_MESSAGE,
         });
     }
 

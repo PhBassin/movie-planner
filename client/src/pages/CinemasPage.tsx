@@ -86,8 +86,8 @@ export default function CinemasPage() {
   const isLoading = theatersQuery.isLoading || (isMember && (profileQuery.isLoading || selectionQuery.isLoading));
   const error = theatersQuery.error || profileQuery.error || selectionQuery.error;
   const selectionCount = profileQuery.data?.selectionCount ?? selectionQuery.data?.length ?? 0;
-  const selectionLimit = profileQuery.data?.selectionLimit ?? 50;
-  const isAtLimit = isMember && selectionCount >= selectionLimit;
+  const selectionLimit = profileQuery.data?.selectionLimit;
+  const isAtLimit = isMember && selectionLimit !== undefined && selectionCount >= selectionLimit;
 
   if (isLoading) return <LoadingSpinner />;
   if (error) {

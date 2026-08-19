@@ -1,5 +1,9 @@
 // Role and permission types
 
+// Canonical message for endpoints restricted to Member accounts; shared by
+// requireMember middleware and service-layer role guards.
+export const MEMBER_ONLY_ENDPOINT_MESSAGE = 'This endpoint is for member accounts';
+
 export interface Role {
   id: number;
   name: string;

@@ -108,6 +108,7 @@ describe('System Queries', () => {
             { version: '001_scrape_jobs_queue.sql' },
             { version: '002_auth_email_tokens.sql' },
             { version: '003_verification_rate_limit_arm.sql' },
+            { version: '004_member_selections.sql' },
           ],
         }),
       } as unknown as DB;
@@ -135,6 +136,7 @@ describe('System Queries', () => {
         { version: '001_scrape_jobs_queue.sql', status: 'pending' },
         { version: '002_auth_email_tokens.sql', status: 'pending' },
         { version: '003_verification_rate_limit_arm.sql', status: 'pending' },
+        { version: '004_member_selections.sql', status: 'pending' },
       ]);
     });
 
@@ -166,6 +168,7 @@ describe('System Queries', () => {
         { version: '001_scrape_jobs_queue.sql', status: 'pending' },
         { version: '002_auth_email_tokens.sql', status: 'pending' },
         { version: '003_verification_rate_limit_arm.sql', status: 'pending' },
+        { version: '004_member_selections.sql', status: 'pending' },
       ]);
     });
   });

@@ -78,9 +78,9 @@ describe.runIf(Boolean(TEST_URL))(
         'app_settings', 'rate_limit_configs', 'rate_limit_audit_log',
         'scrape_schedules', 'scrape_reports', 'scrape_attempts',
         'scrape_jobs',
-         'refresh_tokens', 'auth_email_tokens',
-         'member_preferences', 'member_selections',
-         'permission_category_labels', 'schema_migrations',
+        'refresh_tokens', 'auth_email_tokens',
+        'member_preferences', 'member_selections',
+        'permission_category_labels', 'schema_migrations',
       ]) {
         expect(tables, `missing table ${expected}`).toContain(expected);
       }
@@ -226,17 +226,17 @@ describe.runIf(Boolean(TEST_URL))(
         VALUES ((SELECT id FROM users WHERE email = 'm1@example.com'), 'dark')
         RETURNING appearance
       `);
-       expect(pref.rows[0].appearance).toBe('dark');
-       await db.query(`INSERT INTO theaters (id, name, status) VALUES ('SEL1', 'Selection Theater', 'active')`);
-       await db.query(`
-         INSERT INTO member_selections (member_id, theater_id)
-         VALUES ((SELECT id FROM users WHERE email = 'm1@example.com'), 'SEL1')
-       `);
-       await db.query(`DELETE FROM users WHERE email = 'm1@example.com'`);
-       const leftover = await db.query(`SELECT 1 FROM member_preferences`);
-       expect(leftover.rows).toHaveLength(0);
-       const selectionLeftover = await db.query(`SELECT 1 FROM member_selections`);
-       expect(selectionLeftover.rows).toHaveLength(0);
+      expect(pref.rows[0].appearance).toBe('dark');
+      await db.query(`INSERT INTO theaters (id, name, status) VALUES ('SEL1', 'Selection Theater', 'active')`);
+      await db.query(`
+        INSERT INTO member_selections (member_id, theater_id)
+        VALUES ((SELECT id FROM users WHERE email = 'm1@example.com'), 'SEL1')
+      `);
+      await db.query(`DELETE FROM users WHERE email = 'm1@example.com'`);
+      const leftover = await db.query(`SELECT 1 FROM member_preferences`);
+      expect(leftover.rows).toHaveLength(0);
+      const selectionLeftover = await db.query(`SELECT 1 FROM member_selections`);
+      expect(selectionLeftover.rows).toHaveLength(0);
     });
 
     it('seeds the canonical permission set', async () => {

@@ -9,6 +9,7 @@ import {
   removeSelection,
 } from '../db/selection-queries.js';
 import { AppError, ForbiddenError, NotFoundError } from '../utils/errors.js';
+import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 import type { Theater } from '../types/scraper.js';
 
 export const MAX_SELECTION_SIZE = 50;
@@ -28,7 +29,7 @@ export class SelectionService {
         throw new NotFoundError('Member not found');
       }
       if (member.role_name !== 'member') {
-        throw new ForbiddenError('This endpoint is for member accounts');
+        throw new ForbiddenError(MEMBER_ONLY_ENDPOINT_MESSAGE);
       }
 
       const theater = await getActiveTheater(tx, theaterId);

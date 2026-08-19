@@ -78,10 +78,10 @@ describe('GET /api/me', () => {
             username: 'jane@example.com',
             role_name: 'member',
             status: 'unverified',
-             email_verified_at: null,
-             appearance: 'light',
-             selection_count: 0,
-             created_at: '2024-01-01T00:00:00Z',
+            email_verified_at: null,
+            appearance: 'light',
+            selection_count: 0,
+            created_at: '2024-01-01T00:00:00Z',
         });
 
         const response = await request(app)

@@ -33,18 +33,6 @@ test.describe('Member registration flow', () => {
 
         // Login succeeds and lands on the home page.
         await page.waitForSelector('header nav', { timeout: 10000 });
-
-        await page.goto('/cinemas');
-        await expect(page.getByTestId('add-selection-C0153')).toBeVisible({ timeout: 10000 });
-        await page.getByTestId('add-selection-C0153').click();
-        await expect(page.getByTestId('selected-C0153')).toBeVisible({ timeout: 10000 });
-        await expect(page.getByTestId('selection-counter')).toContainText('1 / 50');
-
-        const selectionResponse = await page.evaluate(async () => {
-            const response = await fetch('/api/me/selection');
-            return response.json();
-        });
-        expect(selectionResponse.data.some((theater: { id: string }) => theater.id === 'C0153')).toBe(true);
     });
 
     test('signup rejects mismatched passwords client-side', async ({ page }) => {

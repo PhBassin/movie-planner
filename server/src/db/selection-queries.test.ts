@@ -19,7 +19,7 @@ describe('Selection queries', () => {
       expect.stringContaining('FROM users u'),
       [7],
     );
-    expect(db.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(db.query.mock.calls[0][0]).toContain('FOR UPDATE OF u');
   });
 
   it('loads only active theaters for a Selection add', async () => {

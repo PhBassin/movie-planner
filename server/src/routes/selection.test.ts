@@ -6,6 +6,7 @@ import express from 'express';
 import request from 'supertest';
 import selectionRouter from './selection.js';
 import { AppError } from '../utils/errors.js';
+import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 
 const mockList = vi.fn();
 const mockAdd = vi.fn();
@@ -33,7 +34,7 @@ vi.mock('../middleware/auth.js', () => ({
   },
   requireMember: (req: express.Request & { user?: { role_name: string } }, res: express.Response, next: express.NextFunction) => {
     if (req.user?.role_name !== 'member') {
-      return res.status(403).json({ success: false, error: 'This endpoint is for member accounts' });
+      return res.status(403).json({ success: false, error: MEMBER_ONLY_ENDPOINT_MESSAGE });
     }
     next();
   },

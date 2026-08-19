@@ -115,10 +115,10 @@ describe('Member Queries', () => {
         username: 'jane@example.com',
         role_name: 'member',
         status: 'active',
-         email_verified_at: '2024-01-02T00:00:00Z',
-         appearance: 'light',
-         selection_count: 3,
-         created_at: '2024-01-01T00:00:00Z',
+        email_verified_at: '2024-01-02T00:00:00Z',
+        appearance: 'light',
+        selection_count: 3,
+        created_at: '2024-01-01T00:00:00Z',
       };
       vi.mocked(mockDb.query).mockResolvedValue({ rows: [profile], rowCount: 1 } as any);
 
