@@ -111,6 +111,7 @@ describe('System Queries', () => {
             { version: '004_password_reset_rate_limit_arms.sql' },
             { version: '005_auth_email_token_uniqueness.sql' },
             { version: '006_member_selections.sql' },
+            { version: '007_theater_submissions.sql' },
           ],
         }),
       } as unknown as DB;
@@ -141,6 +142,7 @@ describe('System Queries', () => {
         { version: '004_password_reset_rate_limit_arms.sql', status: 'pending' },
         { version: '005_auth_email_token_uniqueness.sql', status: 'pending' },
         { version: '006_member_selections.sql', status: 'pending' },
+        { version: '007_theater_submissions.sql', status: 'pending' },
       ]);
     });
 
@@ -175,6 +177,7 @@ describe('System Queries', () => {
         { version: '004_password_reset_rate_limit_arms.sql', status: 'pending' },
         { version: '005_auth_email_token_uniqueness.sql', status: 'pending' },
         { version: '006_member_selections.sql', status: 'pending' },
+        { version: '007_theater_submissions.sql', status: 'pending' },
       ]);
     });
   });

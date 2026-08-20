@@ -514,6 +514,36 @@ CREATE INDEX idx_auth_email_tokens_user_id ON auth_email_tokens(user_id);
 CREATE UNIQUE INDEX idx_auth_email_tokens_user_purpose ON auth_email_tokens(user_id, purpose);
 
 -- ============================================================================
+-- Member data: TheaterSubmission (see CONTEXT.md → TheaterSubmission)
+-- ============================================================================
+-- A Member's act of introducing a Theater that is not yet in the shared
+-- catalog. The row is created in `pending` the moment the URL is accepted
+-- (issue #62) and carries the `report_id` of its `add_theater` ScrapeJob — the
+-- join key the resolver uses to find the submission from a terminal
+-- ProgressEvent (ADR 0005). Dedup downgrades never create a row: they resolve
+-- synchronously in the POST response as a Selection add.
+--
+-- `theater_id` cascades like `member_selections` (a reference to the shared
+-- catalog, hard-deleted with the Theater per ADR 0001); `member_id` cascades
+-- on Member erasure (ADR 0004). `report_id` is load-bearing and NOT NULL.
+
+CREATE TABLE theater_submissions (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  theater_id TEXT NOT NULL REFERENCES theaters(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'succeeded', 'failed')),
+  report_id INTEGER NOT NULL REFERENCES scrape_reports(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_theater_submissions_member_id ON theater_submissions(member_id);
+CREATE INDEX idx_theater_submissions_report_id ON theater_submissions(report_id);
+CREATE INDEX idx_theater_submissions_status ON theater_submissions(status);
+
+-- ============================================================================
 -- Migration tracking
 -- ============================================================================
 -- Empty by design: docker/init.sql is the consolidated baseline, so no rows are
