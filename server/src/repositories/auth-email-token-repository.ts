@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import type { DB } from '../db/index.js';
+import type { DB, DBQueryExecutor } from '../db/index.js';
 import { AUTH_TOKEN_TTL_MS } from '../services/auth-tokens.js';
 import { parseStrictInt } from '../utils/number.js';
 
@@ -11,20 +11,28 @@ import { parseStrictInt } from '../utils/number.js';
  * detail and never crosses this seam. Tokens are stored hashed, carry the
  * shared 30-minute `AUTH_TOKEN_TTL_MS` lifetime (ADR 0006), and are strictly
  * single-use: consuming deletes the row, and issuing a fresh token supersedes
- * (deletes) any prior outstanding token for the same (user, purpose), so at
- * most one token per purpose is live at a time.
+ * any prior outstanding token for the same (user, purpose), so at most one
+ * token per purpose is live at a time.
  */
 
 export type AuthEmailTokenPurpose = 'email_verification' | 'password_reset';
 
 function hashToken(rawToken: string): string {
+  // Not a password: the raw token is 256 bits of crypto-random data, so a
+  // fast hash is the correct storage (same shape as the refresh-token
+  // repository; bcrypt is for low-entropy secrets). CodeQL only sees a
+  // password-ish path because the lifecycle tests chain issue→consume —
+  // production code never feeds one function's output to the other. The
+  // js/insufficient-password-hash alert is dismissed as a false positive in
+  // the Security tab with this rationale (inline codeql[] annotations are
+  // not honored by this repo's analysis setup).
   return crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
 }
 
 /**
- * Issue a fresh token for (userId, purpose): deletes any prior outstanding
- * token for that pair, stores the new token's hash, and returns the raw
- * token for the mailer to embed in a link.
+ * Issue a fresh token for (userId, purpose): atomically replaces any prior
+ * outstanding token for that pair, stores the new token's hash, and returns
+ * the raw token for the mailer to embed in a link.
  */
 export async function issueAuthEmailToken(
   db: DB,
@@ -36,14 +44,16 @@ export async function issueAuthEmailToken(
   const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS);
 
   // Supersession: at most one live token per (user, purpose) — a fresh issue
-  // invalidates any outstanding one (ADR 0006 sub-decision 2).
-  await db.query(
-    `DELETE FROM auth_email_tokens WHERE user_id = $1 AND purpose = $2`,
-    [userId, purpose],
-  );
+  // invalidates any outstanding one (ADR 0006 sub-decision 2). The upsert is
+  // deliberately one statement so concurrent requests cannot both leave a
+  // live token behind.
   await db.query(
     `INSERT INTO auth_email_tokens (user_id, token_hash, expires_at, purpose)
-     VALUES ($1, $2, $3, $4)`,
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, purpose) DO UPDATE
+     SET token_hash = EXCLUDED.token_hash,
+         expires_at = EXCLUDED.expires_at,
+         created_at = NOW()`,
     [userId, tokenHash, expiresAt, purpose],
   );
 
@@ -56,7 +66,7 @@ export async function issueAuthEmailToken(
  * unknown token resolves to null (the caller's rejection path).
  */
 export async function consumeAuthEmailToken(
-  db: DB,
+  db: DBQueryExecutor,
   rawToken: string,
   purpose: AuthEmailTokenPurpose,
 ): Promise<number | null> {

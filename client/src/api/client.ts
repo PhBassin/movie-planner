@@ -1,4 +1,4 @@
-export { ApiError } from './core';
+export { ApiError, getApiErrorMessage } from './core';
 export { default } from './core';
 
 export {

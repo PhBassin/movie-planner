@@ -11,12 +11,15 @@ That file is the single source of truth for initializing an empty Movie Planner
 database (`movie_planner`) and is applied both by the Docker postgres image on
 first startup and by the host-side `npm run server:db:init` path.
 
-This directory starts **empty**. The historical numbered migrations were folded
-into the baseline and removed; their effect is already present in `init.sql`.
+The historical numbered migrations were folded into the baseline and removed;
+new forward migrations now live here after the baseline. The current sequence
+starts at `001` and includes the queue, auth-email-token, verification rate-limit,
+password-reset rate-limit, auth-email-token uniqueness, and member selection
+changes.
 
 ## Creating a migration
 
-Future changes begin at `001_*` and are numbered sequentially:
+Future changes continue from the next free number after the current sequence:
 
 1. Name the file `NNN_short_description.sql` (e.g. `001_add_screen_width.sql`).
 2. Make it idempotent where practical and wrap destructive changes in a

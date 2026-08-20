@@ -42,7 +42,7 @@ const __dirname = path.dirname(__filename);
  * Public auth endpoints exempt from the CSRF double-submit check: they are
  * reached without a session cookie to ride — login/refresh/logout are the
  * credential issuance edge, signup is pre-auth, and the email-verification
- * pair is opened unauthenticated from the Member's mailbox.
+ * pairs are opened unauthenticated from the Member's mailbox.
  */
 const CSRF_EXEMPT_PATHS = new Set([
   '/api/auth/login',
@@ -51,6 +51,8 @@ const CSRF_EXEMPT_PATHS = new Set([
   '/api/auth/signup',
   '/api/auth/verify-email',
   '/api/auth/resend-verification',
+  '/api/auth/password-reset/request',
+  '/api/auth/password-reset/confirm',
 ]);
 
 // ---------------------------------------------------------------------------

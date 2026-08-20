@@ -1,4 +1,4 @@
-import { type DB } from './index.js';
+import { type DB, type DBQueryExecutor } from './index.js';
 import { type UserPublic, type MemberStatus } from '../types/user.js';
 import crypto from 'crypto';
 
@@ -229,7 +229,7 @@ export async function createUser(
  * @param userId - User ID
  * @param newPasswordHash - New hashed password
  */
-export async function updateUserPassword(db: DB, userId: number, newPasswordHash: string): Promise<void> {
+export async function updateUserPassword(db: DBQueryExecutor, userId: number, newPasswordHash: string): Promise<void> {
   await db.query(
     'UPDATE users SET password_hash = $1 WHERE id = $2',
     [newPasswordHash, userId]

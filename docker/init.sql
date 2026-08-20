@@ -222,6 +222,12 @@ CREATE TABLE rate_limit_configs (
   verification_max INTEGER NOT NULL DEFAULT 3 CHECK (verification_max >= 1 AND verification_max <= 20),
   verification_window_ms INTEGER NOT NULL DEFAULT 3600000 CHECK (verification_window_ms >= 300000 AND verification_window_ms <= 86400000),
 
+  -- Password reset uses separate per-IP and per-email budgets (ADR 0006).
+  password_reset_max INTEGER NOT NULL DEFAULT 3 CHECK (password_reset_max >= 1 AND password_reset_max <= 20),
+  password_reset_window_ms INTEGER NOT NULL DEFAULT 3600000 CHECK (password_reset_window_ms >= 300000 AND password_reset_window_ms <= 86400000),
+  password_reset_email_max INTEGER NOT NULL DEFAULT 3 CHECK (password_reset_email_max >= 1 AND password_reset_email_max <= 20),
+  password_reset_email_window_ms INTEGER NOT NULL DEFAULT 3600000 CHECK (password_reset_email_window_ms >= 300000 AND password_reset_email_window_ms <= 86400000),
+
   protected_max INTEGER NOT NULL DEFAULT 60 CHECK (protected_max >= 10 AND protected_max <= 500),
 
   scraper_max INTEGER NOT NULL DEFAULT 10 CHECK (scraper_max >= 5 AND scraper_max <= 100),
@@ -489,9 +495,9 @@ CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 -- Authentication: one-purpose email tokens (verification, password reset)
 -- ============================================================================
 -- Raw token values are never stored: only the SHA-256 hash of the raw token.
--- At most one live token per (user, purpose): issuing a fresh token supersedes
--- (deletes) prior outstanding ones. The 30-minute lifetime is application
--- policy (`AUTH_TOKEN_TTL_MS`, ADR 0006), not a schema concern.
+-- At most one live token per (user, purpose): issuing a fresh token replaces
+-- the prior row through the repository upsert. The 30-minute lifetime is
+-- application policy (`AUTH_TOKEN_TTL_MS`, ADR 0006), not a schema concern.
 
 CREATE TABLE auth_email_tokens (
   id SERIAL PRIMARY KEY,
@@ -505,6 +511,7 @@ CREATE TABLE auth_email_tokens (
 -- Lookup is always by (purpose, hash) at consume time.
 CREATE INDEX idx_auth_email_tokens_hash ON auth_email_tokens(purpose, token_hash);
 CREATE INDEX idx_auth_email_tokens_user_id ON auth_email_tokens(user_id);
+CREATE UNIQUE INDEX idx_auth_email_tokens_user_purpose ON auth_email_tokens(user_id, purpose);
 
 -- ============================================================================
 -- Migration tracking

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signup } from '../api/auth';
-import { ApiError } from '../api/client';
+import { getApiErrorMessage } from '../api/client';
 
 /**
  * Public Member self-registration (email + password). Creates an unverified
@@ -32,13 +32,7 @@ const SignupPage: React.FC = () => {
             await signup(email, password);
             setIsDone(true);
         } catch (err: unknown) {
-            if (err instanceof ApiError && err.data?.error) {
-                setError(err.data.error);
-            } else if (err instanceof Error && err.message) {
-                setError(err.message);
-            } else {
-                setError('An unexpected error occurred. Please try again later.');
-            }
+            setError(getApiErrorMessage(err, 'An unexpected error occurred. Please try again later.'));
         } finally {
             setIsLoading(false);
         }

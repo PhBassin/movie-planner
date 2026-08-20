@@ -90,4 +90,14 @@ describe('Auth email token lifecycle (real service + repository)', () => {
     expect(await service.verifyEmail(first)).toBe(false); // superseded
     expect(await service.verifyEmail(second)).toBe(true); // fresh one works
   });
+
+  it('a fresh password-reset request supersedes the prior reset token', async () => {
+    const { db } = makeTokenDb();
+
+    const first = await issueAuthEmailToken(db, 7, 'password_reset');
+    const second = await issueAuthEmailToken(db, 7, 'password_reset');
+
+    expect(await consumeAuthEmailToken(db, first, 'password_reset')).toBeNull();
+    expect(await consumeAuthEmailToken(db, second, 'password_reset')).toBe(7);
+  });
 });

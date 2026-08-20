@@ -34,17 +34,17 @@ describe('Auth Email Token Repository', () => {
       expect(raw.length).toBeGreaterThanOrEqual(32);
     });
 
-    it('supersedes any prior outstanding token for the same (user, purpose)', async () => {
+    it('atomically supersedes any prior outstanding token for the same (user, purpose)', async () => {
       vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
 
       await issueAuthEmailToken(mockDb, 7, 'email_verification');
 
-      const deleteCall = vi
+      const insertCall = vi
         .mocked(mockDb.query)
-        .mock.calls.find(([sql]) => String(sql).includes('DELETE FROM auth_email_tokens'));
-      expect(deleteCall).toBeDefined();
-      expect(String(deleteCall![0])).toContain('purpose');
-      expect(deleteCall![1]).toEqual([7, 'email_verification']);
+        .mock.calls.find(([sql]) => String(sql).includes('INSERT INTO auth_email_tokens'));
+      expect(insertCall).toBeDefined();
+      expect(String(insertCall![0])).toContain('ON CONFLICT (user_id, purpose)');
+      expect(insertCall![1]).toEqual([7, expect.any(String), expect.any(Date), 'email_verification']);
     });
 
     it('does not touch tokens of another purpose', async () => {
@@ -52,10 +52,10 @@ describe('Auth Email Token Repository', () => {
 
       await issueAuthEmailToken(mockDb, 7, 'password_reset');
 
-      const deleteCall = vi
+      const insertCall = vi
         .mocked(mockDb.query)
-        .mock.calls.find(([sql]) => String(sql).includes('DELETE FROM auth_email_tokens'));
-      expect(deleteCall![1]).toEqual([7, 'password_reset']);
+        .mock.calls.find(([sql]) => String(sql).includes('INSERT INTO auth_email_tokens'));
+      expect(insertCall![1]).toEqual([7, expect.any(String), expect.any(Date), 'password_reset']);
     });
 
     it('sets the expiry to now + AUTH_TOKEN_TTL_MS (30 minutes)', async () => {

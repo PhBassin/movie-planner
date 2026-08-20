@@ -1,4 +1,4 @@
-import { type DB } from './index.js';
+import { type DB, type DBQueryExecutor } from './index.js';
 import { type MemberStatus } from '../types/user.js';
 
 /**
@@ -72,6 +72,26 @@ export async function getUserByEmail(
      JOIN roles r ON r.id = u.role_id
      WHERE LOWER(u.email) = LOWER($1)`,
     [email]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Look up a Member by id with the credential fields needed by auth services.
+ * Staff rows are excluded so email-keyed Member flows cannot be used for them.
+ */
+export async function getMemberById(
+  db: DBQueryExecutor,
+  userId: number,
+): Promise<MemberCredentialRow | undefined> {
+  const result = await db.query<MemberCredentialRow>(
+    `SELECT u.id, u.username, u.email, u.password_hash, u.role_id,
+            r.name AS role_name, r.is_system AS is_system_role,
+            u.status, u.email_verified_at, u.created_at
+     FROM users u
+     JOIN roles r ON r.id = u.role_id
+     WHERE u.id = $1 AND r.name = 'member'`,
+    [userId],
   );
   return result.rows[0];
 }

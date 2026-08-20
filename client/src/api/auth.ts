@@ -46,3 +46,19 @@ export async function verifyEmail(token: string): Promise<void> {
 export async function resendVerification(email: string): Promise<void> {
   await apiClient.post<ApiResponse<{ message: string }>>('/auth/resend-verification', { email });
 }
+
+/**
+ * Request a Member password-reset email. The server intentionally returns the
+ * same successful response for known and unknown addresses.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiClient.post<ApiResponse<{ message: string }>>('/auth/password-reset/request', { email });
+}
+
+/** Confirm a password reset with the single-use token from the email link. */
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  await apiClient.post<ApiResponse<{ message: string }>>('/auth/password-reset/confirm', {
+    token,
+    newPassword,
+  });
+}

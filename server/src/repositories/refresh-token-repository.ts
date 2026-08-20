@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
-import type { DB } from '../db/index.js';
+import type { DB, DBQueryExecutor } from '../db/index.js';
 
 /**
  * Refresh-token data-access module.
@@ -92,7 +92,7 @@ async function revokeByTokenHash(db: DB, tokenHash: string): Promise<void> {
   );
 }
 
-async function revokeByUserId(db: DB, userId: number): Promise<void> {
+async function revokeByUserId(db: DBQueryExecutor, userId: number): Promise<void> {
   await db.query(
     `UPDATE refresh_tokens SET revoked_at = NOW()
      WHERE user_id = $1 AND revoked_at IS NULL`,
@@ -237,7 +237,7 @@ export async function rotateRefreshToken(
  * Revoke all refresh tokens for a user (e.g., on password change or logout-all).
  */
 export async function revokeAllUserTokens(
-  db: DB,
+  db: DBQueryExecutor,
   userId: number,
 ): Promise<void> {
   await revokeByUserId(db, userId);

@@ -20,6 +20,8 @@ The database uses **PostgreSQL 15** with the following tables:
 - **permissions** - Permission definitions for RBAC system
 - **role_permissions** - Junction table linking roles to permissions
 - **app_settings** - White-label branding configuration
+- **rate_limit_configs** - Singleton HTTP rate-limit configuration
+- **auth_email_tokens** - Hashed, purpose-scoped verification/reset tokens
 - **schema_migrations** - Migration tracking system
 
 ## Table Definitions
@@ -584,6 +586,60 @@ WHERE id = 1;
 
 ---
 
+### rate_limit_configs
+
+Singleton configuration for the server's HTTP rate-limit arms. The row is
+loaded at startup and refreshed periodically; admin updates are audited.
+
+**Columns:**
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | `INTEGER` | `1` | Singleton key; CHECK constraint requires `1`. |
+| `window_ms` | `INTEGER` | `900000` | General limiter window in milliseconds. |
+| `general_max` | `INTEGER` | `100` | General API requests per window. |
+| `auth_max` | `INTEGER` | `5` | Failed login attempts per window. |
+| `register_max` / `register_window_ms` | `INTEGER` | `3` / `3600000` | Registration budget and window. |
+| `verification_max` / `verification_window_ms` | `INTEGER` | `3` / `3600000` | Verification-link and resend budget and window. |
+| `password_reset_max` / `password_reset_window_ms` | `INTEGER` | `3` / `3600000` | Password-reset request budget per IP and window. |
+| `password_reset_email_max` / `password_reset_email_window_ms` | `INTEGER` | `3` / `3600000` | Password-reset email budget per normalized address and window. |
+| `protected_max` | `INTEGER` | `60` | Authenticated endpoint requests per window. |
+| `scraper_max` | `INTEGER` | `10` | Scrape-trigger requests per window. |
+| `public_max` | `INTEGER` | `100` | Public catalog requests per window. |
+| `health_max` / `health_window_ms` | `INTEGER` | `10` / `60000` | Health-check budget and fixed one-minute window. |
+| `updated_at` | `TIMESTAMPTZ` | `CURRENT_TIMESTAMP` | Last update time. |
+| `updated_by` | `INTEGER` | | Admin user who made the update. |
+| `environment` | `TEXT` | `production` | `development`, `staging`, or `production`. |
+
+The per-email password-reset limiter stores only a SHA-256-derived in-memory
+key; mailbox addresses are not retained in limiter keys.
+
+---
+
+### auth_email_tokens
+
+One-purpose, single-use credentials for Member email verification and password
+reset. Raw tokens are never stored.
+
+**Columns:**
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `SERIAL` | PRIMARY KEY | Token row identifier. |
+| `user_id` | `INTEGER` | NOT NULL, FK → `users(id)` ON DELETE CASCADE | Token owner. |
+| `purpose` | `TEXT` | CHECK `email_verification` or `password_reset` | Token purpose. |
+| `token_hash` | `TEXT` | NOT NULL | SHA-256 hash of the emailed token. |
+| `expires_at` | `TIMESTAMPTZ` | NOT NULL | Expiry from the shared 30-minute auth-token policy. |
+| `created_at` | `TIMESTAMPTZ` | DEFAULT `NOW()` | Issue time. |
+
+**Indexes:**
+
+- `idx_auth_email_tokens_hash` on `(purpose, token_hash)` for atomic consume.
+- `idx_auth_email_tokens_user_id` on `user_id` for ownership and cascade work.
+- `idx_auth_email_tokens_user_purpose` unique on `(user_id, purpose)`, enforcing one live token per purpose. A new issue replaces the existing row.
+
+---
+
 ### schema_migrations
 
 Tracks applied database migrations (managed automatically).
@@ -640,6 +696,7 @@ roles (1) ──< users (N)
 roles (1) ──< role_permissions (N) ──> permissions (N)
 
 users (1) ──< app_settings.updated_by (1)
+users (1) ──< auth_email_tokens (N)
 ```
 
 ### Foreign Key Details
@@ -654,12 +711,13 @@ users (1) ──< app_settings.updated_by (1)
 | role_permissions | `role_id` | roles | `id` | CASCADE |
 | role_permissions | `permission_id` | permissions | `id` | CASCADE |
 | app_settings | `updated_by` | users | `id` | (none) |
+| auth_email_tokens | `user_id` | users | `id` | CASCADE |
 
 **Cascade Behavior:**
 
 - Deleting a **theater** → deletes all showtimes and weekly programs for that theater
 - Deleting a **movie** → does NOT cascade (orphaned showtimes/programs preserved)
-- Deleting a **user** → does NOT cascade (app_settings.updated_by becomes NULL)
+- Deleting a **user** → deletes their auth-email tokens; `app_settings.updated_by` becomes NULL
 
 ---
 
