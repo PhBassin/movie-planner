@@ -60,7 +60,7 @@ const LoginPage: React.FC = () => {
     return (
         <div className="max-w-md mx-auto mt-10 px-4 sm:px-6">
             <div className="bg-white p-8 rounded-lg shadow-md">
-                <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Login</h2>
+                <h2 className="text-2xl font-bold mb-6 text-center text-gray-800" data-testid="login-heading">Login</h2>
 
                 {sessionExpired && !error && (
                     <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded text-sm" role="status">
@@ -111,6 +111,7 @@ const LoginPage: React.FC = () => {
                         <button
                             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full transition-colors disabled:opacity-50"
                             type="submit"
+                            data-testid="login-submit"
                             disabled={isLoading}
                         >
                             {isLoading ? 'Signing in...' : 'Sign In'}
@@ -120,7 +121,7 @@ const LoginPage: React.FC = () => {
 
                 <p className="mt-4 text-center text-sm text-gray-600">
                     No account yet?{' '}
-                    <Link to="/signup" className="text-blue-600 hover:text-blue-800">
+                    <Link to="/signup" className="text-blue-600 hover:text-blue-800" data-testid="login-signup-link">
                         Create one
                     </Link>
                 </p>

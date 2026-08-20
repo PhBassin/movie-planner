@@ -21,6 +21,7 @@ vi.mock('./middleware/auth.js', () => ({
     (req as any).user = { id: 1, username: 'test', role_name: 'admin', is_system_role: true, permissions: [] };
     next();
   },
+  requireMember: (_req: any, _res: any, next: any) => next(),
 }));
 
 import * as themeGenerator from './services/theme-generator.js';

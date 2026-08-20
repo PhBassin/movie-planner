@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '../types/api.js';
-import type { PermissionName } from '../types/role.js';
+import { MEMBER_ONLY_ENDPOINT_MESSAGE, type PermissionName } from '../types/role.js';
 import { getSecrets, verifyWithMultipleSecrets } from '../utils/jwt-secrets.js';
 
 // Fail-fast: validate secrets at module load
@@ -74,4 +74,15 @@ export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction)
         };
         return res.status(401).json(response);
     }
+};
+
+export const requireMember = (req: AuthRequest, res: Response, next: NextFunction): void | Response => {
+    if (req.user?.role_name !== 'member') {
+        return res.status(403).json({
+            success: false,
+            error: MEMBER_ONLY_ENDPOINT_MESSAGE,
+        });
+    }
+
+    next();
 };

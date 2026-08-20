@@ -10,6 +10,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/forgot-password-page.js';
 import ResetPasswordPage from './pages/reset-password-page.js';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import CinemasPage from './pages/CinemasPage.js';
 import AdminPage from './pages/admin/AdminPage';
 import { AuthContext } from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthProvider';
@@ -108,6 +109,7 @@ function AppRoutes() {
     <Layout>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/cinemas" element={<CinemasPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/verify" element={<VerifyEmailPage />} />

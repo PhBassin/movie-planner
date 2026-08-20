@@ -2,7 +2,7 @@
 import type { DB } from './index.js';
 import type { Theater } from '../types/scraper.js';
 
-interface TheaterRow {
+export interface TheaterRow {
   id: string;
   name: string;
   status: Theater['status'];
@@ -13,11 +13,8 @@ interface TheaterRow {
   url: string | null;
 }
 
-// Récupérer tous les theaters
-export async function getTheaters(db: DB): Promise<Theater[]> {
-  const result = await db.query<TheaterRow>("SELECT * FROM theaters WHERE status = 'active' ORDER BY name");
-  
-  return result.rows.map(row => ({
+export function mapTheaterRow(row: TheaterRow): Theater {
+  return {
     id: row.id,
     name: row.name,
     status: row.status,
@@ -26,7 +23,14 @@ export async function getTheaters(db: DB): Promise<Theater[]> {
     city: row.city ?? undefined,
     image_url: row.image_url ?? undefined,
     url: row.url ?? undefined,
-  }));
+  };
+}
+
+// Récupérer tous les theaters
+export async function getTheaters(db: DB): Promise<Theater[]> {
+  const result = await db.query<TheaterRow>("SELECT * FROM theaters WHERE status = 'active' ORDER BY name");
+
+  return result.rows.map(mapTheaterRow);
 }
 
 // Insertion ou mise à jour d'un theater
@@ -121,16 +125,7 @@ export async function updateTheaterConfig(
   const row = result.rows[0];
   if (!row) return undefined;
 
-  return {
-    id: row.id,
-    name: row.name,
-    status: row.status,
-    address: row.address ?? undefined,
-    postal_code: row.postal_code ?? undefined,
-    city: row.city ?? undefined,
-    image_url: row.image_url ?? undefined,
-    url: row.url ?? undefined,
-  };
+  return mapTheaterRow(row);
 }
 
 // Get total theater count

@@ -39,7 +39,9 @@ containerized with Docker.
 - **Role-based access control** with granular, permission-based role management.
 - **JWT authentication** with rotating refresh tokens and CSRF protection.
 - **Member accounts** — self-registration by email, verification, member
-  selection, member submission of new theaters (see [CONTEXT.md](CONTEXT.md)).
+- **Member accounts** — self-registration by email, verification, member
+  Selection, searchable catalog at `/cinemas`, a fixed 50-theater Selection cap,
+  and member submission of new theaters (see [CONTEXT.md](CONTEXT.md)).
 - **Member password recovery** — enumeration-safe email reset with single-use
   tokens, session revocation, and a confirmation email.
 - **Rate limiting** per endpoint type, dynamically configurable via the admin

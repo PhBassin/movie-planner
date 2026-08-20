@@ -42,7 +42,7 @@ const SignupPage: React.FC = () => {
         return (
             <div className="max-w-md mx-auto mt-10 px-4 sm:px-6">
                 <div className="bg-white p-8 rounded-lg shadow-md text-center">
-                    <h2 className="text-2xl font-bold mb-4 text-gray-800">Account created</h2>
+                    <h2 className="text-2xl font-bold mb-4 text-gray-800" data-testid="signup-complete-heading">Account created</h2>
                     <p className="text-gray-600 mb-6">
                         Your account has been created. Check your inbox — we sent you a link to
                         confirm your email address. You can already sign in, but confirming your
@@ -51,6 +51,7 @@ const SignupPage: React.FC = () => {
                     <button
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                         onClick={() => navigate('/login')}
+                        data-testid="signup-go-to-login"
                     >
                         Go to sign in
                     </button>
@@ -62,7 +63,7 @@ const SignupPage: React.FC = () => {
     return (
         <div className="max-w-md mx-auto mt-10 px-4 sm:px-6">
             <div className="bg-white p-8 rounded-lg shadow-md">
-                <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Create an account</h2>
+                <h2 className="text-2xl font-bold mb-6 text-center text-gray-800" data-testid="signup-heading">Create an account</h2>
 
                 {error && (
                     <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm relative" role="alert">
@@ -123,6 +124,7 @@ const SignupPage: React.FC = () => {
                         <button
                             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full transition-colors disabled:opacity-50"
                             type="submit"
+                            data-testid="signup-submit"
                             disabled={isLoading}
                         >
                             {isLoading ? 'Creating account...' : 'Sign up'}
