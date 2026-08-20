@@ -35,6 +35,20 @@ interface WeeklyMovieRow extends MovieRow {
   theater_image_url: string | null;
 }
 
+interface SelectionMovieRow extends WeeklyMovieRow {
+  is_new_this_week: number | null;
+}
+
+/**
+ * A Movie as programmed inside one Member's Selection: each Theater entry
+ * carries whether the Movie is newly programmed there this week
+ * (`weekly_programs.is_new_this_week`).
+ */
+export interface SelectionMovie
+  extends Movie {
+  theaters: Array<Theater & { isNewThisWeek: boolean }>;
+}
+
 // --- Sanitization ---
 
 /**
@@ -144,6 +158,30 @@ function groupMoviesWithTheaters(
       moviesMap.set(row.id, entry);
     }
     entry.theaters.push(theaterFromWeeklyRow(row));
+  }
+
+  return Array.from(moviesMap.values());
+}
+
+/**
+ * Group Selection-scoped movie rows into distinct movies, each carrying the
+ * list of theaters that program it with their per-theater newness flag.
+ */
+function groupSelectionMoviesWithTheaters(
+  rows: SelectionMovieRow[]
+): SelectionMovie[] {
+  const moviesMap = new Map<number, SelectionMovie>();
+
+  for (const row of rows) {
+    let entry = moviesMap.get(row.id);
+    if (!entry) {
+      entry = { ...formatMovieRow(row), theaters: [] };
+      moviesMap.set(row.id, entry);
+    }
+    entry.theaters.push({
+      ...theaterFromWeeklyRow(row),
+      isNewThisWeek: row.is_new_this_week === 1,
+    });
   }
 
   return Array.from(moviesMap.values());
@@ -289,6 +327,76 @@ export async function getWeeklyMovies(
   );
 
   return groupMoviesWithTheaters(result.rows);
+}
+
+/**
+ * Movies programmed during a given week at any of the given theaters (a
+ * Member's Selection), each theater entry carrying its newness flag.
+ */
+export async function getWeeklyMoviesForTheaters(
+  db: DB,
+  weekStart: string,
+  theaterIds: string[]
+): Promise<SelectionMovie[]> {
+  const result = await db.query<SelectionMovieRow>(
+    `
+      SELECT DISTINCT
+        f.*,
+        c.id as theater_id,
+        c.name as theater_name,
+        c.address as theater_address,
+        c.postal_code,
+        c.city,
+        c.image_url as theater_image_url,
+        wp.is_new_this_week
+       FROM weekly_programs wp
+       JOIN movies f ON wp.movie_id = f.id
+       JOIN theaters c ON wp.theater_id = c.id
+       WHERE c.status = 'active' AND wp.week_start = $1 AND wp.theater_id = ANY($2)
+       ORDER BY f.title
+    `,
+    [weekStart, theaterIds]
+  );
+
+  return groupSelectionMoviesWithTheaters(result.rows);
+}
+
+/**
+ * Movies programmed on a specific date at any of the given theaters (a
+ * Member's Selection), each theater entry carrying its newness flag derived
+ * from the matching weekly_programs row.
+ */
+export async function getMoviesByDateForTheaters(
+  db: DB,
+  date: string,
+  weekStart: string,
+  theaterIds: string[]
+): Promise<SelectionMovie[]> {
+  const result = await db.query<SelectionMovieRow>(
+    `
+      SELECT DISTINCT
+        f.*,
+        c.id as theater_id,
+        c.name as theater_name,
+        c.address as theater_address,
+        c.postal_code,
+        c.city,
+        c.image_url as theater_image_url,
+        wp.is_new_this_week
+       FROM showtimes s
+       JOIN movies f ON s.movie_id = f.id
+       JOIN theaters c ON s.theater_id = c.id
+       LEFT JOIN weekly_programs wp
+         ON wp.theater_id = s.theater_id
+        AND wp.movie_id = s.movie_id
+        AND wp.week_start = s.week_start
+       WHERE c.status = 'active' AND s.date = $1 AND s.week_start = $2 AND s.theater_id = ANY($3)
+       ORDER BY f.title
+    `,
+    [date, weekStart, theaterIds]
+  );
+
+  return groupSelectionMoviesWithTheaters(result.rows);
 }
 
 // --- Movie Search ---

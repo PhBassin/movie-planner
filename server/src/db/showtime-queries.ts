@@ -326,3 +326,64 @@ export async function getWeeklyShowtimes(
     theater: mapRowToTheater(row),
   }));
 }
+
+// Récupérer les séances de la semaine pour une Selection de theaters donnée
+export async function getWeeklyShowtimesForTheaters(
+  db: DB,
+  weekStart: string,
+  theaterIds: string[]
+): Promise<Array<Showtime & { theater: Theater }>> {
+  const result = await db.query<ShowtimeWithTheaterRow>(
+    `
+      SELECT
+        s.*,
+        c.id as theater_id,
+        c.name as theater_name,
+        c.address as theater_address,
+        c.postal_code,
+        c.city,
+        c.image_url as theater_image_url
+       FROM showtimes s
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.week_start = $1 AND s.theater_id = ANY($2)
+      ORDER BY s.date, s.time, c.name
+    `,
+    [weekStart, theaterIds]
+  );
+
+  return result.rows.map((row) => ({
+    ...mapRowToShowtime(row),
+    theater: mapRowToTheater(row),
+  }));
+}
+
+// Récupérer les séances pour une date spécifique pour une Selection de theaters donnée
+export async function getShowtimesByDateForTheaters(
+  db: DB,
+  date: string,
+  weekStart: string,
+  theaterIds: string[]
+): Promise<Array<Showtime & { theater: Theater }>> {
+  const result = await db.query<ShowtimeWithTheaterRow>(
+    `
+      SELECT
+        s.*,
+        c.id as theater_id,
+        c.name as theater_name,
+        c.address as theater_address,
+        c.postal_code,
+        c.city,
+        c.image_url as theater_image_url
+       FROM showtimes s
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND s.date = $1 AND s.week_start = $2 AND s.theater_id = ANY($3)
+      ORDER BY s.date, s.time, c.name
+    `,
+    [date, weekStart, theaterIds]
+  );
+
+  return result.rows.map((row) => ({
+    ...mapRowToShowtime(row),
+    theater: mapRowToTheater(row),
+  }));
+}

@@ -1,6 +1,7 @@
 import type { DB } from '../db/index.js';
-import { getShowtimesByDate, getShowtimesByMovieAndWeek, getWeeklyShowtimes } from '../db/showtime-queries.js';
-import { getWeeklyMovies, getMoviesByDate, getMovie, searchMovies } from '../db/movie-queries.js';
+import { getShowtimesByDate, getShowtimesByDateForTheaters, getShowtimesByMovieAndWeek, getWeeklyShowtimes, getWeeklyShowtimesForTheaters } from '../db/showtime-queries.js';
+import { getWeeklyMovies, getMoviesByDate, getMovie, searchMovies, getWeeklyMoviesForTheaters, getMoviesByDateForTheaters, type SelectionMovie } from '../db/movie-queries.js';
+import { getSelection } from '../db/selection-queries.js';
 import { groupShowtimesByTheater } from '../utils/showtimes.js';
 import type { MovieWithShowtimes, Showtime, Theater } from '../types/scraper.js';
 
@@ -47,6 +48,69 @@ export class MovieService {
 
   async search(query: string, limit: number = 10) {
     return searchMovies(this.db, query, limit);
+  }
+
+  async getSelectionMoviesForWeek(memberId: number, weekStart: string): Promise<MovieWithShowtimes[]> {
+    const theaterIds = await this.getSelectionTheaterIds(memberId);
+    if (theaterIds.length === 0) {
+      return [];
+    }
+
+    const [movies, allShowtimes] = await Promise.all([
+      getWeeklyMoviesForTheaters(this.db, weekStart, theaterIds),
+      getWeeklyShowtimesForTheaters(this.db, weekStart, theaterIds),
+    ]);
+    return this.mergeSelectionMoviesAndShowtimes(movies, allShowtimes);
+  }
+
+  async getSelectionMoviesForDate(memberId: number, date: string, weekStart: string): Promise<MovieWithShowtimes[]> {
+    const theaterIds = await this.getSelectionTheaterIds(memberId);
+    if (theaterIds.length === 0) {
+      return [];
+    }
+
+    const [movies, allShowtimes] = await Promise.all([
+      getMoviesByDateForTheaters(this.db, date, weekStart, theaterIds),
+      getShowtimesByDateForTheaters(this.db, date, weekStart, theaterIds),
+    ]);
+    return this.mergeSelectionMoviesAndShowtimes(movies, allShowtimes);
+  }
+
+  private async getSelectionTheaterIds(memberId: number): Promise<string[]> {
+    const selection = await getSelection(this.db, memberId);
+    return selection.map(theater => theater.id);
+  }
+
+  /**
+   * Merge Selection-scoped movies with their showtimes, then overlay the
+   * per-theater newness carried by the movie rows: each theater entry gains
+   * `isNewThisWeek`, and the movie itself is flagged when at least one of its
+   * selected theaters programs it newly this week.
+   */
+  private mergeSelectionMoviesAndShowtimes(
+    movies: SelectionMovie[],
+    allShowtimes: Array<Showtime & { theater: Theater }>
+  ): MovieWithShowtimes[] {
+    const merged = this.mergeMoviesAndShowtimes(movies, allShowtimes);
+
+    const newnessByMovieTheater = new Map<string, boolean>();
+    for (const movie of movies) {
+      for (const theater of movie.theaters) {
+        newnessByMovieTheater.set(`${movie.id}|${theater.id}`, theater.isNewThisWeek);
+      }
+    }
+
+    return merged.map(movie => {
+      const theaters = movie.theaters.map(theater => ({
+        ...theater,
+        isNewThisWeek: newnessByMovieTheater.get(`${movie.id}|${theater.id}`) ?? false,
+      }));
+      return {
+        ...movie,
+        theaters,
+        isNewThisWeek: theaters.some(theater => theater.isNewThisWeek),
+      };
+    });
   }
 
   private mergeMoviesAndShowtimes(movies: any[], allShowtimes: any[]): MovieWithShowtimes[] {

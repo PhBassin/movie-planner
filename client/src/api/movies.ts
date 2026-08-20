@@ -17,6 +17,20 @@ export async function getMoviesByDate(date: string): Promise<{ movies: MovieWith
   return response.data;
 }
 
+// Selection homepage: movies playing at the authenticated Member's selected
+// theaters for the current week (or a specific date), carrying newness flags
+// for the "Nouveautés cette semaine" section.
+export async function getSelectionMovies(date?: string): Promise<{ movies: MovieWithShowtimes[]; weekStart: string; date?: string }> {
+  const response = await apiClient.get<ApiResponse<{ movies: MovieWithShowtimes[]; weekStart: string; date?: string }>>(
+    '/me/selection/movies',
+    date ? { date } : undefined,
+  );
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to fetch Selection movies');
+  }
+  return response.data;
+}
+
 export async function getMovieById(id: number): Promise<MovieWithShowtimes> {
   const response = await apiClient.get<ApiResponse<MovieWithShowtimes>>(`/movies/${id}`);
   if (!response.success || !response.data) {

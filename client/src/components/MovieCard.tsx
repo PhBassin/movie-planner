@@ -136,7 +136,7 @@ function MovieCard({ movie, isNew = false, initialAfterTime }: MovieCardProps) {
 
           {showSchedule && (
             <div className="mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-              <TheaterShowtimes theaters={movie.theaters} movie={movie} initialAfterTime={initialAfterTime} />
+              <TheaterShowtimes theaters={movie.theaters} movie={movie} initialAfterTime={initialAfterTime} showNewBadges={isNew} />
             </div>
           )}
         </div>

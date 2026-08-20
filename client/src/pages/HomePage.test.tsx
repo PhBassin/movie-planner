@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import HomePage from './HomePage';
 import * as clientApi from '../api/client';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -18,7 +18,7 @@ const mockAuthContext = {
   token: 'mock-token',
 };
 
-const renderWithClient = (ui: React.ReactElement) => {
+const renderWithClient = (ui: React.ReactElement, auth: React.ContextType<typeof AuthContext> = mockAuthContext) => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -28,7 +28,7 @@ const renderWithClient = (ui: React.ReactElement) => {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AuthContext.Provider value={mockAuthContext}>
+      <AuthContext.Provider value={auth}>
         {ui}
       </AuthContext.Provider>
     </QueryClientProvider>
@@ -40,6 +40,9 @@ vi.mock('../api/client', () => ({
   getTheaters: vi.fn(),
   addTheater: vi.fn(),
   searchMovies: vi.fn(),
+  getMemberProfile: vi.fn(),
+  getSelection: vi.fn(),
+  getSelectionMovies: vi.fn(),
 }));
 
 describe('HomePage', () => {
@@ -247,5 +250,206 @@ describe('HomePage — bouton Maintenant', () => {
     fireEvent.click(screen.getByTestId('filter-reset'));
 
     await waitFor(() => expect(input.value).toBe(''));
+  });
+});
+
+describe('HomePage — polymorphic root', () => {
+  const FIXED_TODAY = '2026-03-30';
+  const WEEK_START = '2026-03-25';
+
+  const visitorAuth = {
+    ...mockAuthContext,
+    isAuthenticated: false,
+    user: null,
+  };
+
+  const memberAuth = {
+    ...mockAuthContext,
+    isAuthenticated: true,
+    isAdmin: false,
+    hasPermission: vi.fn(() => false),
+    user: { id: 7, username: 'member@example.com', role_id: 3, role_name: 'member', is_system_role: false, permissions: [] as any[] },
+  };
+
+  const makeMemberProfile = (overrides: Record<string, unknown> = {}) => ({
+    id: 7,
+    email: 'member@example.com',
+    username: 'member@example.com',
+    role_name: 'member',
+    status: 'active',
+    email_verified: true,
+    appearance: 'light',
+    selectionCount: 2,
+    selectionLimit: 50,
+    created_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  const makeSelectionMovie = (id: number, title: string, isNew: boolean) => ({
+    id,
+    title,
+    genres: [],
+    actors: [],
+    source_url: '',
+    isNewThisWeek: isNew,
+    theaters: [
+      {
+        id: 'C0001',
+        name: 'UGC Opéra',
+        address: 'Rue',
+        city: 'Paris',
+        isNewThisWeek: isNew,
+        showtimes: [{ id: `s${id}`, date: FIXED_TODAY, time: '20:00', experiences: [] }],
+      },
+    ],
+  });
+
+  const setupMember = ({ movies = [], profile, selection }: {
+    movies?: any[];
+    profile?: Record<string, unknown>;
+    selection?: any[];
+  } = {}) => {
+    (clientApi.getMemberProfile as any).mockResolvedValue(makeMemberProfile(profile));
+    (clientApi.getSelection as any).mockResolvedValue(selection ?? [{ id: 'C0001', name: 'UGC Opéra', status: 'active' }]);
+    (clientApi.getSelectionMovies as any).mockResolvedValue({ movies, weekStart: WEEK_START });
+  };
+
+  const renderPage = (auth: React.ContextType<typeof AuthContext> = memberAuth) =>
+    renderWithClient(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+      auth,
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (clientApi.getWeeklyMovies as any).mockResolvedValue({ movies: [], weekStart: WEEK_START });
+    (clientApi.getTheaters as any).mockResolvedValue([]);
+  });
+
+  it('renders the Selection movies for a Member instead of the weekly catalog', async () => {
+    setupMember({ movies: [makeSelectionMovie(1, 'Film Sélection', false)] });
+
+    renderPage();
+
+    await waitFor(() => expect(clientApi.getSelectionMovies).toHaveBeenCalled());
+    expect(clientApi.getWeeklyMovies).not.toHaveBeenCalled();
+    expect(await screen.findByText('Film Sélection')).toBeInTheDocument();
+  });
+
+  it('scopes the quick theater links to the Selection for a Member', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Sélection', false)],
+      selection: [{ id: 'C0001', name: 'UGC Opéra', status: 'active' }],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(clientApi.getSelection).toHaveBeenCalled());
+    expect(clientApi.getTheaters).not.toHaveBeenCalled();
+    expect(await screen.findByText('UGC Opéra')).toBeInTheDocument();
+  });
+
+  it('partitions the New section: a new movie appears exactly once, only in the section', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Nouveau', true), makeSelectionMovie(2, 'Film Ancien', false)],
+    });
+
+    renderPage();
+
+    const section = await screen.findByTestId('new-this-week-section');
+    expect(within(section).getByText('Film Nouveau')).toBeInTheDocument();
+    expect(within(section).queryByText('Film Ancien')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Film Nouveau')).toHaveLength(1);
+    expect(screen.getAllByText('Film Ancien')).toHaveLength(1);
+    expect(screen.getByText('Nouveautés cette semaine')).toBeInTheDocument();
+  });
+
+  it('hides the New section when a specific date is selected', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Nouveau', true), makeSelectionMovie(2, 'Film Ancien', false)],
+    });
+
+    renderPage();
+
+    await screen.findByTestId('new-this-week-section');
+    fireEvent.click(screen.getByTestId('day-selector-2026-03-27'));
+
+    await waitFor(() => expect(clientApi.getSelectionMovies).toHaveBeenCalledWith('2026-03-27'));
+    await waitFor(() => expect(screen.queryByTestId('new-this-week-section')).not.toBeInTheDocument());
+    expect(screen.getAllByText('Film Nouveau')).toHaveLength(1);
+  });
+
+  it('keeps the New section in the Maintenant view', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-30T13:00:00'));
+    try {
+      setupMember({
+        movies: [makeSelectionMovie(1, 'Film Nouveau', true), makeSelectionMovie(2, 'Film Ancien', false)],
+      });
+
+      renderPage();
+
+      await screen.findByTestId('new-this-week-section');
+      fireEvent.click(screen.getByRole('button', { name: /maintenant/i }));
+
+      await waitFor(() => expect(clientApi.getSelectionMovies).toHaveBeenCalledWith(FIXED_TODAY));
+      await waitFor(() => expect(screen.getByTestId('new-this-week-section')).toBeInTheDocument());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the full catalog and a sign-up CTA to a Visitor', async () => {
+    (clientApi.getWeeklyMovies as any).mockResolvedValue({
+      movies: [makeSelectionMovie(1, 'Film Catalogue', false)],
+      weekStart: WEEK_START,
+    });
+
+    renderPage(visitorAuth);
+
+    expect(await screen.findByText('Film Catalogue')).toBeInTheDocument();
+    expect(screen.getByTestId('signup-cta')).toBeInTheDocument();
+    expect(clientApi.getSelectionMovies).not.toHaveBeenCalled();
+  });
+
+  it('shows no sign-up CTA to an authenticated Staff user', async () => {
+    renderPage(mockAuthContext);
+
+    await waitFor(() => expect(clientApi.getWeeklyMovies).toHaveBeenCalled());
+    expect(screen.queryByTestId('signup-cta')).not.toBeInTheDocument();
+  });
+
+  it('shows a verification reminder to an unverified Member', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Sélection', false)],
+      profile: { email_verified: false, status: 'unverified' },
+    });
+
+    renderPage();
+
+    expect(await screen.findByTestId('verify-email-reminder')).toBeInTheDocument();
+    expect(await screen.findByText('Film Sélection')).toBeInTheDocument();
+  });
+
+  it('shows no verification reminder to a verified Member', async () => {
+    setupMember({ movies: [makeSelectionMovie(1, 'Film Sélection', false)] });
+
+    renderPage();
+
+    await waitFor(() => expect(clientApi.getSelectionMovies).toHaveBeenCalled());
+    expect(screen.queryByTestId('verify-email-reminder')).not.toBeInTheDocument();
+  });
+
+  it('shows only the add-cinema CTA when the Selection is empty', async () => {
+    setupMember({ movies: [], profile: { selectionCount: 0 }, selection: [] });
+
+    renderPage();
+
+    expect(await screen.findByTestId('empty-selection-cta')).toBeInTheDocument();
+    expect(screen.queryByTestId('filter-bar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('new-this-week-section')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sticky-search-date-container')).not.toBeInTheDocument();
   });
 });

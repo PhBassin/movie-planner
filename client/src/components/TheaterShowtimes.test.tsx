@@ -216,3 +216,38 @@ describe('TheaterShowtimes — bouton Maintenant', () => {
     expect(screen.queryByText('14:00')).not.toBeInTheDocument(); // no Feb 18 showtimes shown
   });
 });
+
+describe('TheaterShowtimes — nouveaux badges', () => {
+  const newTheaters: TheaterWithShowtimes[] = [
+    {
+      id: 'C1',
+      name: 'Theater Nouveau',
+      address: 'Address 1',
+      city: 'Paris',
+      isNewThisWeek: true,
+      showtimes: [{ id: 's1', date: '2026-02-18', time: '14:00', experiences: [] }],
+    } as any,
+    {
+      id: 'C2',
+      name: 'Theater Ancien',
+      address: 'Address 2',
+      city: 'Paris',
+      isNewThisWeek: false,
+      showtimes: [{ id: 's3', date: '2026-02-18', time: '20:00', experiences: [] }],
+    } as any,
+  ];
+
+  it('badges only the newly-programmed theaters on New-section cards', () => {
+    renderWithRouter(<TheaterShowtimes theaters={newTheaters} movie={mockMovie} showNewBadges />);
+
+    expect(screen.getByTestId('theater-new-badge-C1')).toBeInTheDocument();
+    expect(screen.queryByTestId('theater-new-badge-C2')).not.toBeInTheDocument();
+  });
+
+  it('never badges outside the New section', () => {
+    renderWithRouter(<TheaterShowtimes theaters={newTheaters} movie={mockMovie} />);
+
+    expect(screen.queryByTestId('theater-new-badge-C1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('theater-new-badge-C2')).not.toBeInTheDocument();
+  });
+});
