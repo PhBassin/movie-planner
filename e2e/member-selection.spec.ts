@@ -21,7 +21,10 @@ test.describe('Member Selection flow', () => {
         await page.fill('#username', email);
         await page.fill('#password', password);
         await page.getByTestId('login-submit').click();
-        await page.waitForSelector('header nav', { timeout: 10000 });
+        // Wait for a real logged-in signal — `header nav` is present on every
+        // page (including /login), so it never proves the session was
+        // established, letting the next navigation race the login request.
+        await expect(page.getByTestId('user-menu-button')).toBeVisible({ timeout: 10000 });
 
         // Browse the public catalog and add a theater to the Selection.
         await page.goto('/cinemas');

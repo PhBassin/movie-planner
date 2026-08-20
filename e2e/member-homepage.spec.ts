@@ -31,7 +31,9 @@ test.describe('Member Selection homepage', () => {
     await page.fill('#username', email);
     await page.fill('#password', password);
     await page.getByTestId('login-submit').click();
-    await page.waitForSelector('header nav', { timeout: 10000 });
+    // Wait for a real logged-in signal — `header nav` is present on every page
+    // (including /login), so it never proves the session was established.
+    await expect(page.getByTestId('user-menu-button')).toBeVisible({ timeout: 10000 });
 
     // Pick a theater that actually has showtimes this week, plus a catalog
     // theater that is NOT selected, from the public catalog data.
