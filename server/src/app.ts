@@ -29,6 +29,7 @@ import settingsRouter from './routes/settings.js';
 import usersRouter from './routes/users.js';
 import meRouter from './routes/me.js';
 import selectionRouter from './routes/selection.js';
+import submissionsRouter from './routes/submissions.js';
 import systemRouter from './routes/system.js';
 import rolesRouter from './routes/roles.js';
 import rateLimitsRouter from './routes/admin/rate-limits.js';
@@ -153,6 +154,7 @@ export function createApp(options: AppOptions = {}) {
   app.use('/api/settings', settingsRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/me/selection', selectionRouter);
+  app.use('/api/me/submissions', submissionsRouter);
   app.use('/api/me', meRouter);
   app.use('/api/system', systemRouter);
   app.use('/api/roles', rolesRouter);

@@ -14,8 +14,8 @@ first startup and by the host-side `npm run server:db:init` path.
 The historical numbered migrations were folded into the baseline and removed;
 new forward migrations now live here after the baseline. The current sequence
 starts at `001` and includes the queue, auth-email-token, verification rate-limit,
-password-reset rate-limit, auth-email-token uniqueness, and member selection
-changes.
+password-reset rate-limit, auth-email-token uniqueness, member selection, and
+theater submission changes.
 
 ## Creating a migration
 

@@ -79,7 +79,7 @@ describe.runIf(Boolean(TEST_URL))(
         'scrape_schedules', 'scrape_reports', 'scrape_attempts',
         'scrape_jobs',
         'refresh_tokens', 'auth_email_tokens',
-        'member_preferences', 'member_selections',
+        'member_preferences', 'member_selections', 'theater_submissions',
         'permission_category_labels', 'schema_migrations',
       ]) {
         expect(tables, `missing table ${expected}`).toContain(expected);
@@ -309,14 +309,17 @@ describe.runIf(Boolean(TEST_URL))(
         SELECT version FROM schema_migrations ORDER BY version
       `);
        // 001 (scrape_jobs queue), 002 (auth_email_tokens), 003 (verification
-       // rate-limit arm), 004 (password-reset rate-limit arms), and 005
-       // (auth-email-token uniqueness) — all idempotent over the baseline.
+       // rate-limit arm), 004 (password-reset rate-limit arms), 005
+       // (auth-email-token uniqueness), 006 (member selections), and 007
+       // (theater submissions) — all idempotent over the baseline.
       expect(result.rows.map((r) => r.version)).toEqual([
         '001_scrape_jobs_queue.sql',
         '002_auth_email_tokens.sql',
         '003_verification_rate_limit_arm.sql',
         '004_password_reset_rate_limit_arms.sql',
         '005_auth_email_token_uniqueness.sql',
+        '006_member_selections.sql',
+        '007_theater_submissions.sql',
       ]);
 
       // The queue table is present (created by the baseline; the migration is
