@@ -40,3 +40,18 @@ export class TheaterNotFoundError extends AppError {
     super(`Theater not found: ${theaterId}`, 404);
   }
 }
+
+/**
+ * Detect a Postgres unique-constraint violation: SQLSTATE `23505`, or a
+ * "duplicate key" message (re-wrapped errors can lose the code).
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const e = error as { code?: unknown; message?: unknown };
+  if (e.code === '23505') {
+    return true;
+  }
+  return typeof e.message === 'string' && e.message.includes('duplicate key');
+}
