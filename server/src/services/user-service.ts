@@ -13,13 +13,10 @@ import {
   updateUserPassword as dbUpdateUserPassword,
 } from '../db/user-queries.js';
 import { roleExists, getRoleNameById } from '../db/role-queries.js';
-import { ValidationError, NotFoundError, AuthError } from '../utils/errors.js';
+import { ValidationError, NotFoundError, AuthError, isUniqueViolation } from '../utils/errors.js';
 
 // Username validation: alphanumeric only, 3-15 characters
 const USERNAME_REGEX = /^[a-zA-Z0-9]{3,15}$/;
-
-// Postgres unique-violation SQLSTATE — surfaced when a username collides on insert.
-const PG_UNIQUE_VIOLATION = '23505';
 
 /**
  * The single canonical role-name string used to identify the system admin role.
@@ -272,15 +269,4 @@ export class UserService {
       throw new AuthError(message, 403);
     }
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-  const e = error as { code?: unknown; message?: unknown };
-  if (e.code === PG_UNIQUE_VIOLATION) {
-    return true;
-  }
-  return typeof e.message === 'string' && e.message.includes('duplicate key');
 }
