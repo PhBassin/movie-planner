@@ -32,7 +32,7 @@ describe('SelectionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service = new SelectionService(db);
-    vi.mocked(lockMemberForSelection).mockResolvedValue({ id: 7, role_name: 'member' });
+    vi.mocked(lockMemberForSelection).mockResolvedValue({ id: 7, role_name: 'member', status: 'active', email_verified_at: null });
     vi.mocked(getActiveTheater).mockResolvedValue({ id: 'C0001', name: 'UGC Opéra', status: 'active' });
     vi.mocked(isTheaterSelected).mockResolvedValue(false);
     vi.mocked(getSelectionCount).mockResolvedValue(0);
@@ -80,7 +80,7 @@ describe('SelectionService', () => {
   });
 
   it('rejects Staff accounts even when called directly', async () => {
-    vi.mocked(lockMemberForSelection).mockResolvedValue({ id: 1, role_name: 'admin' });
+    vi.mocked(lockMemberForSelection).mockResolvedValue({ id: 1, role_name: 'admin', status: 'active', email_verified_at: null });
 
     await expect(service.add(1, 'C0001')).rejects.toBeInstanceOf(ForbiddenError);
     expect(getActiveTheater).not.toHaveBeenCalled();

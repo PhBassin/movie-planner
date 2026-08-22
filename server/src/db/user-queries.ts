@@ -46,7 +46,7 @@ export interface MemberLifecycleRow {
  * Read a Member's lifecycle slice, optionally locking the users row for the
  * caller's transaction (cap- and throttle-enforced writes).
  */
-export async function getMemberWithRole(
+export async function getMemberLifecycle(
   db: DBQueryExecutor,
   memberId: number,
   options?: { forUpdate?: boolean },

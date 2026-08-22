@@ -1,20 +1,15 @@
 import type { DB } from './index.js';
 import type { Theater } from '../types/scraper.js';
 import { mapTheaterRow, THEATER_COLUMNS, type TheaterRow } from './theater-queries.js';
-import { getMemberWithRole } from './user-queries.js';
+import { getMemberLifecycle, type MemberLifecycleRow } from './user-queries.js';
 
 type QueryableDB = Pick<DB, 'query'>;
-
-export interface SelectionMemberRow {
-  id: number;
-  role_name: string;
-}
 
 export async function lockMemberForSelection(
   db: QueryableDB,
   memberId: number,
-): Promise<SelectionMemberRow | undefined> {
-  return getMemberWithRole(db, memberId, { forUpdate: true });
+): Promise<MemberLifecycleRow | undefined> {
+  return getMemberLifecycle(db, memberId, { forUpdate: true });
 }
 
 export async function getActiveTheater(

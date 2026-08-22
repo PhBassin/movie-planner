@@ -1,5 +1,5 @@
 import type { DB } from './index.js';
-import { getMemberWithRole, type MemberLifecycleRow } from './user-queries.js';
+import { getMemberLifecycle, type MemberLifecycleRow } from './user-queries.js';
 
 type QueryableDB = Pick<DB, 'query'>;
 
@@ -33,7 +33,7 @@ export async function getMemberForSubmission(
   db: QueryableDB,
   memberId: number,
 ): Promise<SubmissionMemberRow | undefined> {
-  return getMemberWithRole(db, memberId);
+  return getMemberLifecycle(db, memberId);
 }
 
 /** Lock the Member row for the authoritative submit decision (verification + throttle). */
@@ -41,7 +41,7 @@ export async function lockMemberForSubmission(
   db: QueryableDB,
   memberId: number,
 ): Promise<SubmissionMemberRow | undefined> {
-  return getMemberWithRole(db, memberId, { forUpdate: true });
+  return getMemberLifecycle(db, memberId, { forUpdate: true });
 }
 
 /** Count a Member's new-cinema submissions within the throttle window. */
