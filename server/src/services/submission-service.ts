@@ -2,17 +2,15 @@ import type { DB } from '../db/index.js';
 import {
   countNewSubmissionsSince,
   getMemberForSubmission,
-  getTheaterById,
   insertSubmission,
   lockMemberForSubmission,
   type SubmissionMemberRow,
   type TheaterSubmissionRow,
 } from '../db/submission-queries.js';
-import { addTheater } from '../db/theater-queries.js';
-import { createScrapeReport } from '../db/report-queries.js';
-import { getBusProducer } from './bus-producer.js';
+import { getTheaterById } from '../db/theater-queries.js';
+import { addTheaterWithScrapeJob } from './theater-service.js';
 import { SelectionService } from './selection-service.js';
-import { AppError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
+import { AppError, ForbiddenError, NotFoundError, ValidationError, isUniqueViolation } from '../utils/errors.js';
 import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 import { cleanTheaterUrl, extractTheaterIdFromUrl, isValidAllocineUrl } from '../utils/url.js';
 import { parseStrictInt } from '../utils/number.js';
@@ -54,13 +52,6 @@ function validateSubmissionUrl(url: string): void {
   if (!isValidAllocineUrl(url)) {
     throw new ValidationError('Invalid Allocine URL. Must be https://www.allocine.fr/...');
   }
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  if (error instanceof Error) {
-    return (error as Error & { code?: string }).code === '23505' || error.message.includes('duplicate key');
-  }
-  return false;
 }
 
 /**
@@ -156,13 +147,11 @@ export class SubmissionService {
       // can never be observed half-done.
       let reportId: number;
       try {
-        await addTheater(tx, { id: theaterId, name: theaterId, url: cleanedUrl });
-        reportId = await createScrapeReport(tx, 'manual');
-        await getBusProducer().enqueueAddTheaterJob(reportId, cleanedUrl, transaction);
+        ({ reportId } = await addTheaterWithScrapeJob(tx, { id: theaterId, name: theaterId, url: cleanedUrl }));
       } catch (error) {
         // A concurrent submitter raced the fast-path dedup read above: the
         // Theater now exists, so degrade to a conflict rather than duplicating.
-        if (isDuplicateKeyError(error)) {
+        if (isUniqueViolation(error)) {
           throw new AppError('This cinema is already being added to the catalog', 409);
         }
         throw error;

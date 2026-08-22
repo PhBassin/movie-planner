@@ -26,6 +26,19 @@ export function mapTheaterRow(row: TheaterRow): Theater {
   };
 }
 
+/** Canonical Theater column list for single-theater lookups (mapTheaterRow's input). */
+export const THEATER_COLUMNS = 'id, name, status, address, postal_code, city, image_url, url';
+
+/** Look up a Theater by id in any lifecycle status. */
+export async function getTheaterById(db: DB, theaterId: string): Promise<Theater | undefined> {
+  const result = await db.query<TheaterRow>(
+    `SELECT ${THEATER_COLUMNS} FROM theaters WHERE id = $1`,
+    [theaterId],
+  );
+  const row = result.rows[0];
+  return row ? mapTheaterRow(row) : undefined;
+}
+
 // Récupérer tous les theaters
 export async function getTheaters(db: DB): Promise<Theater[]> {
   const result = await db.query<TheaterRow>("SELECT * FROM theaters WHERE status = 'active' ORDER BY name");

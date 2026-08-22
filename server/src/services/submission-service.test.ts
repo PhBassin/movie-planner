@@ -4,11 +4,10 @@ import { SubmissionService } from './submission-service.js';
 import {
   countNewSubmissionsSince,
   getMemberForSubmission,
-  getTheaterById,
   insertSubmission,
   lockMemberForSubmission,
 } from '../db/submission-queries.js';
-import { addTheater } from '../db/theater-queries.js';
+import { addTheater, getTheaterById } from '../db/theater-queries.js';
 import { createScrapeReport } from '../db/report-queries.js';
 import { getBusProducer } from './bus-producer.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
@@ -19,13 +18,13 @@ const mockSelectionAdd = vi.fn();
 vi.mock('../db/submission-queries.js', () => ({
   lockMemberForSubmission: vi.fn(),
   getMemberForSubmission: vi.fn(),
-  getTheaterById: vi.fn(),
   countNewSubmissionsSince: vi.fn(),
   insertSubmission: vi.fn(),
 }));
 
 vi.mock('../db/theater-queries.js', () => ({
   addTheater: vi.fn(),
+  getTheaterById: vi.fn(),
 }));
 
 vi.mock('../db/report-queries.js', () => ({
