@@ -1,12 +1,11 @@
 import { getShowtimesByTheaterAndWeek } from '../db/showtime-queries.js';
 import { createScrapeReport } from '../db/report-queries.js';
-import { getTheaters, addTheater, updateTheaterConfig, deleteTheater } from '../db/theater-queries.js';
+import { getTheaters, addTheater, updateTheaterConfig, deleteTheater, type TheaterInput } from '../db/theater-queries.js';
 import { extractTheaterIdFromUrl, cleanTheaterUrl, isValidAllocineUrl } from '../utils/url.js';
 import { getBusProducer } from './bus-producer.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError, NotFoundError, isUniqueViolation } from '../utils/errors.js';
-import type { BusTransaction } from '@movie-planner/scraper-protocol';
-import type { DB } from '../db/index.js';
+import type { DB, TransactionClient } from '../db/index.js';
 
 // --- Theater field rules ---------------------------------------------------
 //
@@ -95,14 +94,12 @@ function assertAtLeastOneUpdateField(data: TheaterUpdateInput): void {
  * the Staff paths and the Member submission path (issue #62).
  */
 export async function addTheaterWithScrapeJob(
-  db: DB,
-  input: { id: string; name: string; url: string },
-): Promise<{ theater: { id: string; name: string; url: string }; reportId: number }> {
+  db: TransactionClient,
+  input: TheaterInput,
+): Promise<{ theater: TheaterInput; reportId: number }> {
   const theater = await addTheater(db, input);
   const reportId = await createScrapeReport(db, 'manual');
-  // DB.query's constrained generic signature is narrower than BusTransaction's;
-  // the transaction object satisfies both at runtime.
-  await getBusProducer().enqueueAddTheaterJob(reportId, input.url, db as unknown as BusTransaction);
+  await getBusProducer().enqueueAddTheaterJob(reportId, input.url, db);
   return { theater, reportId };
 }
 
@@ -136,7 +133,7 @@ export class TheaterService {
     const cleanedUrl = cleanTheaterUrl(url);
 
     const { theater, reportId } = await this.db.transaction(async (transaction) =>
-      addTheaterWithScrapeJob(transaction as DB, {
+      addTheaterWithScrapeJob(transaction, {
         id: theaterId,
         name: theaterId,
         url: cleanedUrl,
@@ -154,7 +151,7 @@ export class TheaterService {
 
     try {
       const { theater, reportId } = await this.db.transaction(async (transaction) =>
-        addTheaterWithScrapeJob(transaction as DB, { id, name, url }),
+        addTheaterWithScrapeJob(transaction, { id, name, url }),
       );
       logger.info(`🎬 add_theater job queued for ${url} (reportId=${reportId})`);
       return theater;

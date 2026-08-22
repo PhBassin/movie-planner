@@ -1,5 +1,5 @@
 // fallow-ignore-file security-sink
-import type { DB } from './index.js';
+import { type DB, type DBQueryExecutor } from './index.js';
 import type { Theater } from '../types/scraper.js';
 
 export interface TheaterRow {
@@ -11,6 +11,13 @@ export interface TheaterRow {
   city: string | null;
   image_url: string | null;
   url: string | null;
+}
+
+/** Minimal Theater identity + source URL — the shape the catalog write and scrape-config reads share. */
+export interface TheaterInput {
+  id: string;
+  name: string;
+  url: string;
 }
 
 export function mapTheaterRow(row: TheaterRow): Theater {
@@ -30,7 +37,7 @@ export function mapTheaterRow(row: TheaterRow): Theater {
 export const THEATER_COLUMNS = 'id, name, status, address, postal_code, city, image_url, url';
 
 /** Look up a Theater by id in any lifecycle status. */
-export async function getTheaterById(db: DB, theaterId: string): Promise<Theater | undefined> {
+export async function getTheaterById(db: DBQueryExecutor, theaterId: string): Promise<Theater | undefined> {
   const result = await db.query<TheaterRow>(
     `SELECT ${THEATER_COLUMNS} FROM theaters WHERE id = $1`,
     [theaterId],
@@ -73,8 +80,8 @@ export async function upsertTheater(db: DB, theater: Theater): Promise<void> {
 }
 
 // Récupérer les theaters configurés pour le scraping (ceux avec une URL)
-export async function getTheaterConfigs(db: DB): Promise<Array<{ id: string; name: string; url: string }>> {
-  const result = await db.query<{ id: string; name: string; url: string }>(
+export async function getTheaterConfigs(db: DB): Promise<TheaterInput[]> {
+  const result = await db.query<TheaterInput>(
     "SELECT id, name, url FROM theaters WHERE url IS NOT NULL ORDER BY name"
   );
   return result.rows;
@@ -82,9 +89,9 @@ export async function getTheaterConfigs(db: DB): Promise<Array<{ id: string; nam
 
 // Ajouter un nouveau theater
 export async function addTheater(
-  db: DB,
-  theater: { id: string; name: string; url: string }
-): Promise<{ id: string; name: string; url: string }> {
+  db: DBQueryExecutor,
+  theater: TheaterInput
+): Promise<TheaterInput> {
   const result = await db.query<{ id: string; name: string; url: string; status: Theater['status'] }>(
     `INSERT INTO theaters (id, name, url, status) VALUES ($1, $2, $3, 'provisioning') RETURNING id, name, url, status`,
     [theater.id, theater.name, theater.url]

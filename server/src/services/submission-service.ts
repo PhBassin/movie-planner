@@ -109,7 +109,7 @@ export class SubmissionService {
     }
 
     return this.db.transaction(async (transaction) => {
-      const tx = transaction as DB;
+      const tx = transaction;
 
       // Authoritative re-check under the Member lock: closes the race between
       // the read-only pre-gate and this transaction, and applies the

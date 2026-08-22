@@ -1,5 +1,5 @@
 // fallow-ignore-file security-sink
-import { type DB } from './index.js';
+import { type DB, type DBQueryExecutor } from './index.js';
 
 // ============================================================================
 // SCRAPE REPORTS QUERIES
@@ -23,7 +23,7 @@ export interface ScrapeReport {
 
 // Create a new scrape report
 export async function createScrapeReport(
-  db: DB,
+  db: DBQueryExecutor,
   triggerType: 'manual' | 'cron',
   parentReportId?: number
 ): Promise<number> {
