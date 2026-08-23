@@ -1,11 +1,11 @@
 import { getShowtimesByTheaterAndWeek } from '../db/showtime-queries.js';
 import { createScrapeReport } from '../db/report-queries.js';
-import { getTheaters, addTheater, updateTheaterConfig, deleteTheater } from '../db/theater-queries.js';
+import { getTheaters, addTheater, updateTheaterConfig, deleteTheater, type TheaterInput } from '../db/theater-queries.js';
 import { extractTheaterIdFromUrl, cleanTheaterUrl, isValidAllocineUrl } from '../utils/url.js';
 import { getBusProducer } from './bus-producer.js';
 import { logger } from '../utils/logger.js';
-import { ValidationError, NotFoundError } from '../utils/errors.js';
-import type { DB } from '../db/index.js';
+import { ValidationError, NotFoundError, isUniqueViolation } from '../utils/errors.js';
+import type { DB, TransactionClient } from '../db/index.js';
 
 // --- Theater field rules ---------------------------------------------------
 //
@@ -87,6 +87,22 @@ function assertAtLeastOneUpdateField(data: TheaterUpdateInput): void {
 
 // --- Theater service -------------------------------------------------------
 
+/**
+ * Insert a provisioning Theater, its manual scrape report, and the
+ * `add_theater` queue job on one caller-owned transaction, so the catalog
+ * write, report, and job enqueue can never be observed half-done. Shared by
+ * the Staff paths and the Member submission path (issue #62).
+ */
+export async function addTheaterWithScrapeJob(
+  db: TransactionClient,
+  input: TheaterInput,
+): Promise<{ theater: TheaterInput; reportId: number }> {
+  const theater = await addTheater(db, input);
+  const reportId = await createScrapeReport(db, 'manual');
+  await getBusProducer().enqueueAddTheaterJob(reportId, input.url, db);
+  return { theater, reportId };
+}
+
 export interface TheaterUpdateInput {
   name?: string;
   url?: string;
@@ -116,17 +132,13 @@ export class TheaterService {
 
     const cleanedUrl = cleanTheaterUrl(url);
 
-    const { theater, reportId } = await this.db.transaction(async (transaction) => {
-      // Keep the catalog write, report, and queue insert atomic.
-      const theater = await addTheater(transaction as typeof this.db, {
+    const { theater, reportId } = await this.db.transaction(async (transaction) =>
+      addTheaterWithScrapeJob(transaction, {
         id: theaterId,
         name: theaterId,
         url: cleanedUrl,
-      });
-      const reportId = await createScrapeReport(transaction as typeof this.db, 'manual');
-      await getBusProducer().enqueueAddTheaterJob(reportId, cleanedUrl, transaction);
-      return { theater, reportId };
-    });
+      }),
+    );
     logger.info(`🎬 add_theater job queued for ${cleanedUrl} (reportId=${reportId})`);
 
     return theater;
@@ -138,16 +150,13 @@ export class TheaterService {
     validateTheaterUrl(url);
 
     try {
-      const { theater, reportId } = await this.db.transaction(async (transaction) => {
-        const theater = await addTheater(transaction as typeof this.db, { id, name, url });
-        const reportId = await createScrapeReport(transaction as typeof this.db, 'manual');
-        await getBusProducer().enqueueAddTheaterJob(reportId, url, transaction);
-        return { theater, reportId };
-      });
+      const { theater, reportId } = await this.db.transaction(async (transaction) =>
+        addTheaterWithScrapeJob(transaction, { id, name, url }),
+      );
       logger.info(`🎬 add_theater job queued for ${url} (reportId=${reportId})`);
       return theater;
     } catch (error: any) {
-      if (error.message && error.message.includes('duplicate key')) {
+      if (isUniqueViolation(error)) {
         throw new ValidationError('Theater with this ID already exists');
       }
       throw error;

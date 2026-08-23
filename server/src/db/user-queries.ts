@@ -31,6 +31,38 @@ export interface UserWithRoleRow {
 }
 
 /**
+ * The Member lifecycle slice shared by the Selection and Submission
+ * boundaries: role (defense in depth), status (suspension), and verification
+ * state.
+ */
+export interface MemberLifecycleRow {
+  id: number;
+  role_name: string;
+  status: MemberStatus;
+  email_verified_at: string | null;
+}
+
+/**
+ * Read a Member's lifecycle slice, optionally locking the users row for the
+ * caller's transaction (cap- and throttle-enforced writes).
+ */
+export async function getMemberLifecycle(
+  db: DBQueryExecutor,
+  memberId: number,
+  options?: { forUpdate?: boolean },
+): Promise<MemberLifecycleRow | undefined> {
+  const lockClause = options?.forUpdate ? ' FOR UPDATE OF u' : '';
+  const result = await db.query<MemberLifecycleRow>(
+    `SELECT u.id, r.name AS role_name, u.status, u.email_verified_at
+     FROM users u
+     JOIN roles r ON r.id = u.role_id
+     WHERE u.id = $1${lockClause}`,
+    [memberId],
+  );
+  return result.rows[0];
+}
+
+/**
  * Get all users without passwords (for admin panel)
  * Uses JOIN on roles table to get role_name
  * @param db - Database client

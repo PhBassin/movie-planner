@@ -16,7 +16,7 @@ import type { ApiResponse } from '../types/api.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permission.js';
 import { protectedLimiter } from '../middleware/rate-limit.js';
-import { ValidationError, NotFoundError, AuthError, AppError } from '../utils/errors.js';
+import { ValidationError, NotFoundError, AuthError, AppError, isUniqueViolation } from '../utils/errors.js';
 
 const router = express.Router();
 
@@ -142,7 +142,7 @@ router.post(
       const response: ApiResponse = { success: true, data: role };
       res.status(201).json(response);
     } catch (error: any) {
-      if (error.code === '23505' || error.message?.includes('duplicate key')) {
+      if (isUniqueViolation(error)) {
         return next(new ValidationError('Role name already exists'));
       }
       next(error);

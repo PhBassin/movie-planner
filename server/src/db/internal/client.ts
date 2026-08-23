@@ -20,7 +20,7 @@ const pool = new pg.Pool(
   connectionString ? { connectionString } : config
 );
 
-interface TransactionClient {
+export interface TransactionClient {
   query: (text: string, params?: any[]) => Promise<pg.QueryResult<any>>;
 }
 

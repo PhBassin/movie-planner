@@ -1,27 +1,15 @@
 import type { DB } from './index.js';
 import type { Theater } from '../types/scraper.js';
-import { mapTheaterRow, type TheaterRow } from './theater-queries.js';
+import { mapTheaterRow, THEATER_COLUMNS, type TheaterRow } from './theater-queries.js';
+import { getMemberLifecycle, type MemberLifecycleRow } from './user-queries.js';
 
 type QueryableDB = Pick<DB, 'query'>;
-
-export interface SelectionMemberRow {
-  id: number;
-  role_name: string;
-}
 
 export async function lockMemberForSelection(
   db: QueryableDB,
   memberId: number,
-): Promise<SelectionMemberRow | undefined> {
-  const result = await db.query<SelectionMemberRow>(
-    `SELECT u.id, r.name AS role_name
-     FROM users u
-     JOIN roles r ON r.id = u.role_id
-     WHERE u.id = $1
-      FOR UPDATE OF u`,
-    [memberId],
-  );
-  return result.rows[0];
+): Promise<MemberLifecycleRow | undefined> {
+  return getMemberLifecycle(db, memberId, { forUpdate: true });
 }
 
 export async function getActiveTheater(
@@ -29,9 +17,7 @@ export async function getActiveTheater(
   theaterId: string,
 ): Promise<Theater | undefined> {
   const result = await db.query<TheaterRow>(
-    `SELECT id, name, status, address, postal_code, city, image_url, url
-     FROM theaters
-     WHERE id = $1 AND status = 'active'`,
+    `SELECT ${THEATER_COLUMNS} FROM theaters WHERE id = $1 AND status = 'active'`,
     [theaterId],
   );
   const row = result.rows[0];

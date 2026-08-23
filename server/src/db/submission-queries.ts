@@ -1,7 +1,5 @@
 import type { DB } from './index.js';
-import type { Theater } from '../types/scraper.js';
-import type { MemberStatus } from '../types/user.js';
-import { mapTheaterRow, type TheaterRow } from './theater-queries.js';
+import { getMemberLifecycle, type MemberLifecycleRow } from './user-queries.js';
 
 type QueryableDB = Pick<DB, 'query'>;
 
@@ -23,16 +21,8 @@ export interface TheaterSubmissionRow {
   resolved_at: string | null;
 }
 
-/**
- * The Member lifecycle slice the submission boundary reads under `FOR UPDATE`:
- * role (defense in depth), status (suspension), and verification state.
- */
-export interface SubmissionMemberRow {
-  id: number;
-  role_name: string;
-  status: MemberStatus;
-  email_verified_at: string | null;
-}
+/** The Member lifecycle slice the submission boundary reads (see user-queries). */
+export type SubmissionMemberRow = MemberLifecycleRow;
 
 /**
  * Read a Member's lifecycle slice without locking — the pre-gate check that
@@ -43,7 +33,7 @@ export async function getMemberForSubmission(
   db: QueryableDB,
   memberId: number,
 ): Promise<SubmissionMemberRow | undefined> {
-  return querySubmissionMember(db, memberId, false);
+  return getMemberLifecycle(db, memberId);
 }
 
 /** Lock the Member row for the authoritative submit decision (verification + throttle). */
@@ -51,38 +41,7 @@ export async function lockMemberForSubmission(
   db: QueryableDB,
   memberId: number,
 ): Promise<SubmissionMemberRow | undefined> {
-  return querySubmissionMember(db, memberId, true);
-}
-
-async function querySubmissionMember(
-  db: QueryableDB,
-  memberId: number,
-  forUpdate: boolean,
-): Promise<SubmissionMemberRow | undefined> {
-  const lockClause = forUpdate ? ' FOR UPDATE OF u' : '';
-  const result = await db.query<SubmissionMemberRow>(
-    `SELECT u.id, r.name AS role_name, u.status, u.email_verified_at
-     FROM users u
-     JOIN roles r ON r.id = u.role_id
-     WHERE u.id = $1${lockClause}`,
-    [memberId],
-  );
-  return result.rows[0];
-}
-
-/** Look up a Theater by id in any lifecycle status (dedup key, issue #62). */
-export async function getTheaterById(
-  db: QueryableDB,
-  theaterId: string,
-): Promise<Theater | undefined> {
-  const result = await db.query<TheaterRow>(
-    `SELECT id, name, status, address, postal_code, city, image_url, url
-     FROM theaters
-     WHERE id = $1`,
-    [theaterId],
-  );
-  const row = result.rows[0];
-  return row ? mapTheaterRow(row) : undefined;
+  return getMemberLifecycle(db, memberId, { forUpdate: true });
 }
 
 /** Count a Member's new-cinema submissions within the throttle window. */

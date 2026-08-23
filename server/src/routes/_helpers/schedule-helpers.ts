@@ -1,6 +1,6 @@
 import type { Request, NextFunction } from 'express';
 import { parseStrictInt } from '../../utils/number.js';
-import { ValidationError, NotFoundError, AuthError } from '../../utils/errors.js';
+import { ValidationError, NotFoundError, AuthError, isUniqueViolation } from '../../utils/errors.js';
 import { getScheduleById, type ScrapeSchedule } from '../../db/schedule-queries.js';
 import type { DB } from '../../db/index.js';
 import type { AuthRequest } from '../../middleware/auth.js';
@@ -62,7 +62,7 @@ export function handleUniqueConstraintError(
   next: NextFunction,
   message = 'Resource already exists'
 ): void {
-  if (error?.code === '23505' || error?.message?.includes('duplicate key')) {
+  if (isUniqueViolation(error)) {
     next(new ValidationError(message));
     return;
   }

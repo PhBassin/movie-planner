@@ -9,7 +9,7 @@ import { logger } from '../utils/logger.js';
 import { parseJwtExpiration } from '../utils/jwt-config.js';
 import type { PermissionName } from '../types/role.js';
 import { getCurrentSecret } from '../utils/jwt-secrets.js';
-import { ValidationError, AuthError, NotFoundError } from '../utils/errors.js';
+import { ValidationError, AuthError, NotFoundError, isUniqueViolation } from '../utils/errors.js';
 
 // Pre-computed hash for 'dummy' (cost 10) to prevent timing attacks
 const DUMMY_HASH = 'scrypt:16384:8:1:00000000000000000000000000000000:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
@@ -214,7 +214,7 @@ export class AuthService {
     } catch (error: any) {
       // A concurrent signup with the same email loses the race to the unique
       // index — surface the same rejection as the check above, never a 500.
-      if (error?.code === '23505') {
+      if (isUniqueViolation(error)) {
         throw new ValidationError('An account with this email already exists');
       }
       throw error;

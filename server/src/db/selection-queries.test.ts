@@ -10,13 +10,13 @@ import {
 describe('Selection queries', () => {
   it('locks the Member users row for cap-enforced writes', async () => {
     const db = {
-      query: vi.fn().mockResolvedValue({ rows: [{ id: 7, role_name: 'member' }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ id: 7, role_name: 'member', status: 'active', email_verified_at: null }] }),
     } as unknown as DB;
 
     await lockMemberForSelection(db, 7);
 
     expect(db.query).toHaveBeenCalledWith(
-      expect.stringContaining('FROM users u'),
+      expect.stringContaining('SELECT u.id, r.name AS role_name, u.status, u.email_verified_at'),
       [7],
     );
     expect(db.query.mock.calls[0][0]).toContain('FOR UPDATE OF u');
