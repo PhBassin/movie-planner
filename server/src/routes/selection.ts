@@ -59,6 +59,26 @@ router.get(
   },
 );
 
+router.get(
+  '/movies/search',
+  protectedLimiter,
+  requireAuth,
+  requireMember,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const query = req.query.q as string | undefined;
+      if (!query || query.trim().length < 2 || query.trim().length > 100) {
+        return next(new ValidationError('Search query must be between 2 and 100 characters'));
+      }
+
+      const movies = await new MovieService(req.app.get('db')).searchSelection(req.user!.id, query.trim(), 10);
+      res.json({ success: true, data: { movies, query: query.trim() } } satisfies ApiResponse);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.post(
   '/:theaterId',
   protectedLimiter,

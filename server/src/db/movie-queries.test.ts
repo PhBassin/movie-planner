@@ -671,7 +671,8 @@ describe('Movie Queries - Selection-scoped', () => {
       await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001']);
 
       const [sql, params] = mockDb.query.mock.calls[0];
-      expect(sql).toContain('weekly_programs');
+       expect(sql).toContain('weekly_programs');
+       expect(sql).toContain('FROM showtimes s');
       expect(sql).toContain('wp.is_new_this_week');
       expect(sql).toContain('ANY($2)');
       expect(sql).toContain("c.status = 'active'");
@@ -688,6 +689,17 @@ describe('Movie Queries - Selection-scoped', () => {
       const result = await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001']);
 
       expect(result[0].theaters[0].isNewThisWeek).toBe(false);
+    });
+
+    it('uses showtimes as the complete weekly movie source', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001']);
+
+      expect(mockDb.query.mock.calls[0][0]).toContain('FROM showtimes s');
+      expect(mockDb.query.mock.calls[0][0]).toContain('LEFT JOIN weekly_programs wp');
     });
   });
 

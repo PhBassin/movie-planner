@@ -10,6 +10,7 @@ interface FilterBarProps {
   onNow: (date: string, time: string) => void;
   isNowActive: boolean;
   onFilter: (movies: Movie[] | null) => void;
+  searchFn?: (query: string) => Promise<Movie[]>;
   onReset: () => void;
   resetKey?: number;
 }
@@ -21,6 +22,7 @@ function FilterBar({
   onNow,
   isNowActive,
   onFilter,
+  searchFn,
   onReset,
   resetKey,
 }: FilterBarProps) {
@@ -33,7 +35,8 @@ function FilterBar({
         <MovieSearchBar
           placeholder="Rechercher un film..."
           className="w-full"
-          onFilter={onFilter}
+           onFilter={onFilter}
+           searchFn={searchFn}
           resetKey={resetKey}
         />
       </div>

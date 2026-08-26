@@ -14,11 +14,13 @@ const mockRemove = vi.fn();
 
 const mockGetSelectionMoviesForWeek = vi.fn();
 const mockGetSelectionMoviesForDate = vi.fn();
+const mockSearchSelection = vi.fn();
 
 vi.mock('../services/movie-service.js', () => ({
   MovieService: class {
     getSelectionMoviesForWeek = mockGetSelectionMoviesForWeek;
     getSelectionMoviesForDate = mockGetSelectionMoviesForDate;
+    searchSelection = mockSearchSelection;
   },
 }));
 
@@ -153,6 +155,18 @@ describe('Selection routes', () => {
 
       expect(response.status).toBe(403);
       expect(mockGetSelectionMoviesForWeek).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /movies/search', () => {
+    it('returns search results scoped to the Member Selection', async () => {
+      mockSearchSelection.mockResolvedValue([{ id: 1, title: 'Film A' }]);
+
+      const response = await request(app).get('/api/me/selection/movies/search?q=Film');
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.movies).toEqual([{ id: 1, title: 'Film A' }]);
+      expect(mockSearchSelection).toHaveBeenCalledWith(7, 'Film', 10);
     });
   });
 

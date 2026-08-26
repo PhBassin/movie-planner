@@ -118,6 +118,13 @@ The root route is **polymorphic by auth state**: an authenticated Member's root 
 
 The Homepage carries a **New section** ("Nouveautés cette semaine"): the subset of Movies that are **newly programmed** at one or more of the Member's selected Theaters this week — driven by `WeeklyProgram.is_new_this_week`. The New section is a **partition**, not a highlight: a Movie in the New section appears *only* there, and the rest of the Homepage shows the continuing titles; each Movie appears on the Homepage exactly once. The New section is a week-level concept and is not shown when the view is narrowed to a single date.
 
+The homepage's Selection movie projection is the wire shape returned by
+`GET /api/me/selection/movies` (`server/src/routes/selection.ts`): a Movie with
+only its selected active Theaters, each carrying its showtimes and optional
+`isNewThisWeek` marker. The movie-level marker is true when any included
+Theater is newly programmed. `GET /api/me/selection/movies?date=...` uses the
+same projection for one date and omits the week-level New section in the UI.
+
 **What a Homepage is not:**
 - Not the **catalog**. The catalog is shared and complete; the Homepage is personal and Selection-scoped. A non-selected Theater never appears on a Member's Homepage.
 - Not a **page for Visitors**. A Visitor has no Homepage; they see the catalog. The Homepage is one of the perks of becoming a Member.

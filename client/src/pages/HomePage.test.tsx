@@ -43,6 +43,7 @@ vi.mock('../api/client', () => ({
   getMemberProfile: vi.fn(),
   getSelection: vi.fn(),
   getSelectionMovies: vi.fn(),
+  searchSelectionMovies: vi.fn(),
 }));
 
 describe('HomePage', () => {
@@ -338,6 +339,17 @@ describe('HomePage — polymorphic root', () => {
     expect(await screen.findByText('Film Sélection')).toBeInTheDocument();
   });
 
+  it('loads today for a Visitor by default', async () => {
+    const today = new Date().toISOString().split('T')[0];
+    (clientApi.getMoviesByDate as any).mockResolvedValue({ movies: [], weekStart: '2026-03-25', date: today });
+
+    renderPage(visitorAuth);
+
+    await waitFor(() => expect(clientApi.getMoviesByDate).toHaveBeenCalledWith(today));
+    expect(clientApi.getWeeklyMovies).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('signup-cta')).toBeInTheDocument();
+  });
+
   it('scopes the quick theater links to the Selection for a Member', async () => {
     setupMember({
       movies: [makeSelectionMovie(1, 'Film Sélection', false)],
@@ -402,9 +414,11 @@ describe('HomePage — polymorphic root', () => {
   });
 
   it('shows the full catalog and a sign-up CTA to a Visitor', async () => {
-    (clientApi.getWeeklyMovies as any).mockResolvedValue({
+    const today = new Date().toISOString().split('T')[0];
+    (clientApi.getMoviesByDate as any).mockResolvedValue({
       movies: [makeSelectionMovie(1, 'Film Catalogue', false)],
       weekStart: WEEK_START,
+      date: today,
     });
 
     renderPage(visitorAuth);

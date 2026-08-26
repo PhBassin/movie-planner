@@ -349,16 +349,56 @@ export async function getWeeklyMoviesForTheaters(
         c.city,
         c.image_url as theater_image_url,
         wp.is_new_this_week
-       FROM weekly_programs wp
-       JOIN movies f ON wp.movie_id = f.id
-       JOIN theaters c ON wp.theater_id = c.id
-       WHERE c.status = 'active' AND wp.week_start = $1 AND wp.theater_id = ANY($2)
+      FROM showtimes s
+      JOIN movies f ON s.movie_id = f.id
+      JOIN theaters c ON s.theater_id = c.id
+      LEFT JOIN weekly_programs wp
+        ON wp.theater_id = s.theater_id
+       AND wp.movie_id = s.movie_id
+       AND wp.week_start = s.week_start
+      WHERE c.status = 'active' AND s.week_start = $1 AND s.theater_id = ANY($2)
        ORDER BY f.title
     `,
     [weekStart, theaterIds]
   );
 
   return groupSelectionMoviesWithTheaters(result.rows);
+}
+
+export async function searchMoviesForTheaters(
+  db: DB,
+  query: string,
+  theaterIds: string[],
+  limit: number = 10,
+): Promise<Movie[]> {
+  const result = await db.query<MovieRow>(
+    `SELECT
+       f.id, f.title, f.original_title, f.poster_url, f.duration_minutes,
+       f.release_date, f.rerelease_date, f.genres, f.nationality, f.director,
+       f.screenwriters, f.actors, f.synopsis, f.certificate, f.press_rating,
+       f.audience_rating, f.source_url, f.trailer_url,
+       ${MOVIE_SEARCH_SCORING_SQL} AS score
+     FROM movies f
+     WHERE EXISTS (
+       SELECT 1
+       FROM showtimes s
+       JOIN theaters c ON c.id = s.theater_id
+       WHERE s.movie_id = f.id
+         AND c.status = 'active'
+         AND s.theater_id = ANY($2)
+     )
+       AND (
+         similarity(f.title, $1) > 0.1
+         OR (f.original_title IS NOT NULL AND similarity(f.original_title, $1) > 0.1)
+         OR f.title ILIKE '%' || $1 || '%'
+         OR (f.original_title IS NOT NULL AND f.original_title ILIKE '%' || $1 || '%')
+       )
+     ORDER BY score DESC, f.title ASC
+     LIMIT $3`,
+    [query, theaterIds, limit],
+  );
+
+  return result.rows.map(formatMovieRow);
 }
 
 /**

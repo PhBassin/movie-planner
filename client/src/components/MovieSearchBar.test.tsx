@@ -37,7 +37,10 @@ describe('MovieSearchBar — inline filter mode', () => {
     vi.clearAllMocks();
   });
 
-  const renderSearchBar = (props: { onFilter?: (movies: Movie[] | null) => void } = {}) =>
+  const renderSearchBar = (props: {
+    onFilter?: (movies: Movie[] | null) => void;
+    searchFn?: (query: string) => Promise<Movie[]>;
+  } = {}) =>
     render(
       <MemoryRouter>
         <MovieSearchBar {...props} />

@@ -3,6 +3,8 @@ export const getUniqueDates = (showtimes: { date: string }[]): string[] => {
   return Array.from(dates).sort();
 };
 
+export const getTodayDate = (): string => new Date().toISOString().split('T')[0];
+
 // ⚡ PERFORMANCE: Cache Intl.DateTimeFormat instances to prevent expensive
 // re-initialization during loops or frequent re-renders
 const formatterWeekday = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' });

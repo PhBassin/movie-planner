@@ -31,6 +31,17 @@ export async function getSelectionMovies(date?: string): Promise<{ movies: Movie
   return response.data;
 }
 
+export async function searchSelectionMovies(query: string): Promise<Movie[]> {
+  const response = await apiClient.get<ApiResponse<{ movies: Movie[]; query: string }>>(
+    '/me/selection/movies/search',
+    { q: query.trim() },
+  );
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to search Selection movies');
+  }
+  return response.data.movies;
+}
+
 export async function getMovieById(id: number): Promise<MovieWithShowtimes> {
   const response = await apiClient.get<ApiResponse<MovieWithShowtimes>>(`/movies/${id}`);
   if (!response.success || !response.data) {

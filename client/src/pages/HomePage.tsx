@@ -1,7 +1,7 @@
 import { useContext, useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWeeklyMovies, getMoviesByDate, getSelectionMovies, getTheaters, getMemberProfile, getSelection, addTheater } from '../api/client.js';
+import { getWeeklyMovies, getMoviesByDate, getSelectionMovies, searchSelectionMovies, getTheaters, getMemberProfile, getSelection, addTheater } from '../api/client.js';
 import MovieCard from '../components/MovieCard.js';
 import FilterBar from '../components/FilterBar.js';
 import ScrollToTop from '../components/ScrollToTop.js';
@@ -10,12 +10,14 @@ import TheatersQuickLinks from '../components/TheatersQuickLinks.js';
 import { LoadingSpinner, ErrorMessage } from '../components/ui/PageStates.js';
 import { useDateTimeFilter } from '../hooks/useDateTimeFilter.js';
 import type { Movie } from '../types';
+import { getTodayDate } from '../utils/date.js';
 
 export default function HomePage() {
   const queryClient = useQueryClient();
   const { selectedDate, afterTime, selectDate, selectNow, resetAll } = useDateTimeFilter();
   const { isAuthenticated, user, hasPermission } = useContext(AuthContext);
   const isMember = isAuthenticated && user?.role_name === 'member';
+  const isVisitorToday = !isAuthenticated && !selectedDate;
   const [searchResults, setSearchResults] = useState<Movie[] | null>(null);
   const [resetKey, setResetKey] = useState(0);
 
@@ -36,9 +38,11 @@ export default function HomePage() {
     queryFn: () =>
       isMember
         ? getSelectionMovies(selectedDate || undefined)
-        : selectedDate
-          ? getMoviesByDate(selectedDate)
-          : getWeeklyMovies(),
+        : selectedDate || isVisitorToday
+          ? getMoviesByDate(selectedDate || getTodayDate())
+          : isAuthenticated
+            ? getWeeklyMovies()
+            : getMoviesByDate(getTodayDate()),
   });
 
   const allMovies = useMemo(() => moviesData?.movies || [], [moviesData]);
@@ -184,7 +188,7 @@ export default function HomePage() {
       {/* Title and Date Info */}
       <div className="mb-4">
         <h1 className="text-4xl font-bold mb-3">
-          {selectedDate ? 'Films du jour' : 'Au programme cette semaine'}
+           {selectedDate || isVisitorToday ? 'Films du jour' : 'Au programme cette semaine'}
         </h1>
         {weekStart && !selectedDate && (
           <div className="flex items-center gap-2 text-gray-500 font-medium">
@@ -192,10 +196,10 @@ export default function HomePage() {
             <span>Du {formatDate(weekStart)} au {getWeekEndDate(weekStart)}</span>
           </div>
         )}
-        {selectedDate && (
+        {(selectedDate || isVisitorToday) && (
           <div className="flex items-center gap-2 text-gray-500 font-medium">
             <span className="bg-gray-100 px-2 py-0.5 rounded text-sm">Date sélectionnée</span>
-            <span>{formatDate(selectedDate)}</span>
+            <span>{formatDate(selectedDate || getTodayDate())}</span>
           </div>
         )}
       </div>
@@ -214,6 +218,7 @@ export default function HomePage() {
             onNow={selectNow}
             isNowActive={afterTime !== null}
             onFilter={handleFilter}
+            searchFn={isMember ? searchSelectionMovies : undefined}
             onReset={handleReset}
             resetKey={resetKey}
           />
