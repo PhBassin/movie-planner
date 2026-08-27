@@ -350,6 +350,17 @@ describe('HomePage — polymorphic root', () => {
     expect(await screen.findByTestId('signup-cta')).toBeInTheDocument();
   });
 
+  it('shows the day heading without the week range to a Visitor on the default view', async () => {
+    const today = new Date().toISOString().split('T')[0];
+    (clientApi.getMoviesByDate as any).mockResolvedValue({ movies: [], weekStart: '2026-03-25', date: today });
+
+    renderPage(visitorAuth);
+
+    expect(await screen.findByText('Films du jour')).toBeInTheDocument();
+    expect(screen.getByText("Aujourd'hui")).toBeInTheDocument();
+    expect(screen.queryByText('Semaine ciné')).not.toBeInTheDocument();
+  });
+
   it('scopes the quick theater links to the Selection for a Member', async () => {
     setupMember({
       movies: [makeSelectionMovie(1, 'Film Sélection', false)],
@@ -411,6 +422,27 @@ describe('HomePage — polymorphic root', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps the New section partition during a Member search', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Nouveau', true), makeSelectionMovie(2, 'Film Ancien', false)],
+    });
+    (clientApi.searchSelectionMovies as any).mockResolvedValue([
+      { id: 1, title: 'Film Nouveau', genres: [], actors: [], source_url: '' },
+      { id: 2, title: 'Film Ancien', genres: [], actors: [], source_url: '' },
+    ]);
+
+    renderPage();
+
+    await screen.findByTestId('new-this-week-section');
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'Film' } });
+
+    await waitFor(() => expect(clientApi.searchSelectionMovies).toHaveBeenCalledWith('Film'));
+    const section = await screen.findByTestId('new-this-week-section');
+    expect(within(section).getByText('Film Nouveau')).toBeInTheDocument();
+    expect(within(section).queryByText('Film Ancien')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Film Nouveau')).toHaveLength(1);
   });
 
   it('shows the full catalog and a sign-up CTA to a Visitor', async () => {

@@ -188,9 +188,9 @@ export default function HomePage() {
       {/* Title and Date Info */}
       <div className="mb-4">
         <h1 className="text-4xl font-bold mb-3">
-           {selectedDate || isVisitorToday ? 'Films du jour' : 'Au programme cette semaine'}
+          {selectedDate || isVisitorToday ? 'Films du jour' : 'Au programme cette semaine'}
         </h1>
-        {weekStart && !selectedDate && (
+        {weekStart && !selectedDate && !isVisitorToday && (
           <div className="flex items-center gap-2 text-gray-500 font-medium">
             <span className="bg-gray-100 px-2 py-0.5 rounded text-sm">Semaine ciné</span>
             <span>Du {formatDate(weekStart)} au {getWeekEndDate(weekStart)}</span>
@@ -198,7 +198,9 @@ export default function HomePage() {
         )}
         {(selectedDate || isVisitorToday) && (
           <div className="flex items-center gap-2 text-gray-500 font-medium">
-            <span className="bg-gray-100 px-2 py-0.5 rounded text-sm">Date sélectionnée</span>
+            <span className="bg-gray-100 px-2 py-0.5 rounded text-sm">
+              {selectedDate ? 'Date sélectionnée' : "Aujourd'hui"}
+            </span>
             <span>{formatDate(selectedDate || getTodayDate())}</span>
           </div>
         )}
