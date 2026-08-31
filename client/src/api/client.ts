@@ -4,6 +4,8 @@ export { default } from './core';
 export {
   getWeeklyMovies,
   getMoviesByDate,
+  getSelectionMovies,
+  searchSelectionMovies,
   getMovieById,
   searchMovies,
 } from './movies';

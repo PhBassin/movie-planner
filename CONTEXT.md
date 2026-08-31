@@ -116,7 +116,17 @@ A Member's personalized root view — the page an authenticated Member lands on.
 
 The root route is **polymorphic by auth state**: an authenticated Member's root is the Homepage; a **Visitor's** root is the full shared catalog (the free-tier demonstrator that motivates sign-up), shown with a sign-up prompt. An **unverified Member** sees the same Homepage as an active one — Selection and all — with a verification reminder; only submission is withheld. The full catalog remains browsable to everyone on a separate route, independent of the Homepage.
 
-The Homepage carries a **New section** ("Nouveautés cette semaine"): the subset of Movies that are **newly programmed** at one or more of the Member's selected Theaters this week — driven by `WeeklyProgram.is_new_this_week`. The New section is a **partition**, not a highlight: a Movie in the New section appears *only* there, and the rest of the Homepage shows the continuing titles; each Movie appears on the Homepage exactly once. The New section is a week-level concept and is not shown when the view is narrowed to a single date.
+The Homepage carries a **New section** ("Nouveautés cette semaine"): the subset of Movies that are **newly programmed** at one or more of the Member's selected Theaters this week — driven by `WeeklyProgram.is_new_this_week`. The New section is a **partition**, not a highlight: a Movie in the New section appears *only* there, and the rest of the Homepage shows the continuing titles; each Movie appears on the Homepage exactly once. The New section is a week-level concept and is not shown when the view is narrowed to a single date. Inside a New-section card, every selected Theater that programs the Movie this week is listed — even with no showtime on the day displayed inside the card — so the per-theater "nouveau" badges stay visible; the **Maintenant** filter also keeps the week-level dataset and narrows to "today, from now on" client-side rather than narrowing the request to a single date.
+
+The homepage's Selection movie projection is the wire shape returned by
+`GET /api/me/selection/movies` (`server/src/routes/selection.ts`): a Movie with
+only its selected active Theaters, each carrying its showtimes and optional
+`isNewThisWeek` marker. The movie-level marker is true when any included
+Theater is newly programmed. `GET /api/me/selection/movies?date=...` uses the
+same projection for one date and omits the week-level New section in the UI.
+The request scope shared by the Selection movie and showtime queries is the
+`SelectionScope` (`server/src/db/showtime-queries.ts`): selected theaters,
+one cinema week, an optional single date.
 
 **What a Homepage is not:**
 - Not the **catalog**. The catalog is shared and complete; the Homepage is personal and Selection-scoped. A non-selected Theater never appears on a Member's Homepage.

@@ -4,6 +4,7 @@ import {
   getShowtimesByMovieAndWeek,
   getShowtimesByTheaterAndWeek,
   getWeeklyShowtimes,
+  getShowtimesForTheaters,
   upsertShowtimes,
 } from './showtime-queries.js';
 import { type DB } from './index.js';
@@ -160,4 +161,34 @@ describe('Showtime Queries', () => {
       expect(mockDb.query).not.toHaveBeenCalled();
     });
   });
+  describe('Selection-scoped showtime queries', () => {
+    it('getShowtimesForTheaters scopes the week showtimes to the Selection', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getShowtimesForTheaters(mockDb, { weekStart: '2026-02-18', theaterIds: ['C0001', 'C0002'] });
+
+      const [sql, params] = mockDb.query.mock.calls[0];
+      expect(sql).toContain("c.status = 'active'");
+      expect(sql).toContain('ANY($2)');
+      expect(sql).not.toContain('s.date = $1');
+      expect(params).toEqual(['2026-02-18', ['C0001', 'C0002']]);
+    });
+
+    it('getShowtimesForTheaters narrows to a date when one is given', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getShowtimesForTheaters(mockDb, { weekStart: '2026-02-18', theaterIds: ['C0001'], date: '2026-02-19' });
+
+      const [sql, params] = mockDb.query.mock.calls[0];
+      expect(sql).toContain("c.status = 'active'");
+      expect(sql).toContain('s.date = $1 AND s.week_start = $2');
+      expect(sql).toContain('ANY($3)');
+      expect(params).toEqual(['2026-02-19', '2026-02-18', ['C0001']]);
+    });
+  });
+
 });

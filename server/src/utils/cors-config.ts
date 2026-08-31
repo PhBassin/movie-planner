@@ -21,17 +21,23 @@ export const getCorsOptions = (opts: CorsConfigOptions = {}): CorsOptions => {
 
   return {
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Strict mode: block requests with no origin (prevents sandboxed iframe attacks)
-      if (strict && (!origin || origin === 'null')) {
+      // Strict mode: block the opaque `null` origin (sandboxed iframes and
+      // some privacy-sensitive cross-origin redirects report `Origin: null`).
+      // A genuinely ABSENT Origin header is NOT a cross-site browser attack
+      // vector — browsers always attach Origin to cross-origin requests and to
+      // every non-GET request — so same-origin reads such as the SPA's
+      // `GET /api/auth/me` session check (which carry no Origin) must pass.
+      if (strict && origin === 'null') {
         return callback(
           new Error(
-            `CORS blocked request with no or null origin in strict mode. ` +
-            `Requests to this endpoint must include a valid Origin header.`
+            `CORS blocked request with 'null' origin in strict mode. ` +
+            `Requests to this endpoint must come from an allowed origin.`
           )
         );
       }
 
-      // Lenient mode: allow requests with no origin (mobile apps or curl requests)
+      // Lenient (and strict-with-absent-origin): allow requests with no origin
+      // (same-origin GETs, mobile apps, curl).
       if (!origin) {
         return callback(null, true);
       }

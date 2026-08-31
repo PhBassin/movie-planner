@@ -46,6 +46,16 @@ interface ShowtimeWithTheaterRow extends ShowtimeRow {
   theater_image_url: string | null;
 }
 
+/**
+ * The window a Selection-scoped query runs in: the Member's selected theaters
+ * for one cinema week, optionally narrowed to a single date.
+ */
+export interface SelectionScope {
+  weekStart: string;
+  theaterIds: string[];
+  date?: string;
+}
+
 // --- Row Mapping Helpers ---
 
 function mapRowToShowtime(row: ShowtimeRow): Showtime {
@@ -298,14 +308,14 @@ export async function getShowtimesByMovieAndWeek(
   }));
 }
 
-// Récupérer toutes les séances de la semaine pour tous les movies
+// Récupérer les séances de la semaine pour tous les movies
 export async function getWeeklyShowtimes(
   db: DB,
   weekStart: string
 ): Promise<Array<Showtime & { theater: Theater }>> {
   const result = await db.query<ShowtimeWithTheaterRow>(
     `
-      SELECT 
+      SELECT
         s.*,
         c.id as theater_id,
         c.name as theater_name,
@@ -319,6 +329,42 @@ export async function getWeeklyShowtimes(
       ORDER BY s.date, s.time, c.name
     `,
     [weekStart]
+  );
+
+  return result.rows.map((row) => ({
+    ...mapRowToShowtime(row),
+    theater: mapRowToTheater(row),
+  }));
+}
+
+// Récupérer les séances pour une Selection de theaters donnée : toute la
+// semaine, ou une seule date quand `date` est fourni.
+export async function getShowtimesForTheaters(
+  db: DB,
+  scope: SelectionScope
+): Promise<Array<Showtime & { theater: Theater }>> {
+  const { weekStart, theaterIds, date } = scope;
+  const dateFilter = date !== undefined ? 's.date = $1 AND ' : '';
+  const weekParam = date !== undefined ? '$2' : '$1';
+  const theatersParam = date !== undefined ? '$3' : '$2';
+  const params = date !== undefined ? [date, weekStart, theaterIds] : [weekStart, theaterIds];
+
+  const result = await db.query<ShowtimeWithTheaterRow>(
+    `
+      SELECT
+        s.*,
+        c.id as theater_id,
+        c.name as theater_name,
+        c.address as theater_address,
+        c.postal_code,
+        c.city,
+        c.image_url as theater_image_url
+       FROM showtimes s
+       JOIN theaters c ON s.theater_id = c.id
+       WHERE c.status = 'active' AND ${dateFilter}s.week_start = ${weekParam} AND s.theater_id = ANY(${theatersParam})
+      ORDER BY s.date, s.time, c.name
+    `,
+    params
   );
 
   return result.rows.map((row) => ({

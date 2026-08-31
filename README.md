@@ -31,7 +31,8 @@ containerized with Docker.
 - **Scraper resilience** with automatic HTTP 429 detection and graceful shutdown.
 - **RESTful API** built with Express.js and TypeScript.
 - **React SPA** (Vite) with a member-facing homepage driven by a personal
-  selection of theaters.
+  Selection of theaters, including weekly new releases and Selection-scoped
+  date, current-time, and movie-search filters.
 - **Real-time progress** via Server-Sent Events (SSE) for live scraping updates.
 - **Weekly reports** for tracking theater programs and identifying new releases.
 - **White-label branding** — site name, logo, colors, fonts, footer — via the

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getMovie,
   getMoviesByDate,
+  getSelectionMoviesForTheaters,
   getWeeklyMovies,
   searchMovies,
   upsertMovie,
@@ -607,5 +608,129 @@ describe('Movie Queries - formatMovieRow', () => {
     movie1.genres.push('Thriller');
     expect(movie2.genres).toEqual(['Action']);
     expect(movie1.genres).toEqual(['Action', 'Thriller']);
+  });
+});
+
+describe('Movie Queries - Selection-scoped', () => {
+  const selectionMovieRow = (overrides: Record<string, unknown>) => ({
+    id: 1,
+    title: 'Film A',
+    original_title: null,
+    poster_url: null,
+    duration_minutes: null,
+    release_date: null,
+    rerelease_date: null,
+    genres: '[]',
+    nationality: null,
+    director: null,
+    screenwriters: null,
+    actors: '[]',
+    synopsis: null,
+    certificate: null,
+    press_rating: null,
+    audience_rating: null,
+    source_url: 'https://example.com',
+    trailer_url: null,
+    theater_id: 'C0001',
+    theater_name: 'UGC Opéra',
+    theater_address: null,
+    postal_code: null,
+    city: null,
+    theater_image_url: null,
+    ...overrides,
+  });
+
+  describe('getSelectionMoviesForTheaters', () => {
+    it('scopes weekly movies to the given theaters and carries per-theater newness', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({
+          rows: [
+            selectionMovieRow({ id: 1, title: 'Film A', theater_id: 'C0001', is_new_this_week: 1 }),
+            selectionMovieRow({ id: 1, title: 'Film A', theater_id: 'C0002', is_new_this_week: 0 }),
+            selectionMovieRow({ id: 2, title: 'Film B', theater_id: 'C0002', is_new_this_week: 0 }),
+          ],
+        }),
+      } as unknown as DB;
+
+      const result = await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001', 'C0002'] });
+
+      expect(result).toHaveLength(2);
+      expect(result.map(m => m.title)).toEqual(['Film A', 'Film B']);
+      expect(result[0].theaters).toHaveLength(2);
+      expect(result[0].theaters.find(t => t.id === 'C0001')?.isNewThisWeek).toBe(true);
+      expect(result[0].theaters.find(t => t.id === 'C0002')?.isNewThisWeek).toBe(false);
+      expect(result[1].theaters[0].isNewThisWeek).toBe(false);
+    });
+
+    it('reads weekly_programs and filters by the theater id array', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'] });
+
+      const [sql, params] = mockDb.query.mock.calls[0];
+       expect(sql).toContain('weekly_programs');
+       expect(sql).toContain('FROM showtimes s');
+      expect(sql).toContain('wp.is_new_this_week');
+      expect(sql).toContain('ANY($2)');
+      expect(sql).toContain("c.status = 'active'");
+      expect(sql).not.toContain('s.date = $1');
+      expect(params).toEqual(['2026-03-11', ['C0001']]);
+    });
+
+    it('treats a null is_new_this_week as not new', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({
+          rows: [selectionMovieRow({ is_new_this_week: null })],
+        }),
+      } as unknown as DB;
+
+      const result = await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'] });
+
+      expect(result[0].theaters[0].isNewThisWeek).toBe(false);
+    });
+
+    it('uses showtimes as the complete weekly movie source', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'] });
+
+      expect(mockDb.query.mock.calls[0][0]).toContain('FROM showtimes s');
+      expect(mockDb.query.mock.calls[0][0]).toContain('LEFT JOIN weekly_programs wp');
+    });
+
+    it('scopes date movies to the given theaters and derives newness from weekly_programs', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({
+          rows: [
+            selectionMovieRow({ id: 1, title: 'Film A', theater_id: 'C0001', is_new_this_week: 1 }),
+            selectionMovieRow({ id: 2, title: 'Film B', theater_id: 'C0002', is_new_this_week: null }),
+          ],
+        }),
+      } as unknown as DB;
+
+      const result = await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001', 'C0002'], date: '2026-03-12' });
+
+      expect(result).toHaveLength(2);
+      expect(result[0].theaters[0].isNewThisWeek).toBe(true);
+      expect(result[1].theaters[0].isNewThisWeek).toBe(false);
+    });
+
+    it('narrows to the date with a date-scoped predicate when one is given', async () => {
+      const mockDb = {
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+      } as unknown as DB;
+
+      await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'], date: '2026-03-12' });
+
+      const [sql, params] = mockDb.query.mock.calls[0];
+      expect(sql).toContain('s.date = $1 AND s.week_start = $2');
+      expect(sql).toContain('LEFT JOIN weekly_programs');
+      expect(sql).toContain('ANY($3)');
+      expect(params).toEqual(['2026-03-12', '2026-03-11', ['C0001']]);
+    });
   });
 });

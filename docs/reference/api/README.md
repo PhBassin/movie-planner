@@ -35,6 +35,8 @@ Member-owned theater Selection and cap information.
 **Endpoints:**
 - `GET /api/me` - Get Member profile and Selection count/limit
 - `GET /api/me/selection` - List my Selection (Member only)
+- `GET /api/me/selection/movies` - List Selection homepage movies (Member only)
+- `GET /api/me/selection/movies/search` - Search Selection movies (Member only)
 - `POST /api/me/selection/:theaterId` - Add an active Theater (Member only)
 - `DELETE /api/me/selection/:theaterId` - Remove a Theater (Member only)
 

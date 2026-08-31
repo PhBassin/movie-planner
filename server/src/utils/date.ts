@@ -61,6 +61,16 @@ export function getTodayDate(): string {
   return today.toISOString().split('T')[0];
 }
 
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Whether a string is shaped like an ISO `YYYY-MM-DD` date (format check only,
+ * no calendar validation) — the accepted `date` query-parameter format.
+ */
+export function isValidISODateFormat(date: string): boolean {
+  return ISO_DATE_REGEX.test(date);
+}
+
 export type ScrapeMode = 'weekly' | 'from_today' | 'from_today_limited';
 
 /**

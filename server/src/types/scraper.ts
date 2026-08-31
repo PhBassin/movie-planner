@@ -63,8 +63,12 @@ export interface TheaterConfig {
 
 export interface TheaterWithShowtimes extends Theater {
   showtimes: Showtime[];
+  // Selection-scoped only: this movie is newly programmed at this theater this week
+  isNewThisWeek?: boolean;
 }
 
 export interface MovieWithShowtimes extends Movie {
   theaters: TheaterWithShowtimes[];
+  // Selection-scoped only: newly programmed at >=1 of the member's selected theaters this week
+  isNewThisWeek?: boolean;
 }

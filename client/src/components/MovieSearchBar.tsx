@@ -9,6 +9,7 @@ interface MovieSearchBarProps {
   className?: string;
   placeholder?: string;
   onFilter?: (movies: Movie[] | null) => void;
+  searchFn?: (query: string) => Promise<Movie[]>;
   resetKey?: number;
 }
 
@@ -16,6 +17,7 @@ export default function MovieSearchBar({
   className = '', 
   placeholder = 'Rechercher un film...',
   onFilter,
+  searchFn,
   resetKey = 0,
 }: MovieSearchBarProps) {
   const [query, setQuery] = useState('');
@@ -50,7 +52,7 @@ export default function MovieSearchBar({
 
       setIsLoading(true);
       try {
-        const movies = await searchMovies(debouncedQuery);
+        const movies = await (searchFn ?? searchMovies)(debouncedQuery);
         setResults(movies);
         setIsOpen(true);
         setSelectedIndex(-1);
@@ -65,7 +67,7 @@ export default function MovieSearchBar({
     }
 
     performSearch();
-  }, [debouncedQuery, onFilter]);
+  }, [debouncedQuery, onFilter, searchFn]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

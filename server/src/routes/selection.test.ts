@@ -12,6 +12,18 @@ const mockList = vi.fn();
 const mockAdd = vi.fn();
 const mockRemove = vi.fn();
 
+const mockGetSelectionMoviesForWeek = vi.fn();
+const mockGetSelectionMoviesForDate = vi.fn();
+const mockSearchSelection = vi.fn();
+
+vi.mock('../services/movie-service.js', () => ({
+  MovieService: class {
+    getSelectionMoviesForWeek = mockGetSelectionMoviesForWeek;
+    getSelectionMoviesForDate = mockGetSelectionMoviesForDate;
+    searchSelection = mockSearchSelection;
+  },
+}));
+
 vi.mock('../services/selection-service.js', () => ({
   SelectionService: class {
     list = mockList;
@@ -100,4 +112,62 @@ describe('Selection routes', () => {
     expect(response.status).toBe(403);
     expect(mockList).not.toHaveBeenCalled();
   });
+  describe('GET /movies — Selection homepage data', () => {
+    it('returns the Member weekly Selection movies with the current week start', async () => {
+      mockGetSelectionMoviesForWeek.mockResolvedValue([
+        { id: 1, title: 'Film A', isNewThisWeek: true, theaters: [] },
+      ]);
+
+      const response = await request(app).get('/api/me/selection/movies');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.movies).toEqual([
+        { id: 1, title: 'Film A', isNewThisWeek: true, theaters: [] },
+      ]);
+      expect(response.body.data.weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(mockGetSelectionMoviesForWeek).toHaveBeenCalledWith(7, response.body.data.weekStart);
+    });
+
+    it('serves the date variant through the date-scoped service method', async () => {
+      mockGetSelectionMoviesForDate.mockResolvedValue([]);
+
+      const response = await request(app).get('/api/me/selection/movies?date=2026-03-12');
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.date).toBe('2026-03-12');
+      expect(mockGetSelectionMoviesForDate).toHaveBeenCalledWith(7, '2026-03-12', response.body.data.weekStart);
+      expect(mockGetSelectionMoviesForWeek).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed date with a 400', async () => {
+      const response = await request(app).get('/api/me/selection/movies?date=12-03-2026');
+
+      expect(response.status).toBe(400);
+      expect(mockGetSelectionMoviesForDate).not.toHaveBeenCalled();
+      expect(mockGetSelectionMoviesForWeek).not.toHaveBeenCalled();
+    });
+
+    it('keeps Staff outside the Selection movies endpoint', async () => {
+      const response = await request(app)
+        .get('/api/me/selection/movies')
+        .set('x-test-role', 'admin');
+
+      expect(response.status).toBe(403);
+      expect(mockGetSelectionMoviesForWeek).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /movies/search', () => {
+    it('returns search results scoped to the Member Selection', async () => {
+      mockSearchSelection.mockResolvedValue([{ id: 1, title: 'Film A' }]);
+
+      const response = await request(app).get('/api/me/selection/movies/search?q=Film');
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.movies).toEqual([{ id: 1, title: 'Film A' }]);
+      expect(mockSearchSelection).toHaveBeenCalledWith(7, 'Film', 10);
+    });
+  });
+
 });

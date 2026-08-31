@@ -16,6 +16,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY client/ ./client/
+# npm (>=11) installs each workspace's own devDependencies (tsc, vite) into the
+# workspace's node_modules rather than hoisting them to the root, so the root
+# node_modules alone no longer provides the build toolchain. Carry the
+# workspace-local install across from the deps stage. (.dockerignore excludes
+# node_modules from the build context, so `COPY client/` never clobbers this.)
+COPY --from=deps /app/client/node_modules ./client/node_modules
 ARG VITE_APP_NAME=Movie-Planner
 ARG VITE_API_BASE_URL=/api
 ENV VITE_APP_NAME=${VITE_APP_NAME}
@@ -29,6 +35,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY server/ ./server/
 COPY packages/ ./packages/
+# Carry workspace-local devDependencies (see frontend-builder note).
+COPY --from=deps /app/server/node_modules ./server/node_modules
+COPY --from=deps /app/packages/scraper-protocol/node_modules ./packages/scraper-protocol/node_modules
 RUN npm run build --workspace=@movie-planner/scraper-protocol && \
     cd server && npx tsc -p tsconfig.json && cd /app && \
     rm -rf node_modules/.cache && \
@@ -40,6 +49,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY scraper/ ./scraper/
 COPY packages/ ./packages/
+# Carry workspace-local devDependencies (see frontend-builder note).
+COPY --from=deps /app/scraper/node_modules ./scraper/node_modules
+COPY --from=deps /app/packages/scraper-protocol/node_modules ./packages/scraper-protocol/node_modules
 RUN npm run build --workspace=@movie-planner/scraper-protocol && \
     cd scraper && npx tsc -p tsconfig.json && cd /app && \
     rm -rf node_modules/.cache && \

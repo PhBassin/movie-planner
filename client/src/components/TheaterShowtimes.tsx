@@ -9,9 +9,11 @@ interface TheaterShowtimesProps {
   movie: Movie;
   initialDate?: string;
   initialAfterTime?: string | null;
+  /** New-section cards badge the theaters where the movie is newly programmed. */
+  showNewBadges?: boolean;
 }
 
-export default function TheaterShowtimes({ theaters, movie, initialDate, initialAfterTime }: TheaterShowtimesProps) {
+export default function TheaterShowtimes({ theaters, movie, initialDate, initialAfterTime, showNewBadges = false }: TheaterShowtimesProps) {
   const allShowtimes = useMemo(() => 
     theaters.flatMap(c => c.showtimes),
     [theaters]
@@ -52,12 +54,15 @@ export default function TheaterShowtimes({ theaters, movie, initialDate, initial
       const filteredShowtimes = theater.showtimes.filter(
         s => s.date === selectedDate && (!afterTime || s.time >= afterTime)
       );
-      if (filteredShowtimes.length > 0) {
+      // New-section cards list every theater programming the movie this week —
+      // including those without a showtime on the selected day — so their
+      // "nouveau" badge stays visible whatever the in-card date.
+      if (filteredShowtimes.length > 0 || showNewBadges) {
         acc.push({ theater, showtimes: filteredShowtimes });
       }
       return acc;
     }, [] as Array<{ theater: TheaterWithShowtimes; showtimes: TheaterWithShowtimes['showtimes'] }>);
-  }, [theaters, selectedDate, afterTime]);
+  }, [theaters, selectedDate, afterTime, showNewBadges]);
 
   if (theaters.length === 0) {
     return (
@@ -135,6 +140,14 @@ export default function TheaterShowtimes({ theaters, movie, initialDate, initial
                   <Link to={`/theater/${theater.id}`} className="hover:text-primary transition">
                     {theater.name}
                   </Link>
+                  {showNewBadges && theater.isNewThisWeek && (
+                    <span
+                      data-testid={`theater-new-badge-${theater.id}`}
+                      className="ml-2 align-middle text-[10px] uppercase font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded"
+                    >
+                      nouveau
+                    </span>
+                  )}
                 </h3>
                 {theater.address && (
                   <p className="text-sm text-gray-500">

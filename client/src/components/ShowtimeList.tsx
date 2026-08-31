@@ -12,14 +12,20 @@ function ShowtimeList({ showtimes, movie, theater }: ShowtimeListProps) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  const showtimesByVersion = useMemo(() => showtimes.reduce((acc, showtime) => {
-    const version = showtime.version || 'VF';
-    if (!acc[version]) acc[version] = [];
-    acc[version].push(showtime);
-    return acc;
-  }, {} as Record<string, Showtime[]>), [showtimes]);
+  const versionEntries = useMemo(() => {
+    const byVersion = showtimes.reduce((acc, showtime) => {
+      const version = showtime.version || 'VF';
+      if (!acc[version]) acc[version] = [];
+      acc[version].push(showtime);
+      return acc;
+    }, {} as Record<string, Showtime[]>);
 
-  const versionEntries = Object.entries(showtimesByVersion);
+    for (const versionShowtimes of Object.values(byVersion)) {
+      versionShowtimes.sort((a, b) => a.time.localeCompare(b.time) || a.id.localeCompare(b.id));
+    }
+
+    return Object.entries(byVersion);
+  }, [showtimes]);
 
   const handleToggle = useCallback((key: string) => {
     setOpenKey(prev => (prev === key ? null : key));
@@ -41,8 +47,8 @@ function ShowtimeList({ showtimes, movie, theater }: ShowtimeListProps) {
         <div key={version} className="border-l-4 border-primary pl-3">
           <p className="text-sm font-semibold text-gray-700 mb-2">{version}</p>
           <div className="flex flex-wrap gap-2">
-            {versionShowtimes.map((showtime, index) => {
-              const key = `${version}-${showtime.time}-${index}`;
+            {versionShowtimes.map((showtime) => {
+              const key = `${version}-${showtime.time}-${showtime.id}`;
               const isOpen = openKey === key;
               const anchorRef = { current: buttonRefs.current.get(key) ?? null };
 

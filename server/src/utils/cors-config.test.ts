@@ -112,7 +112,7 @@ describe('getCorsOptions strict mode', () => {
     process.env = originalEnv;
   });
 
-  it('should block requests with no origin (undefined)', () => {
+  it('should allow requests with no origin (undefined) so same-origin GETs pass', () => {
     process.env.ALLOWED_ORIGINS = 'http://example.com';
     const options = getCorsOptions({ strict: true });
 
@@ -122,7 +122,7 @@ describe('getCorsOptions strict mode', () => {
     if (typeof originCheck === 'function') {
       // @ts-ignore
       originCheck(undefined, callback);
-      expect(callback).toHaveBeenCalledWith(expect.any(Error));
+      expect(callback).toHaveBeenCalledWith(null, true);
     }
   });
 
@@ -140,7 +140,7 @@ describe('getCorsOptions strict mode', () => {
     }
   });
 
-  it('should block requests with empty string origin', () => {
+  it('should allow requests with empty string origin (treated as absent)', () => {
     process.env.ALLOWED_ORIGINS = 'http://example.com';
     const options = getCorsOptions({ strict: true });
 
@@ -150,7 +150,7 @@ describe('getCorsOptions strict mode', () => {
     if (typeof originCheck === 'function') {
       // @ts-ignore
       originCheck('', callback);
-      expect(callback).toHaveBeenCalledWith(expect.any(Error));
+      expect(callback).toHaveBeenCalledWith(null, true);
     }
   });
 
