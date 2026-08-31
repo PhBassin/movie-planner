@@ -110,7 +110,10 @@ test.describe('Member theater submission', () => {
     );
 
     const url = process.env.E2E_LIVE_SUBMISSION_URL ?? '';
-    test.skip(url.length > 0, 'E2E_LIVE_SUBMISSION_URL must carry the AlloCiné theater URL to submit.');
+    test.skip(
+      url.length === 0,
+      'E2E_LIVE_SUBMISSION_URL must carry the AlloCiné theater URL to submit.',
+    );
 
     await signupAndLogin(page);
 

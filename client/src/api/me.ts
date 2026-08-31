@@ -51,7 +51,7 @@ export async function removeFromSelection(theaterId: string): Promise<void> {
  */
 export interface PendingSubmission {
   id: number;
-  status: string;
+  status: 'pending' | 'succeeded' | 'failed';
   report_id: number;
 }
 

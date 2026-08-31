@@ -34,7 +34,7 @@ const memberAuth = { ...visitorAuth, isAuthenticated: true, user: member };
 let noticeCallback: ((notice: MemberNotice) => void) | null = null;
 const mockUnsubscribe = vi.fn();
 
-function renderComponent(auth = memberAuth) {
+function renderComponent(auth: typeof visitorAuth | typeof memberAuth = memberAuth) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -82,7 +82,6 @@ describe('MemberNotifications', () => {
     });
     noticeCallback!({
       type: 'submission_resolved',
-      memberId: 7,
       submissionId: 9,
       theaterId: 'C0013',
       theaterName: 'UGC Opéra',
@@ -104,7 +103,6 @@ describe('MemberNotifications', () => {
     await waitFor(() => expect(noticeCallback).not.toBeNull());
     noticeCallback!({
       type: 'submission_resolved',
-      memberId: 7,
       submissionId: 9,
       theaterId: 'C0013',
       theaterName: 'UGC Opéra',
@@ -123,7 +121,6 @@ describe('MemberNotifications', () => {
     await waitFor(() => expect(noticeCallback).not.toBeNull());
     noticeCallback!({
       type: 'submission_resolved',
-      memberId: 7,
       submissionId: 9,
       theaterId: 'C0013',
       theaterName: 'C0013',
@@ -143,7 +140,6 @@ describe('MemberNotifications', () => {
     await waitFor(() => expect(noticeCallback).not.toBeNull());
     noticeCallback!({
       type: 'submission_resolved',
-      memberId: 7,
       submissionId: 9,
       theaterId: 'C0013',
       theaterName: 'UGC Opéra',
@@ -173,7 +169,6 @@ describe('MemberNotifications', () => {
     await waitFor(() => expect(hookNotice).not.toBeNull());
     hookNotice!({
       type: 'submission_resolved',
-      memberId: 7,
       submissionId: 9,
       theaterId: 'C0013',
       theaterName: 'UGC Opéra',

@@ -1,5 +1,4 @@
-import type { MemberNotice, MemberNoticeOutcome, ProgressEvent } from '@movie-planner/scraper-protocol';
-import type { DB } from '../db/index.js';
+import type { MemberNotice, MemberNoticeOutcome, ProgressEvent } from '@movie-planner/scraper-protocol';import type { DB } from '../db/index.js';
 import {
   getPendingSubmissionByReport,
   getResolvablePendingSubmissions,
@@ -41,11 +40,6 @@ const SCRAPE_OK_STATUSES = new Set(['success', 'partial_success']);
 
 function isTerminalReportStatus(status: ScrapeReport['status']): boolean {
   return status === 'success' || status === 'partial_success' || status === 'failed';
-}
-
-export interface ResolutionResult {
-  outcome: MemberNoticeOutcome;
-  notice: MemberNotice;
 }
 
 export class SubmissionResolutionService {
@@ -96,10 +90,10 @@ export class SubmissionResolutionService {
 
   /**
    * Resolve the pending submission joined to `reportId`, if any and if the
-   * report is terminal. Returns the outcome, or null when there is nothing to
-   * resolve (no pending submission, or the report is still running).
+   * report is terminal. Returns the published notice, or null when there is
+   * nothing to resolve (no pending submission, or the report is still running).
    */
-  async resolveReport(reportId: number): Promise<ResolutionResult | null> {
+  async resolveReport(reportId: number): Promise<MemberNotice | null> {
     const submission = await getPendingSubmissionByReport(this.db, reportId);
     if (!submission) return null;
 
@@ -118,8 +112,8 @@ export class SubmissionResolutionService {
   async resolveSubmission(
     submission: Pick<TheaterSubmissionRow, 'id' | 'member_id' | 'theater_id'>,
     scrapeOk: boolean,
-  ): Promise<ResolutionResult | null> {
-    const outcome = await this.db.transaction(async (transaction) => {
+  ): Promise<MemberNotice | null> {
+    const notice = await this.db.transaction(async (transaction): Promise<MemberNotice | null> => {
       const tx = transaction;
 
       // The theater row must exist for the notice copy regardless of outcome,
@@ -158,27 +152,24 @@ export class SubmissionResolutionService {
             // Cap-blocked: the scrape succeeded and the Theater is in the
             // catalog, but the Selection is full — a distinct notice outcome
             // (ADR 0005 sub-decision 6). The row stays `succeeded`.
-            return { outcome: 'succeeded_selection_full' as const, notice: this.buildNotice(resolved, 'succeeded_selection_full', theater) };
+            return this.buildNotice(resolved, 'succeeded_selection_full', theater);
           }
           await insertSelection(tx, resolved.member_id, resolved.theater_id);
         }
       }
 
-      return {
-        outcome: (effectiveOutcome === 'succeeded' ? 'succeeded' : 'failed') as MemberNoticeOutcome,
-        notice: this.buildNotice(resolved, effectiveOutcome, theater),
-      };
+      return this.buildNotice(resolved, effectiveOutcome, theater);
     });
 
-    if (!outcome) return null;
+    if (!notice) return null;
 
     // (3) Ephemeral push, only after the durable facts committed. Best-effort:
     // publishMemberNotice already swallows and logs transport failures.
-    await this.producer.publishMemberNotice(outcome.notice);
+    await this.producer.publishMemberNotice(notice);
     logger.info(
-      `[submission-resolver] Submission ${submission.id} resolved (${outcome.notice.outcome}); notice published for member=${submission.member_id}`,
+      `[submission-resolver] Submission ${submission.id} resolved (${notice.outcome}); notice published for member=${submission.member_id}`,
     );
-    return outcome;
+    return notice;
   }
 
   private buildNotice(
