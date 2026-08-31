@@ -54,12 +54,15 @@ export default function TheaterShowtimes({ theaters, movie, initialDate, initial
       const filteredShowtimes = theater.showtimes.filter(
         s => s.date === selectedDate && (!afterTime || s.time >= afterTime)
       );
-      if (filteredShowtimes.length > 0) {
+      // New-section cards list every theater programming the movie this week —
+      // including those without a showtime on the selected day — so their
+      // "nouveau" badge stays visible whatever the in-card date.
+      if (filteredShowtimes.length > 0 || showNewBadges) {
         acc.push({ theater, showtimes: filteredShowtimes });
       }
       return acc;
     }, [] as Array<{ theater: TheaterWithShowtimes; showtimes: TheaterWithShowtimes['showtimes'] }>);
-  }, [theaters, selectedDate, afterTime]);
+  }, [theaters, selectedDate, afterTime, showNewBadges]);
 
   if (theaters.length === 0) {
     return (

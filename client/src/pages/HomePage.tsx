@@ -21,6 +21,14 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<Movie[] | null>(null);
   const [resetKey, setResetKey] = useState(0);
 
+  // "Maintenant" is a from-now filter over the week dataset, not a day
+  // narrowing: it keeps `selectedDate` set (to today) alongside `afterTime`.
+  const isMaintenant = afterTime !== null;
+  // The view is narrowed to one specific date picked in the day selector.
+  // The Visitor default (today's catalog) is not a narrowing, and neither is
+  // "Maintenant".
+  const isSpecificDateView = selectedDate !== '' && !isMaintenant;
+
   const profileQuery = useQuery({
     queryKey: ['me'],
     queryFn: getMemberProfile,
@@ -37,23 +45,26 @@ export default function HomePage() {
     queryKey: isMember ? ['selection-movies', selectedDate] : ['movies', selectedDate],
     queryFn: () =>
       isMember
-        ? getSelectionMovies(selectedDate || undefined)
-        : selectedDate || isVisitorToday
-          ? getMoviesByDate(selectedDate || getTodayDate())
+        ? // "Maintenant" keeps the week-level dataset (the New section is a
+          // week concept) and filters from now client-side.
+          getSelectionMovies(isSpecificDateView ? selectedDate : undefined)
+        : selectedDate
+          ? getMoviesByDate(selectedDate)
           : isAuthenticated
             ? getWeeklyMovies()
             : getMoviesByDate(getTodayDate()),
   });
 
   const allMovies = useMemo(() => moviesData?.movies || [], [moviesData]);
-  // When "Maintenant" is active, hide movies whose showtimes are all in the past
-  // When search is active, filter by search results
+  // When "Maintenant" is active, hide movies with no showtime left on the
+  // selected day. When search is active, filter by search results.
   const movies = useMemo(() => {
     let filtered = allMovies;
 
     if (afterTime) {
+      const day = selectedDate || getTodayDate();
       filtered = filtered.filter(movie =>
-        movie.theaters.some(c => c.showtimes.some(s => s.time >= afterTime))
+        movie.theaters.some(c => c.showtimes.some(s => s.date === day && s.time >= afterTime))
       );
     }
 
@@ -63,7 +74,7 @@ export default function HomePage() {
     }
 
     return filtered;
-  }, [allMovies, afterTime, searchResults]);
+  }, [allMovies, afterTime, selectedDate, searchResults]);
   const weekStart = moviesData?.weekStart || '';
 
   // A Member's homepage waits for the profile too — it decides the empty-Selection state.
@@ -72,9 +83,8 @@ export default function HomePage() {
 
   // The New section is a week-level concept: it shows in the week and
   // "Maintenant" views and hides when the view is narrowed to a single date.
-  const isSingleDateView = selectedDate !== '' && afterTime === null;
-  const newThisWeekMovies = isSingleDateView ? [] : movies.filter(movie => movie.isNewThisWeek);
-  const continuingMovies = isSingleDateView ? movies : movies.filter(movie => !movie.isNewThisWeek);
+  const newThisWeekMovies = isSpecificDateView ? [] : movies.filter(movie => movie.isNewThisWeek);
+  const continuingMovies = isSpecificDateView ? movies : movies.filter(movie => !movie.isNewThisWeek);
   const selectionEmpty = isMember && profile !== undefined && profile.selectionCount === 0;
 
   const handleDateSelect = useCallback((date: string | null) => {

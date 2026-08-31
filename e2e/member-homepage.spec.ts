@@ -4,7 +4,17 @@ interface TheaterLike {
   id: string;
 }
 
-async function fetchJson(page: Page, path: string): Promise<any> {
+interface MoviesApiResponse {
+  data: {
+    movies: Array<{ theaters: TheaterLike[] }>;
+  };
+}
+
+interface TheatersApiResponse {
+  data: TheaterLike[];
+}
+
+async function fetchJson<T>(page: Page, path: string): Promise<T> {
   return page.evaluate(async (url) => {
     const response = await fetch(url);
     return response.json();
@@ -37,15 +47,15 @@ test.describe('Member Selection homepage', () => {
 
     // Pick a theater that actually has showtimes this week, plus a catalog
     // theater that is NOT selected, from the public catalog data.
-    const moviesResponse = await fetchJson(page, '/api/movies');
+    const moviesResponse = await fetchJson<MoviesApiResponse>(page, '/api/movies');
     const theaterIdsWithShowtimes: string[] = [
-      ...new Set(moviesResponse.data.movies.flatMap((m: { theaters: TheaterLike[] }) => m.theaters.map(t => t.id))),
+      ...new Set(moviesResponse.data.movies.flatMap(m => m.theaters.map(t => t.id))),
     ];
     expect(theaterIdsWithShowtimes.length).toBeGreaterThan(0);
     const selectedId = theaterIdsWithShowtimes[0];
 
-    const theatersResponse = await fetchJson(page, '/api/theaters');
-    const unselectedTheater = theatersResponse.data.find((t: TheaterLike) => t.id !== selectedId);
+    const theatersResponse = await fetchJson<TheatersApiResponse>(page, '/api/theaters');
+    const unselectedTheater = theatersResponse.data.find(t => t.id !== selectedId);
 
     // Empty Selection first: the homepage is the add-cinema CTA, nothing else.
     await page.goto('/');

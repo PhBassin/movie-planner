@@ -1,5 +1,6 @@
 import { type DB } from './index.js';
 import type { Theater, Movie } from '../types/scraper.js';
+import type { SelectionScope } from './showtime-queries.js';
 import { logger } from '../utils/logger.js';
 import { parseJSONMemoized } from '../utils/json-parse-cache.js';
 
@@ -330,14 +331,21 @@ export async function getWeeklyMovies(
 }
 
 /**
- * Movies programmed during a given week at any of the given theaters (a
- * Member's Selection), each theater entry carrying its newness flag.
+ * Movies programmed at any of the given theaters (a Member's Selection) —
+ * showtimes are the authoritative movie source, `weekly_programs` is only
+ * LEFT JOINed for the per-theater newness flag. Whole week, or a single date
+ * when `scope.date` is provided. Each theater entry carries its newness flag.
  */
-export async function getWeeklyMoviesForTheaters(
+export async function getSelectionMoviesForTheaters(
   db: DB,
-  weekStart: string,
-  theaterIds: string[]
+  scope: SelectionScope
 ): Promise<SelectionMovie[]> {
+  const { weekStart, theaterIds, date } = scope;
+  const dateFilter = date !== undefined ? 's.date = $1 AND ' : '';
+  const weekParam = date !== undefined ? '$2' : '$1';
+  const theatersParam = date !== undefined ? '$3' : '$2';
+  const params = date !== undefined ? [date, weekStart, theaterIds] : [weekStart, theaterIds];
+
   const result = await db.query<SelectionMovieRow>(
     `
       SELECT DISTINCT
@@ -349,17 +357,17 @@ export async function getWeeklyMoviesForTheaters(
         c.city,
         c.image_url as theater_image_url,
         wp.is_new_this_week
-      FROM showtimes s
-      JOIN movies f ON s.movie_id = f.id
-      JOIN theaters c ON s.theater_id = c.id
-      LEFT JOIN weekly_programs wp
-        ON wp.theater_id = s.theater_id
-       AND wp.movie_id = s.movie_id
-       AND wp.week_start = s.week_start
-      WHERE c.status = 'active' AND s.week_start = $1 AND s.theater_id = ANY($2)
+       FROM showtimes s
+       JOIN movies f ON s.movie_id = f.id
+       JOIN theaters c ON s.theater_id = c.id
+       LEFT JOIN weekly_programs wp
+         ON wp.theater_id = s.theater_id
+        AND wp.movie_id = s.movie_id
+        AND wp.week_start = s.week_start
+       WHERE c.status = 'active' AND ${dateFilter}s.week_start = ${weekParam} AND s.theater_id = ANY(${theatersParam})
        ORDER BY f.title
     `,
-    [weekStart, theaterIds]
+    params
   );
 
   return groupSelectionMoviesWithTheaters(result.rows);
@@ -387,56 +395,13 @@ export async function searchMoviesForTheaters(
          AND c.status = 'active'
          AND s.theater_id = ANY($2)
      )
-       AND (
-         similarity(f.title, $1) > 0.1
-         OR (f.original_title IS NOT NULL AND similarity(f.original_title, $1) > 0.1)
-         OR f.title ILIKE '%' || $1 || '%'
-         OR (f.original_title IS NOT NULL AND f.original_title ILIKE '%' || $1 || '%')
-       )
+       AND (${MOVIE_SEARCH_MATCH_SQL})
      ORDER BY score DESC, f.title ASC
      LIMIT $3`,
     [query, theaterIds, limit],
   );
 
   return result.rows.map(formatMovieRow);
-}
-
-/**
- * Movies programmed on a specific date at any of the given theaters (a
- * Member's Selection), each theater entry carrying its newness flag derived
- * from the matching weekly_programs row.
- */
-export async function getMoviesByDateForTheaters(
-  db: DB,
-  date: string,
-  weekStart: string,
-  theaterIds: string[]
-): Promise<SelectionMovie[]> {
-  const result = await db.query<SelectionMovieRow>(
-    `
-      SELECT DISTINCT
-        f.*,
-        c.id as theater_id,
-        c.name as theater_name,
-        c.address as theater_address,
-        c.postal_code,
-        c.city,
-        c.image_url as theater_image_url,
-        wp.is_new_this_week
-       FROM showtimes s
-       JOIN movies f ON s.movie_id = f.id
-       JOIN theaters c ON s.theater_id = c.id
-       LEFT JOIN weekly_programs wp
-         ON wp.theater_id = s.theater_id
-        AND wp.movie_id = s.movie_id
-        AND wp.week_start = s.week_start
-       WHERE c.status = 'active' AND s.date = $1 AND s.week_start = $2 AND s.theater_id = ANY($3)
-       ORDER BY f.title
-    `,
-    [date, weekStart, theaterIds]
-  );
-
-  return groupSelectionMoviesWithTheaters(result.rows);
 }
 
 // --- Movie Search ---
@@ -454,18 +419,30 @@ export async function getMoviesByDateForTheaters(
  */
 const MOVIE_SEARCH_SCORING_SQL = `
   CASE
-    WHEN LOWER(title) = LOWER($1) THEN 1.0
-    WHEN original_title IS NOT NULL AND LOWER(original_title) = LOWER($1) THEN 0.95
-    WHEN LOWER(title) LIKE LOWER($1) || '%' THEN 0.9
-    WHEN original_title IS NOT NULL AND LOWER(original_title) LIKE LOWER($1) || '%' THEN 0.85
-    WHEN similarity(title, $1) > 0.3 THEN similarity(title, $1) * 0.8
-    WHEN original_title IS NOT NULL AND similarity(original_title, $1) > 0.3 THEN similarity(original_title, $1) * 0.75
-    WHEN similarity(title, $1) > 0.1 THEN similarity(title, $1) * 0.6
-    WHEN original_title IS NOT NULL AND similarity(original_title, $1) > 0.1 THEN similarity(original_title, $1) * 0.55
-    WHEN title ILIKE '%' || $1 || '%' THEN 0.4
-    WHEN original_title IS NOT NULL AND original_title ILIKE '%' || $1 || '%' THEN 0.35
+    WHEN LOWER(f.title) = LOWER($1) THEN 1.0
+    WHEN f.original_title IS NOT NULL AND LOWER(f.original_title) = LOWER($1) THEN 0.95
+    WHEN LOWER(f.title) LIKE LOWER($1) || '%' THEN 0.9
+    WHEN f.original_title IS NOT NULL AND LOWER(f.original_title) LIKE LOWER($1) || '%' THEN 0.85
+    WHEN similarity(f.title, $1) > 0.3 THEN similarity(f.title, $1) * 0.8
+    WHEN f.original_title IS NOT NULL AND similarity(f.original_title, $1) > 0.3 THEN similarity(f.original_title, $1) * 0.75
+    WHEN similarity(f.title, $1) > 0.1 THEN similarity(f.title, $1) * 0.6
+    WHEN f.original_title IS NOT NULL AND similarity(f.original_title, $1) > 0.1 THEN similarity(f.original_title, $1) * 0.55
+    WHEN f.title ILIKE '%' || $1 || '%' THEN 0.4
+    WHEN f.original_title IS NOT NULL AND f.original_title ILIKE '%' || $1 || '%' THEN 0.35
     ELSE 0.1
   END
+`;
+
+/**
+ * Permissive match predicate shared by every movie-search variant: a row
+ * matches on moderate trigram similarity or a substring hit on either title.
+ * `$1` is always the search query.
+ */
+const MOVIE_SEARCH_MATCH_SQL = `
+  similarity(f.title, $1) > 0.1
+  OR (f.original_title IS NOT NULL AND similarity(f.original_title, $1) > 0.1)
+  OR f.title ILIKE '%' || $1 || '%'
+  OR (f.original_title IS NOT NULL AND f.original_title ILIKE '%' || $1 || '%')
 `;
 
 /**
@@ -491,22 +468,17 @@ export async function searchMovies(
       source_url,
       trailer_url,
       ${MOVIE_SEARCH_SCORING_SQL} AS score
-    FROM movies
+    FROM movies f
      WHERE
        EXISTS (
          SELECT 1
          FROM showtimes s
          JOIN theaters c ON c.id = s.theater_id
-         WHERE s.movie_id = movies.id AND c.status = 'active'
+         WHERE s.movie_id = f.id AND c.status = 'active'
        )
-       AND (
-       similarity(title, $1) > 0.1
-       OR (original_title IS NOT NULL AND similarity(original_title, $1) > 0.1)
-       OR title ILIKE '%' || $1 || '%'
-       OR (original_title IS NOT NULL AND original_title ILIKE '%' || $1 || '%')
-       )
+       AND (${MOVIE_SEARCH_MATCH_SQL})
     ORDER BY score DESC, title ASC
-    LIMIT $2`,
+     LIMIT $2`,
     [query, limit]
   );
 

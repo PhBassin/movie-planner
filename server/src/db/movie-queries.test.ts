@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getMovie,
   getMoviesByDate,
-  getMoviesByDateForTheaters,
+  getSelectionMoviesForTheaters,
   getWeeklyMovies,
-  getWeeklyMoviesForTheaters,
   searchMovies,
   upsertMovie,
   formatMovieRow,
@@ -641,7 +640,7 @@ describe('Movie Queries - Selection-scoped', () => {
     ...overrides,
   });
 
-  describe('getWeeklyMoviesForTheaters', () => {
+  describe('getSelectionMoviesForTheaters', () => {
     it('scopes weekly movies to the given theaters and carries per-theater newness', async () => {
       const mockDb = {
         query: vi.fn().mockResolvedValue({
@@ -653,7 +652,7 @@ describe('Movie Queries - Selection-scoped', () => {
         }),
       } as unknown as DB;
 
-      const result = await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001', 'C0002']);
+      const result = await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001', 'C0002'] });
 
       expect(result).toHaveLength(2);
       expect(result.map(m => m.title)).toEqual(['Film A', 'Film B']);
@@ -668,7 +667,7 @@ describe('Movie Queries - Selection-scoped', () => {
         query: vi.fn().mockResolvedValue({ rows: [] }),
       } as unknown as DB;
 
-      await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001']);
+      await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'] });
 
       const [sql, params] = mockDb.query.mock.calls[0];
        expect(sql).toContain('weekly_programs');
@@ -676,6 +675,7 @@ describe('Movie Queries - Selection-scoped', () => {
       expect(sql).toContain('wp.is_new_this_week');
       expect(sql).toContain('ANY($2)');
       expect(sql).toContain("c.status = 'active'");
+      expect(sql).not.toContain('s.date = $1');
       expect(params).toEqual(['2026-03-11', ['C0001']]);
     });
 
@@ -686,7 +686,7 @@ describe('Movie Queries - Selection-scoped', () => {
         }),
       } as unknown as DB;
 
-      const result = await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001']);
+      const result = await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'] });
 
       expect(result[0].theaters[0].isNewThisWeek).toBe(false);
     });
@@ -696,14 +696,12 @@ describe('Movie Queries - Selection-scoped', () => {
         query: vi.fn().mockResolvedValue({ rows: [] }),
       } as unknown as DB;
 
-      await getWeeklyMoviesForTheaters(mockDb, '2026-03-11', ['C0001']);
+      await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'] });
 
       expect(mockDb.query.mock.calls[0][0]).toContain('FROM showtimes s');
       expect(mockDb.query.mock.calls[0][0]).toContain('LEFT JOIN weekly_programs wp');
     });
-  });
 
-  describe('getMoviesByDateForTheaters', () => {
     it('scopes date movies to the given theaters and derives newness from weekly_programs', async () => {
       const mockDb = {
         query: vi.fn().mockResolvedValue({
@@ -714,21 +712,22 @@ describe('Movie Queries - Selection-scoped', () => {
         }),
       } as unknown as DB;
 
-      const result = await getMoviesByDateForTheaters(mockDb, '2026-03-12', '2026-03-11', ['C0001', 'C0002']);
+      const result = await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001', 'C0002'], date: '2026-03-12' });
 
       expect(result).toHaveLength(2);
       expect(result[0].theaters[0].isNewThisWeek).toBe(true);
       expect(result[1].theaters[0].isNewThisWeek).toBe(false);
     });
 
-    it('left joins weekly_programs for the newness flag', async () => {
+    it('narrows to the date with a date-scoped predicate when one is given', async () => {
       const mockDb = {
         query: vi.fn().mockResolvedValue({ rows: [] }),
       } as unknown as DB;
 
-      await getMoviesByDateForTheaters(mockDb, '2026-03-12', '2026-03-11', ['C0001']);
+      await getSelectionMoviesForTheaters(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'], date: '2026-03-12' });
 
       const [sql, params] = mockDb.query.mock.calls[0];
+      expect(sql).toContain('s.date = $1 AND s.week_start = $2');
       expect(sql).toContain('LEFT JOIN weekly_programs');
       expect(sql).toContain('ANY($3)');
       expect(params).toEqual(['2026-03-12', '2026-03-11', ['C0001']]);

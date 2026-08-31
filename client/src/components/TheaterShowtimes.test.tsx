@@ -250,4 +250,50 @@ describe('TheaterShowtimes — nouveaux badges', () => {
     expect(screen.queryByTestId('theater-new-badge-C1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('theater-new-badge-C2')).not.toBeInTheDocument();
   });
+
+  it('lists every theater on New-section cards even without a showtime that day', () => {
+    const theaters: TheaterWithShowtimes[] = [
+      {
+        id: 'C1',
+        name: 'Theater Jour',
+        isNewThisWeek: false,
+        showtimes: [{ id: 's1', date: '2026-02-18', time: '14:00', experiences: [] }],
+      },
+      {
+        id: 'C2',
+        name: 'Theater AutreJour',
+        isNewThisWeek: true,
+        showtimes: [{ id: 's2', date: '2026-02-19', time: '20:00', experiences: [] }],
+      },
+    ] as any;
+
+    renderWithRouter(<TheaterShowtimes theaters={theaters} movie={mockMovie} showNewBadges />);
+
+    expect(screen.getByText('Theater Jour')).toBeInTheDocument();
+    expect(screen.getByText('Theater AutreJour')).toBeInTheDocument();
+    expect(screen.getByTestId('theater-new-badge-C2')).toBeInTheDocument();
+    expect(screen.queryByTestId('theater-new-badge-C1')).not.toBeInTheDocument();
+    expect(screen.getByText('14:00')).toBeInTheDocument();
+    expect(screen.queryByText('20:00')).not.toBeInTheDocument();
+  });
+
+  it('drops theaters without a showtime that day outside the New section', () => {
+    const theaters: TheaterWithShowtimes[] = [
+      {
+        id: 'C1',
+        name: 'Theater Jour',
+        showtimes: [{ id: 's1', date: '2026-02-18', time: '14:00', experiences: [] }],
+      },
+      {
+        id: 'C2',
+        name: 'Theater AutreJour',
+        showtimes: [{ id: 's2', date: '2026-02-19', time: '20:00', experiences: [] }],
+      },
+    ] as any;
+
+    renderWithRouter(<TheaterShowtimes theaters={theaters} movie={mockMovie} />);
+
+    expect(screen.getByText('Theater Jour')).toBeInTheDocument();
+    expect(screen.queryByText('Theater AutreJour')).not.toBeInTheDocument();
+  });
 });

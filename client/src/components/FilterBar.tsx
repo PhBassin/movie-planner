@@ -35,8 +35,8 @@ function FilterBar({
         <MovieSearchBar
           placeholder="Rechercher un film..."
           className="w-full"
-           onFilter={onFilter}
-           searchFn={searchFn}
+          onFilter={onFilter}
+          searchFn={searchFn}
           resetKey={resetKey}
         />
       </div>

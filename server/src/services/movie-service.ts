@@ -1,6 +1,6 @@
 import type { DB } from '../db/index.js';
-import { getShowtimesByDate, getShowtimesByDateForTheaters, getShowtimesByMovieAndWeek, getWeeklyShowtimes, getWeeklyShowtimesForTheaters } from '../db/showtime-queries.js';
-import { getWeeklyMovies, getMoviesByDate, getMovie, searchMovies, searchMoviesForTheaters, getWeeklyMoviesForTheaters, getMoviesByDateForTheaters, type SelectionMovie } from '../db/movie-queries.js';
+import { getShowtimesByDate, getShowtimesByMovieAndWeek, getWeeklyShowtimes, getShowtimesForTheaters, type SelectionScope } from '../db/showtime-queries.js';
+import { getWeeklyMovies, getMoviesByDate, getMovie, searchMovies, searchMoviesForTheaters, getSelectionMoviesForTheaters, type SelectionMovie } from '../db/movie-queries.js';
 import { getSelection } from '../db/selection-queries.js';
 import { groupShowtimesByTheater } from '../utils/showtimes.js';
 import type { MovieWithShowtimes, Showtime, Theater } from '../types/scraper.js';
@@ -59,32 +59,27 @@ export class MovieService {
   }
 
   async getSelectionMoviesForWeek(memberId: number, weekStart: string): Promise<MovieWithShowtimes[]> {
-    return this.getSelectionMovies(
-      memberId,
-      (theaterIds) => getWeeklyMoviesForTheaters(this.db, weekStart, theaterIds),
-      (theaterIds) => getWeeklyShowtimesForTheaters(this.db, weekStart, theaterIds),
-    );
+    return this.getSelectionMovies(memberId, { weekStart });
   }
 
   async getSelectionMoviesForDate(memberId: number, date: string, weekStart: string): Promise<MovieWithShowtimes[]> {
-    return this.getSelectionMovies(
-      memberId,
-      (theaterIds) => getMoviesByDateForTheaters(this.db, date, weekStart, theaterIds),
-      (theaterIds) => getShowtimesByDateForTheaters(this.db, date, weekStart, theaterIds),
-    );
+    return this.getSelectionMovies(memberId, { weekStart, date });
   }
 
   private async getSelectionMovies(
     memberId: number,
-    getMovies: (theaterIds: string[]) => Promise<SelectionMovie[]>,
-    getShowtimes: (theaterIds: string[]) => Promise<Array<Showtime & { theater: Theater }>>,
+    scope: Omit<SelectionScope, 'theaterIds'>,
   ): Promise<MovieWithShowtimes[]> {
     const theaterIds = await this.getSelectionTheaterIds(memberId);
     if (theaterIds.length === 0) {
       return [];
     }
 
-    const [movies, allShowtimes] = await Promise.all([getMovies(theaterIds), getShowtimes(theaterIds)]);
+    const selectionScope = { ...scope, theaterIds };
+    const [movies, allShowtimes] = await Promise.all([
+      getSelectionMoviesForTheaters(this.db, selectionScope),
+      getShowtimesForTheaters(this.db, selectionScope),
+    ]);
     return this.mergeSelectionMoviesAndShowtimes(movies, allShowtimes);
   }
 
@@ -94,28 +89,32 @@ export class MovieService {
   }
 
   /**
-   * Merge Selection-scoped movies with their showtimes, then overlay the
-   * per-theater newness carried by the movie rows: each theater entry gains
-   * `isNewThisWeek`, and the movie itself is flagged when at least one of its
-   * selected theaters programs it newly this week.
+   * Merge Selection-scoped movies with their showtimes: each movie keeps the
+   * theaters carried by its own rows — the authoritative list for the New
+   * section badges — and only gains the showtimes matching that theater. The
+   * movie itself is flagged when at least one of its selected theaters
+   * programs it newly this week.
    */
   private mergeSelectionMoviesAndShowtimes(
     movies: SelectionMovie[],
     allShowtimes: Array<Showtime & { theater: Theater }>
   ): MovieWithShowtimes[] {
-    const merged = this.mergeMoviesAndShowtimes(movies, allShowtimes);
-
-    const newnessByMovieTheater = new Map<string, boolean>();
-    for (const movie of movies) {
-      for (const theater of movie.theaters) {
-        newnessByMovieTheater.set(`${movie.id}|${theater.id}`, theater.isNewThisWeek);
+    const showtimesByMovie = new Map<number, Map<string, Showtime[]>>();
+    for (const showtime of allShowtimes) {
+      let byTheater = showtimesByMovie.get(showtime.movie_id);
+      if (!byTheater) {
+        byTheater = new Map();
+        showtimesByMovie.set(showtime.movie_id, byTheater);
       }
+      const { theater: _theater, ...showtimeOnly } = showtime;
+      byTheater.set(showtime.theater_id, [...(byTheater.get(showtime.theater_id) ?? []), showtimeOnly]);
     }
 
-    return merged.map(movie => {
+    return movies.map(movie => {
+      const byTheater = showtimesByMovie.get(movie.id);
       const theaters = movie.theaters.map(theater => ({
         ...theater,
-        isNewThisWeek: newnessByMovieTheater.get(`${movie.id}|${theater.id}`) ?? false,
+        showtimes: byTheater?.get(theater.id) ?? [],
       }));
       return {
         ...movie,

@@ -26,8 +26,9 @@ vi.mock('../db/movie-queries.js', () => ({
   searchMovies: vi.fn(),
 }));
 
-vi.mock('../utils/date.js', () => ({
-  getWeekStart: vi.fn().mockReturnValue('2026-02-18')
+vi.mock('../utils/date.js', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getWeekStart: vi.fn().mockReturnValue('2026-02-18'),
 }));
 
 describe('Routes - Movies', () => {

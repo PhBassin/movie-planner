@@ -417,8 +417,40 @@ describe('HomePage — polymorphic root', () => {
       await screen.findByTestId('new-this-week-section');
       fireEvent.click(screen.getByRole('button', { name: /maintenant/i }));
 
-      await waitFor(() => expect(clientApi.getSelectionMovies).toHaveBeenCalledWith(FIXED_TODAY));
+      // "Maintenant" keeps the week-level dataset: no date param is sent.
+      await waitFor(() => expect(clientApi.getSelectionMovies).toHaveBeenCalledWith(undefined));
       await waitFor(() => expect(screen.getByTestId('new-this-week-section')).toBeInTheDocument());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hides movies with no showtime left today in the Maintenant view', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-30T13:00:00'));
+    try {
+      setupMember({
+        movies: [
+          makeSelectionMovie(1, 'Film Tard', false),
+          {
+            ...makeSelectionMovie(2, 'Film Matin', false),
+            theaters: [{
+              id: 'C0001',
+              name: 'UGC Opéra',
+              isNewThisWeek: false,
+              showtimes: [{ id: 's2', date: FIXED_TODAY, time: '10:00', experiences: [] }],
+            }],
+          },
+        ],
+      });
+
+      renderPage();
+
+      await screen.findByText('Film Tard');
+      fireEvent.click(screen.getByRole('button', { name: /maintenant/i }));
+
+      expect(await screen.findByText('Film Tard')).toBeInTheDocument();
+      expect(screen.queryByText('Film Matin')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

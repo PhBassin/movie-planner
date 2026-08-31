@@ -2,7 +2,7 @@ import { parseStrictInt } from '../utils/number.js';
 import express from 'express';
 import type { DB } from '../db/index.js';
 import { MovieService } from '../services/movie-service.js';
-import { getWeekStart } from '../utils/date.js';
+import { getWeekStart, isValidISODateFormat } from '../utils/date.js';
 import type { ApiResponse } from '../types/api.js';
 import { publicLimiter } from '../middleware/rate-limit.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
@@ -18,11 +18,8 @@ router.get('/', publicLimiter, async (req, res, next) => {
     const dateParam = req.query.date as string | undefined;
 
     // Validate date format if provided
-    if (dateParam) {
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(dateParam)) {
-        return next(new ValidationError('Invalid date format. Use YYYY-MM-DD'));
-      }
+    if (dateParam && !isValidISODateFormat(dateParam)) {
+      return next(new ValidationError('Invalid date format. Use YYYY-MM-DD'));
     }
 
     let moviesWithShowtimes;
