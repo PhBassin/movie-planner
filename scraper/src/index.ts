@@ -5,7 +5,7 @@ import { runScraper, addTheaterAndScrape } from './scraper/index.js';
 import type { ScrapeSummary } from './types/scraper.js';
 import type { ProgressPublisher } from './scraper/scrape-run.js';
 import { getBusConsumer, disconnectBus } from './bus/bus-consumer.js';
-import type { BusConsumer } from '@movie-planner/scraper-protocol';
+import type { BusConsumer, ProgressEvent } from '@movie-planner/scraper-protocol';
 import type { ScrapeJob, ScrapeJobScrape, ScrapeJobAddTheater } from '@movie-planner/scraper-protocol';
 import { db } from './db/client.js';
 import { createScrapeReport, updateScrapeReport } from './db/report-queries.js';
@@ -57,9 +57,29 @@ const RUN_MODE: RunMode = (process.env.RUN_MODE as RunMode) ?? 'oneshot';
 // Job executor
 // ---------------------------------------------------------------------------
 
+/**
+ * Tag terminal progress events with the job's `reportId` (issue #63, ADR 0005):
+ * the web role's submission resolver joins that id to a
+ * `theater_submissions` row. Non-terminal events pass through untouched. The
+ * scraper stays domain-agnostic — `reportId` is scraper bookkeeping, not
+ * Member vocabulary.
+ */
+function tagTerminalEvents(job: ScrapeJob, progress: ProgressPublisher): ProgressPublisher {
+  return {
+    emit: async (event: ProgressEvent) => {
+      if (event.type === 'completed' || event.type === 'failed') {
+        await progress.emit({ ...event, reportId: job.reportId });
+      } else {
+        await progress.emit(event);
+      }
+    },
+  };
+}
+
 export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): Promise<void> {
   // Support legacy jobs that predate the discriminated union (no 'type' field)
   const jobType = ('type' in job) ? job.type : 'scrape';
+  const taggedProgress = tagTerminalEvents(job, progress);
 
   // Update report status
   try {
@@ -72,12 +92,29 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
   if (jobType === 'add_theater') {
     const addTheaterJob = job as ScrapeJobAddTheater;
     try {
-      await addTheaterAndScrape(db, addTheaterJob.url, progress);
+      const theater = await addTheaterAndScrape(db, addTheaterJob.url, taggedProgress);
       await updateScrapeReport(db, job.reportId, {
         status: 'success',
         completed_at: new Date().toISOString(),
       });
-      logger.info(`[scraper] add_theater job ${job.reportId} completed successfully`);
+      // Terminal event for the single-theater run — the scrape:progress
+      // vocabulary has no add_theater-specific arm, and the web role's
+      // submission resolver keys on this event's tagged reportId.
+      await taggedProgress.emit({
+        type: 'completed',
+        summary: {
+          total_theaters: 1,
+          successful_theaters: 1,
+          failed_theaters: 0,
+          total_movies: 0,
+          total_showtimes: 0,
+          total_dates: 0,
+          duration_ms: 0,
+          errors: [],
+          status: 'success',
+        },
+      });
+      logger.info(`[scraper] add_theater job ${job.reportId} completed successfully (${theater.id})`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error(`[scraper] add_theater job ${job.reportId} failed:`, err);
@@ -86,6 +123,7 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
         completed_at: new Date().toISOString(),
         errors: [{ theater_name: 'System', error: errorMessage }],
       }).catch(() => {});
+      await taggedProgress.emit({ type: 'failed', error: errorMessage });
     }
     return;
   }
@@ -95,7 +133,7 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
 
   try {
     const scrapeJob = job as ScrapeJobScrape;
-    const summary = await runScraper(progress, scrapeJob.options);
+    const summary = await runScraper(taggedProgress, scrapeJob.options);
 
     const status = await recordScrapeOutcome(job.reportId, summary);
 

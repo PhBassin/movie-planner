@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './Layout';
 import { AuthContext } from '../contexts/AuthContext';
 import { SettingsContext } from '../contexts/SettingsContext';
@@ -45,14 +46,19 @@ const mockSettingsContext = {
 
 describe('Header Stickiness', () => {
   it('should have sticky classes on the header element', () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     render(
-      <BrowserRouter>
-        <AuthContext.Provider value={mockAuthContext}>
-          <SettingsContext.Provider value={mockSettingsContext}>
-            <Layout>Test Content</Layout>
-          </SettingsContext.Provider>
-        </AuthContext.Provider>
-      </BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthContext.Provider value={mockAuthContext}>
+            <SettingsContext.Provider value={mockSettingsContext}>
+              <Layout>Test Content</Layout>
+            </SettingsContext.Provider>
+          </AuthContext.Provider>
+        </BrowserRouter>
+      </QueryClientProvider>
     );
 
     const header = screen.getByRole('banner');

@@ -158,3 +158,16 @@ export interface ScrapeSchedule {
   last_run_at: string | null;
   last_run_status: string | null;
 }
+
+// Member notification (ADR 0005) — transient SSE push when a
+// TheaterSubmission resolves; durability lives in the submission rows.
+export type MemberNoticeOutcome = 'succeeded' | 'succeeded_selection_full' | 'failed';
+
+export interface MemberNotice {
+  type: 'submission_resolved';
+  submissionId: number;
+  theaterId: string;
+  theaterName: string;
+  outcome: MemberNoticeOutcome;
+  reason?: string;
+}

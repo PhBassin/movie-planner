@@ -17,6 +17,7 @@ vi.mock('../api/me.js', () => ({
   getSelection: vi.fn(),
   addToSelection: vi.fn(),
   removeFromSelection: vi.fn(),
+  submitTheater: vi.fn(),
 }));
 
 const catalog = [
@@ -156,5 +157,69 @@ describe('CinemasPage', () => {
 
     expect(await screen.findByTestId('selection-toast')).toHaveTextContent('Selection contains 50 theaters');
     await waitFor(() => expect(memberApi.getMemberProfile).toHaveBeenCalledTimes(2));
+  });
+
+  it('hides the submission form from Visitors', async () => {
+    renderPage();
+    await screen.findByText('UGC Opéra');
+
+    expect(screen.queryByTestId('submission-form')).not.toBeInTheDocument();
+  });
+
+  it('submits a new cinema and announces the pending proposal', async () => {
+    vi.mocked(memberApi.submitTheater).mockResolvedValue({
+      outcome: 'submitted',
+      submission: { id: 9, status: 'pending', report_id: 42 },
+    });
+
+    renderPage(member);
+    await screen.findByText('UGC Opéra');
+
+    fireEvent.change(screen.getByTestId('submission-url'), {
+      target: { value: 'https://www.allocine.fr/seance/salle_gen_csalle=C0099.html' },
+    });
+    fireEvent.click(screen.getByTestId('submission-submit'));
+
+    await waitFor(() =>
+      expect(memberApi.submitTheater).toHaveBeenCalledWith(
+        'https://www.allocine.fr/seance/salle_gen_csalle=C0099.html',
+        expect.anything(),
+      ),
+    );
+    expect(await screen.findByTestId('selection-toast')).toHaveTextContent('Proposition enregistrée');
+    expect((screen.getByTestId('submission-url') as HTMLInputElement).value).toBe('');
+  });
+
+  it('surfaces the dedup downgrade when the proposed cinema already exists', async () => {
+    vi.mocked(memberApi.submitTheater).mockResolvedValue({
+      outcome: 'selection_added',
+      theater: catalog[0],
+    });
+
+    renderPage(member);
+    await screen.findByText('UGC Opéra');
+
+    fireEvent.change(screen.getByTestId('submission-url'), {
+      target: { value: 'https://www.allocine.fr/seance/salle_gen_csalle=C0001.html' },
+    });
+    fireEvent.click(screen.getByTestId('submission-submit'));
+
+    expect(await screen.findByTestId('selection-toast')).toHaveTextContent('déjà dans le catalogue');
+  });
+
+  it('surfaces submission rejections (throttle, unverified) in the toast', async () => {
+    vi.mocked(memberApi.submitTheater).mockRejectedValue(
+      new ApiError('You have reached the limit of 3 new cinema submissions.', 429),
+    );
+
+    renderPage(member);
+    await screen.findByText('UGC Opéra');
+
+    fireEvent.change(screen.getByTestId('submission-url'), {
+      target: { value: 'https://www.allocine.fr/seance/salle_gen_csalle=C0099.html' },
+    });
+    fireEvent.click(screen.getByTestId('submission-submit'));
+
+    expect(await screen.findByTestId('selection-toast')).toHaveTextContent('limit of 3 new cinema submissions');
   });
 });

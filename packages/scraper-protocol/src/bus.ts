@@ -1,5 +1,5 @@
 import type { ScrapeJob } from './jobs.js';
-import type { ProgressEvent, ScheduleChangeEvent } from './events.js';
+import type { MemberNotice, ProgressEvent, ScheduleChangeEvent } from './events.js';
 
 export interface BusTransaction {
   query<T = Record<string, unknown>>(text: string, params?: any[]): Promise<{ rows: T[] }>;
@@ -12,9 +12,10 @@ export interface BusTransaction {
 // queue runs on the `scrape_jobs` table with `FOR UPDATE SKIP LOCKED` and the
 // pub/sub fan-outs run on `LISTEN/NOTIFY` (see `notifications.ts`). This port
 // is the seam that makes the backend a drop-in: role code depends on the
-// interface, not the concrete queue/transport. `member:notices` is a reserved
-// peer channel (CONTEXT.md, ADR 0005) with no callers in code yet; it joins
-// the port when it gains an implementation.
+// interface, not the concrete queue/transport. The `member:notices` channel
+// (ADR 0005) rides the same pub/sub arm: the web role's resolver publishes
+// Member notices and the web role's SSE router subscribes — separate web
+// instances fan out to whichever holds the Member's live connections.
 // ---------------------------------------------------------------------------
 
 /**
@@ -39,6 +40,16 @@ export interface BusProducer {
 
   /** Publish a schedule-change notice (server → worker). */
   publishScheduleChange(event: ScheduleChangeEvent): Promise<void>;
+
+  /**
+   * Publish a Member-domain notice on the `member:notices` channel (ADR 0005).
+   * Best-effort: the notice is ephemeral by design — the submission row is the
+   * durable record — so a publish failure is logged and swallowed.
+   */
+  publishMemberNotice(notice: MemberNotice): Promise<void>;
+
+  /** Subscribe to Member-domain notices for per-Member SSE fan-out. */
+  subscribeToMemberNotices(handler: (notice: MemberNotice) => void): Promise<void>;
 
   /** Tear down all connections held by this backend (graceful shutdown). */
   disconnect(): Promise<void>;

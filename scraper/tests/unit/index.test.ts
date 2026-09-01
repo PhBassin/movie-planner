@@ -170,6 +170,64 @@ describe('executeJob dispatcher', () => {
       expect.objectContaining({ status: 'failed' })
     );
   });
+
+  it('tags a terminal scrape event with the job reportId and passes through non-terminal events', async () => {
+    mockRunScraper.mockImplementation(async (progress: { emit: (event: any) => Promise<void> }) => {
+      await progress.emit({ type: 'theater_started', theater_name: 'X', theater_id: 'C1', index: 1 });
+      await progress.emit({ type: 'completed', summary: okSummary });
+      return okSummary;
+    });
+
+    const { executeJob } = await import('../../src/index.js');
+
+    await executeJob({ type: 'scrape', triggerType: 'manual', reportId: 42 }, mockProgress);
+
+    expect(mockEmit).toHaveBeenCalledTimes(2);
+    const [nonTerminal, terminal] = mockEmit.mock.calls.map(([event]) => event);
+    expect(nonTerminal).toEqual({ type: 'theater_started', theater_name: 'X', theater_id: 'C1', index: 1 });
+    expect(terminal).toMatchObject({ type: 'completed', reportId: 42 });
+  });
+
+  it('emits a terminal completed event tagged with the reportId for a successful add_theater job', async () => {
+    mockAddTheaterAndScrape.mockResolvedValue({
+      id: 'C0072',
+      name: 'Theater Test',
+      url: 'https://www.allocine.fr/seance/salle_gen_csalle=C0072.html',
+    });
+
+    const { executeJob } = await import('../../src/index.js');
+
+    await executeJob({
+      type: 'add_theater',
+      triggerType: 'manual',
+      reportId: 43,
+      url: 'https://www.allocine.fr/seance/salle_gen_csalle=C0072.html',
+    }, mockProgress);
+
+    expect(mockEmit).toHaveBeenCalledOnce();
+    const event = mockEmit.mock.calls[0][0];
+    expect(event).toMatchObject({
+      type: 'completed',
+      reportId: 43,
+      summary: expect.objectContaining({ total_theaters: 1, successful_theaters: 1, failed_theaters: 0 }),
+    });
+  });
+
+  it('emits a terminal failed event tagged with the reportId for a failed add_theater job', async () => {
+    mockAddTheaterAndScrape.mockRejectedValue(new Error('Invalid Allociné URL: bad-url'));
+
+    const { executeJob } = await import('../../src/index.js');
+
+    await executeJob({
+      type: 'add_theater',
+      triggerType: 'manual',
+      reportId: 45,
+      url: 'bad-url',
+    }, mockProgress);
+
+    const terminal = mockEmit.mock.calls.map(([event]) => event).find((event) => event.type === 'failed');
+    expect(terminal).toMatchObject({ type: 'failed', error: 'Invalid Allociné URL: bad-url', reportId: 45 });
+  });
 });
 
 describe('runScheduledScrape (cron executor)', () => {
