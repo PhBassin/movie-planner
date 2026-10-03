@@ -7,7 +7,9 @@ import { validateMailerConfiguration } from './services/mailer.js';
 
 const PORT = process.env.PORT || 3000;
 const AUTH_EMAIL_TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SUBMISSION_RECONCILIATION_INTERVAL_MS = 60 * 1000;
 let authEmailTokenCleanupInterval: ReturnType<typeof setInterval> | null = null;
+let submissionReconciliationInterval: ReturnType<typeof setInterval> | null = null;
 
 async function startServer() {
   try {
@@ -53,13 +55,44 @@ async function startServer() {
     // Subscribe to PostgreSQL progress notifications and forward to SSE clients
     const { getBusProducer } = await import('./services/bus-producer.js');
     const { progressTracker } = await import('./services/progress-tracker.js');
+    const { memberNotificationTracker } = await import('./services/member-notification-tracker.js');
+    const { SubmissionResolutionService } = await import('./services/submission-resolver.js');
 
     const busProducer = getBusProducer();
+    const submissionResolver = new SubmissionResolutionService(db);
+
     await busProducer.subscribeToProgress((event) => {
       progressTracker.emit(event);
+      // Live resolution path (ADR 0005 sub-decision 7): a terminal event whose
+      // reportId joins a pending theater_submissions row resolves it.
+      submissionResolver.onProgressEvent(event);
     });
 
     logger.info('📡 PostgreSQL progress subscription active (scrape:progress)');
+
+    // Route Member-domain notices to their Member's live SSE connections —
+    // a dumb per-memberId router (ADR 0005 sub-decision 4).
+    await busProducer.subscribeToMemberNotices((notice) => {
+      memberNotificationTracker.emit(notice);
+    });
+
+    logger.info('📡 PostgreSQL member notices subscription active (member:notices)');
+
+    // Reconciliation sweep (ADR 0005 sub-decision 8): pending submissions
+    // whose ScrapeReport already went terminal resolve through the same
+    // routine — once at startup, then every ~60s. Idempotent via the
+    // `pending` status guard, so a missed live event heals here.
+    try {
+      await submissionResolver.reconcilePendingSubmissions();
+    } catch (error) {
+      logger.warn('Startup submission reconciliation failed', { error });
+    }
+    submissionReconciliationInterval = setInterval(() => {
+      void submissionResolver.reconcilePendingSubmissions().catch((error) => {
+        logger.warn('Submission reconciliation sweep failed', { error });
+      });
+    }, SUBMISSION_RECONCILIATION_INTERVAL_MS);
+    submissionReconciliationInterval.unref();
 
     // Create Express app
     const app = createApp();
@@ -88,6 +121,11 @@ async function startServer() {
       if (authEmailTokenCleanupInterval) {
         clearInterval(authEmailTokenCleanupInterval);
         authEmailTokenCleanupInterval = null;
+      }
+
+      if (submissionReconciliationInterval) {
+        clearInterval(submissionReconciliationInterval);
+        submissionReconciliationInterval = null;
       }
 
       // Disconnect the Postgres-backed bus

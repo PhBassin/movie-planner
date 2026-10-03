@@ -5,6 +5,7 @@ import { AuthContext } from '../contexts/AuthContext.js';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { ADMIN_PERMISSIONS } from '../utils/adminPermissions.js';
 import { useScrollHeader, useClickOutside } from '../hooks/useLayoutChrome.js';
+import MemberNotifications from './MemberNotifications.js';
 
 interface LayoutProps {
   children: ReactNode;
@@ -40,6 +41,8 @@ export default function Layout({ children, title }: LayoutProps) {
         {children}
       </main>
       <Footer appName={APP_NAME} footerText={publicSettings?.footer_text ?? undefined} footerLinks={publicSettings?.footer_links} />
+      {/* Live submission-outcome toasts (ADR 0005) — app-wide, transient. */}
+      <MemberNotifications />
     </div>
   );
 }

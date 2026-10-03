@@ -3,6 +3,7 @@ import {
   parseNotificationPayload,
   type BusProducer,
   type BusTransaction,
+  type MemberNotice,
   type NotificationBus,
   type ProgressEvent,
   type ScheduleChangeEvent,
@@ -66,6 +67,29 @@ export class PostgresBusProducer implements BusProducer {
     } catch (error) {
       logger.error('[PostgresBusProducer] Dropped schedule-change notification', { error });
     }
+  }
+
+  publishMemberNotice(notice: MemberNotice): Promise<void> {
+    // Best-effort by design (ADR 0005 sub-decision 1): the `theater_submissions`
+    // row is the durable outcome record; the notice is a transient push, so a
+    // publish failure must never fail the resolution routine that already
+    // committed the durable facts.
+    return this.notifications
+      .publish(NOTIFICATION_CHANNELS.memberNotices, JSON.stringify(notice))
+      .catch((error) => {
+        logger.error('[PostgresBusProducer] Dropped member notice', { error });
+      });
+  }
+
+  subscribeToMemberNotices(handler: (notice: MemberNotice) => void): Promise<void> {
+    return this.notifications.subscribe(NOTIFICATION_CHANNELS.memberNotices, (payload) => {
+      const notice = parseNotificationPayload<MemberNotice>(payload);
+      if (notice === null) {
+        logger.warn('[PostgresBusProducer] Dropped unparsable member notice');
+        return;
+      }
+      handler(notice);
+    });
   }
 
   // --- Lifecycle -------------------------------------------------------------

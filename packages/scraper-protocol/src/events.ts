@@ -41,5 +41,28 @@ export type ProgressEvent =
   | { type: 'date_completed'; date: string; movies_count: number }
   | { type: 'theater_completed'; theater_name: string; total_movies: number }
   | { type: 'theater_failed'; theater_name: string; error: string }
-  | { type: 'completed'; summary: ScrapeSummary }
-  | { type: 'failed'; error: string };
+  | { type: 'completed'; summary: ScrapeSummary; reportId?: number }
+  | { type: 'failed'; error: string; reportId?: number };
+
+/**
+ * Member-domain outcome notice (ADR 0005) published on the PostgreSQL
+ * `member:notices` channel when a TheaterSubmission resolves. Durability lives
+ * in the `theater_submissions` row; this payload is the transient push routed
+ * by `memberId` to the Member's live SSE connections on `/api/me/notifications`.
+ *
+ * `reason` is set only on `failed` and is sanitized Member-facing copy — never
+ * the scrape error type or HTTP status. `theaterId` is the shared catalog's
+ * TEXT id (e.g. `C0013`).
+ */
+export type MemberNoticeOutcome = 'succeeded' | 'succeeded_selection_full' | 'failed';
+
+export interface MemberNotice {
+  type: 'submission_resolved';
+  /** Routing key — the submitter's user id; never sent to other Members. */
+  memberId: number;
+  submissionId: number;
+  theaterId: string;
+  theaterName: string;
+  outcome: MemberNoticeOutcome;
+  reason?: string;
+}

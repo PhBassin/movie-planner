@@ -107,6 +107,77 @@ describe('PostgresBusProducer', () => {
     );
   });
 
+  it('publishes member notices serialized to the member:notices channel', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
+    const notice = {
+      type: 'submission_resolved' as const,
+      memberId: 7,
+      submissionId: 9,
+      theaterId: 'C0013',
+      theaterName: 'UGC Opéra',
+      outcome: 'succeeded' as const,
+    };
+
+    await producer.publishMemberNotice(notice);
+
+    expect(notifications.publish).toHaveBeenCalledWith(
+      NOTIFICATION_CHANNELS.memberNotices,
+      JSON.stringify(notice),
+    );
+  });
+
+  it('logs and swallows member-notice publish failures (durable row already committed)', async () => {
+    vi.mocked(notifications.publish).mockRejectedValueOnce(new Error('pg down'));
+    const producer = new PostgresBusProducer(queue, notifications);
+    const notice = {
+      type: 'submission_resolved' as const,
+      memberId: 7,
+      submissionId: 9,
+      theaterId: 'C0013',
+      theaterName: 'UGC Opéra',
+      outcome: 'failed' as const,
+      reason: 'Source injoignable',
+    };
+
+    await expect(producer.publishMemberNotice(notice)).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[PostgresBusProducer] Dropped member notice',
+      { error: expect.any(Error) },
+    );
+  });
+
+  it('subscribes to member notices and parses payloads for the handler', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
+    const handler = vi.fn();
+    const notice = {
+      type: 'submission_resolved' as const,
+      memberId: 7,
+      submissionId: 9,
+      theaterId: 'C0013',
+      theaterName: 'UGC Opéra',
+      outcome: 'succeeded_selection_full' as const,
+    };
+
+    await producer.subscribeToMemberNotices(handler);
+
+    expect(notifications.subscribe).toHaveBeenCalledWith(
+      NOTIFICATION_CHANNELS.memberNotices,
+      expect.any(Function),
+    );
+
+    const listener = vi.mocked(notifications.subscribe).mock.calls.at(-1)![1];
+    listener(JSON.stringify(notice));
+    expect(handler).toHaveBeenCalledWith(notice);
+  });
+
+  it('logs and swallows malformed member-notice payloads', async () => {
+    const producer = new PostgresBusProducer(queue, notifications);
+    await producer.subscribeToMemberNotices(vi.fn());
+
+    const listener = vi.mocked(notifications.subscribe).mock.calls.at(-1)![1];
+    expect(() => listener('not-json')).not.toThrow();
+  });
+
   it('disconnects both the queue and the notification backend', async () => {
     const producer = new PostgresBusProducer(queue, notifications);
 

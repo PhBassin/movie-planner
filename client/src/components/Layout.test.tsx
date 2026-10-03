@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './Layout';
 import { AuthContext } from '../contexts/AuthContext';
 import { SettingsContext } from '../contexts/SettingsContext';
@@ -56,14 +57,19 @@ const mockSettingsContext = {
     };
 
 const renderWithProviders = (authContext: typeof mockAuthContext | typeof mockNonAdminAuthContext = mockAuthContext) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <BrowserRouter>
-      <AuthContext.Provider value={authContext}>
-        <SettingsContext.Provider value={mockSettingsContext}>
-          <Layout>Test Content</Layout>
-        </SettingsContext.Provider>
-      </AuthContext.Provider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthContext.Provider value={authContext}>
+          <SettingsContext.Provider value={mockSettingsContext}>
+            <Layout>Test Content</Layout>
+          </SettingsContext.Provider>
+        </AuthContext.Provider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 };
 

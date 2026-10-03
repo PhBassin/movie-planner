@@ -6,9 +6,22 @@ vi.mock('../utils/logger.js', () => ({
 }));
 
 import { logger } from '../utils/logger.js';
-import { attachProgressStream, type ProgressListenerSink } from './sse-bridge.js';
+import {
+  attachProgressStream,
+  attachMemberNotificationStream,
+  type MemberNotificationSink,
+  type ProgressListenerSink,
+} from './sse-bridge.js';
 
 function makeSink(count = 1): ProgressListenerSink {
+  return {
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    getListenerCount: vi.fn().mockReturnValue(count),
+  };
+}
+
+function makeMemberSink(count = 1): MemberNotificationSink {
   return {
     addListener: vi.fn(),
     removeListener: vi.fn(),
@@ -85,5 +98,53 @@ describe('attachProgressStream', () => {
     const cleanup = attachProgressStream(makeRes(), makeSink());
 
     expect(() => cleanup()).not.toThrow();
+  });
+});
+
+describe('attachMemberNotificationStream', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('sets the SSE transport headers on the response', () => {
+    const res = makeRes();
+
+    attachMemberNotificationStream(7, res, makeMemberSink());
+
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+    expect(res.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
+    expect(res.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+  });
+
+  it('registers the response on the sink keyed by memberId', () => {
+    const res = makeRes();
+    const sink = makeMemberSink();
+
+    attachMemberNotificationStream(7, res, sink);
+
+    expect(sink.addListener).toHaveBeenCalledWith(7, res);
+  });
+
+  it('writes no backlog frame — live-only on connect', () => {
+    const res = makeRes();
+
+    attachMemberNotificationStream(7, res, makeMemberSink());
+
+    expect((res as unknown as { write?: unknown }).write).toBeUndefined();
+    expect(logger.info).toHaveBeenCalledWith('📡 Member SSE client connected (member=7, 1 total)');
+  });
+
+  it('returns a cleanup that removes the listener and logs the member id', () => {
+    const res = makeRes();
+    const sink = makeMemberSink(0);
+    const onClose = vi.fn();
+
+    const cleanup = attachMemberNotificationStream(7, res, sink, onClose);
+    cleanup();
+
+    expect(sink.removeListener).toHaveBeenCalledWith(7, res);
+    expect(logger.info).toHaveBeenCalledWith('📡 Member SSE client disconnected (member=7, 0 remaining)');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

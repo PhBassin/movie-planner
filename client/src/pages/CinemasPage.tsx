@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/core.js';
-import { addToSelection, getMemberProfile, getSelection, removeFromSelection } from '../api/me.js';
+import { addToSelection, getMemberProfile, getSelection, removeFromSelection, submitTheater } from '../api/me.js';
 import { getTheaters } from '../api/theaters.js';
 import { AuthContext } from '../contexts/AuthContext.js';
 import type { Theater } from '../types/index.js';
@@ -51,6 +51,27 @@ export default function CinemasPage() {
     queryClient.invalidateQueries({ queryKey: ['selection'] }),
     queryClient.invalidateQueries({ queryKey: ['me'] }),
   ]);
+
+  // Propose a new cinema (TheaterSubmission): the synchronous outcomes resolve
+  // in this response — dedup degrades to a Selection add, a genuinely new
+  // cinema is queued and its resolution arrives later as a live notification.
+  const [submissionUrl, setSubmissionUrl] = useState('');
+  const submitMutation = useMutation({
+    mutationFn: submitTheater,
+    onSuccess: async (result) => {
+      setSubmissionUrl('');
+      if (result.outcome === 'selection_added') {
+        setNotice(`« ${result.theater.name} » est déjà dans le catalogue — il a été ajouté à votre Selection.`);
+        await refreshMemberSelection();
+        return;
+      }
+      setNotice('Proposition enregistrée. Vous serez notifié dès que ce cinéma sera disponible.');
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (error: Error) => {
+      setNotice(error.message || 'Impossible de proposer ce cinéma.');
+    },
+  });
   const filteredTheaters = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
     const activeTheaters = (theatersQuery.data ?? []).filter((theater) => theater.status === 'active');
@@ -128,6 +149,41 @@ export default function CinemasPage() {
             Fermer
           </button>
         </div>
+      )}
+
+      {isMember && (
+        <section className="mb-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-gray-900">Un cinéma manque ?</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Proposez la page AlloCiné d’un cinéma absent du catalogue. S’il est validé, il est ajouté automatiquement à votre Selection.
+          </p>
+          <form
+            className="mt-4 flex flex-col gap-3 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (submissionUrl.trim()) submitMutation.mutate(submissionUrl.trim());
+            }}
+            data-testid="submission-form"
+          >
+            <input
+              type="url"
+              value={submissionUrl}
+              onChange={(event) => setSubmissionUrl(event.target.value)}
+              placeholder="https://www.allocine.fr/seance/salle_gen_csalle=C0153.html"
+              className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+              aria-label="URL AlloCiné du cinéma"
+              data-testid="submission-url"
+            />
+            <button
+              type="submit"
+              disabled={submitMutation.isPending || !submissionUrl.trim()}
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="submission-submit"
+            >
+              {submitMutation.isPending ? 'Envoi…' : 'Proposer ce cinéma'}
+            </button>
+          </form>
+        </section>
       )}
 
       <label className="mb-6 block">
