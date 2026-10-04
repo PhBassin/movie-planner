@@ -21,6 +21,8 @@ export {
   getSelection,
   addToSelection,
   removeFromSelection,
+  updateAppearance,
+  type Appearance,
 } from './me.js';
 
 export {

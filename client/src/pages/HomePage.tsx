@@ -5,6 +5,7 @@ import { getWeeklyMovies, getMoviesByDate, getSelectionMovies, searchSelectionMo
 import MovieCard from '../components/MovieCard.js';
 import FilterBar from '../components/FilterBar.js';
 import ScrollToTop from '../components/ScrollToTop.js';
+import AppearanceToggle from '../components/AppearanceToggle.js';
 import { AuthContext } from '../contexts/AuthContext.js';
 import TheatersQuickLinks from '../components/TheatersQuickLinks.js';
 import { LoadingSpinner, ErrorMessage } from '../components/ui/PageStates.js';
@@ -197,9 +198,15 @@ export default function HomePage() {
 
       {/* Title and Date Info */}
       <div className="mb-4">
-        <h1 className="text-4xl font-bold mb-3">
-          {selectedDate || isVisitorToday ? 'Films du jour' : 'Au programme cette semaine'}
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-4xl font-bold mb-3">
+            {selectedDate || isVisitorToday ? 'Films du jour' : 'Au programme cette semaine'}
+          </h1>
+          {/* Appearance control — the only visual setting a Member owns */}
+          {isMember && profile && (
+            <AppearanceToggle appearance={profile.appearance} />
+          )}
+        </div>
         {weekStart && !selectedDate && !isVisitorToday && (
           <div className="flex items-center gap-2 text-gray-500 font-medium">
             <span className="bg-gray-100 px-2 py-0.5 rounded text-sm">Semaine ciné</span>
