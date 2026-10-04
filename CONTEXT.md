@@ -34,7 +34,7 @@ The Member is the reason movie-planner exists; Staff exist to operate it for the
 
 `unverified` and `suspended` both block submission; only `suspended` also blocks login (an unverified Member may still log in to read and curate their Selection). The suspension check lives in `AuthService.login` and runs only after the password has matched, so the failure ordering cannot be used to enumerate suspended accounts.
 
-The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance); it is the seam the Selection and Appearance tickets extend.
+The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance) and the Appearance is updated at `PUT /api/me/appearance` (same file — invalid values rejected before any write); this is the seam the Selection and Appearance tickets extend.
 
 **What a Member is *not*:**
 - Not **Staff**. A Member cannot trigger a scrape, cannot manage other Users, cannot touch admin Settings. Since a User has exactly one Role, a person who is both a Member and Staff does so across two accounts — never one Member that is also Staff.
@@ -101,7 +101,7 @@ This makes the link to Selection explicit: a *successful* TheaterSubmission term
 
 ### Appearance
 
-A Member's personal look for their homepage — concretely, a **light/dark mode** choice. Appearance is per-Member (a preferences row keyed by Member, alongside the Selection) and is the *only* visual control a Member owns.
+A Member's personal look for their homepage — concretely, a **light/dark mode** choice. Appearance is per-Member (a preferences row keyed by Member, alongside the Selection) and is the *only* visual control a Member owns. It is read on the profile surface (`GET /api/me`, defaulting to `light` when no preference row exists) and updated at `PUT /api/me/appearance` (`server/src/routes/me.ts`), persisted in `member_preferences` (`server/src/db/member-queries.ts`); the homepage carries the toggle control. Appearance carries no subscription gate — it is available to every Member, not a paid perk.
 
 Appearance **adapts** the Branding; it does not fight it. A dark Appearance reuses the admin's brand colors on a dark surface. A Member cannot choose custom colors, fonts, a logo, or a site name — those are Branding.
 

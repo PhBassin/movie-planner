@@ -22,6 +22,19 @@ export async function getMemberProfile(): Promise<MemberProfile> {
   return response.data.user;
 }
 
+export type Appearance = 'light' | 'dark';
+
+export async function updateAppearance(appearance: Appearance): Promise<Appearance> {
+  const response = await apiClient.put<ApiResponse<{ id: number; appearance: Appearance }>>(
+    '/me/appearance',
+    { appearance }
+  );
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to update appearance');
+  }
+  return response.data.appearance;
+}
+
 export async function getSelection(): Promise<Theater[]> {
   const response = await apiClient.get<ApiResponse<Theater[]>>('/me/selection');
   if (!response.success || !response.data) {

@@ -24,6 +24,7 @@ vi.mock('../db/internal/client.js', () => ({
 
 vi.mock('../db/member-queries.js', () => ({
     getMemberProfile: vi.fn(),
+    updateMemberAppearance: vi.fn(),
 }));
 
 // Mock the auth middleware with proper JWT verification using test secret
@@ -174,5 +175,71 @@ describe('GET /api/me', () => {
 
         expect(response.status).toBe(404);
         expect(response.body.success).toBe(false);
+    });
+});
+
+describe('PUT /api/me/appearance', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it.each(['light', 'dark'] as const)('should persist appearance=%s', async (appearance) => {
+        vi.mocked(memberQueries.updateMemberAppearance).mockResolvedValue(undefined);
+
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({ appearance });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.data).toEqual({ id: 7, appearance });
+        expect(memberQueries.updateMemberAppearance).toHaveBeenCalledWith(db, 7, appearance);
+    });
+
+    it('should reject a missing appearance without writing', async () => {
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({});
+
+        expect(response.status).toBe(400);
+        expect(response.body.success).toBe(false);
+        expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+    });
+
+    it.each([['system'], ['DARK'], [123], [null], [true]])(
+        'should reject the invalid appearance value %p without writing',
+        async (value) => {
+            const response = await request(app)
+                .put('/api/me/appearance')
+                .set('Authorization', `Bearer ${memberToken()}`)
+                .send({ appearance: value });
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+        }
+    );
+
+    it('should return 401 without a token', async () => {
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .send({ appearance: 'dark' });
+
+        expect(response.status).toBe(401);
+        expect(response.body.success).toBe(false);
+        expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 for a Staff account (Appearance is Member-owned)', async () => {
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken(1, 'admin', 'admin')}`)
+            .send({ appearance: 'dark' });
+
+        expect(response.status).toBe(403);
+        expect(response.body.success).toBe(false);
+        expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
     });
 });
