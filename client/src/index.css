@@ -33,6 +33,56 @@ body {
   font-family: var(--theme-font-body);
 }
 
+/*
+ * Member Appearance (light/dark) — see CONTEXT.md → Appearance.
+ * A dark Appearance adapts the Branding onto a dark surface: the admin's
+ * brand colors (--color-primary/secondary/accent, served by /api/theme.css)
+ * are reused untouched; only grounds, text and borders flip. There is no
+ * per-Member color/font override — recoloring is Branding, admin-owned.
+ */
+html.dark {
+  --theme-color-background: #111827;
+  --theme-color-text: #F9FAFB;
+  --theme-color-text-secondary: #9CA3AF;
+  --theme-color-border: #374151;
+}
+
+html.dark body {
+  background-color: var(--theme-color-background);
+  color: var(--theme-color-text);
+}
+
+/* Surfaces: the common utility grounds mapped onto the dark scale */
+html.dark .bg-white { background-color: #1F2937; }
+html.dark .bg-gray-50 { background-color: #111827; }
+html.dark .bg-gray-50\/95 { background-color: rgb(17 24 39 / 0.95); }
+html.dark .bg-gray-100 { background-color: #374151; }
+html.dark .bg-gray-200 { background-color: #374151; }
+
+/* Text: light-on-dark, keeping the same visual hierarchy */
+html.dark .text-gray-400 { color: #9CA3AF; }
+html.dark .text-gray-500 { color: #9CA3AF; }
+html.dark .text-gray-600 { color: #D1D5DB; }
+html.dark .text-gray-700 { color: #E5E7EB; }
+html.dark .text-gray-800 { color: #F3F4F6; }
+html.dark .text-gray-900 { color: #F9FAFB; }
+
+/* Borders and separators */
+html.dark .border-gray-50 { border-color: #374151; }
+html.dark .border-gray-100 { border-color: #374151; }
+html.dark .border-gray-200 { border-color: #374151; }
+html.dark .border-gray-300 { border-color: #4B5563; }
+
+/* Cards and search highlight — the homepage's content surfaces */
+html.dark .card {
+  background-color: #1F2937;
+}
+
+html.dark mark {
+  background-color: rgb(250 204 21 / 0.35); /* brand-adjacent yellow, dimmed */
+  color: inherit;
+}
+
 .btn-primary {
   padding: 0.5rem 1rem;
   background-color: var(--color-primary);

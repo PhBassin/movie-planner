@@ -20,6 +20,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RequirePermission from './components/RequirePermission';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useTheme } from './hooks/useTheme';
+import { useAppearance } from './hooks/useAppearance';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ADMIN_PERMISSIONS } from './utils/adminPermissions';
 
@@ -69,6 +70,9 @@ function AppRoutes() {
 
   // Apply theme globally
   useTheme();
+
+  // Sync the Member Appearance (light/dark) onto the document root
+  useAppearance();
 
   useEffect(() => {
     const handleUnauthorized = (event: Event) => {
