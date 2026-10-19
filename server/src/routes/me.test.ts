@@ -12,6 +12,7 @@ import meRouter from './me.js';
 import { db } from '../db/internal/client.js';
 import * as memberQueries from '../db/member-queries.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { protectedLimiter } from '../middleware/rate-limit.js';
 
 const TEST_JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
 
@@ -53,7 +54,17 @@ vi.mock('../middleware/auth.js', () => ({
             });
         }
     }),
+    requireMember: vi.fn((req: AuthRequest, res, next) => {
+        if (req.user?.role_name !== 'member') {
+            return res.status(403).json({ success: false, error: 'This endpoint is for member accounts' });
+        }
+        next();
+    }),
     AuthRequest: {} as any,
+}));
+
+vi.mock('../middleware/rate-limit.js', () => ({
+    protectedLimiter: vi.fn((_req, _res, next) => next()),
 }));
 
 const app = express();
@@ -241,5 +252,16 @@ describe('PUT /api/me/appearance', () => {
         expect(response.status).toBe(403);
         expect(response.body.success).toBe(false);
         expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+    });
+
+    it('should go through the protected rate limiter (a Member-scoped write)', async () => {
+        vi.mocked(memberQueries.updateMemberAppearance).mockResolvedValue(undefined);
+
+        await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({ appearance: 'dark' });
+
+        expect(protectedLimiter).toHaveBeenCalled();
     });
 });

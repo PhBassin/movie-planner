@@ -5,6 +5,7 @@ import { useAppearance } from './useAppearance.js';
 import { getMemberProfile } from '../api/me.js';
 import { AuthContext, type User } from '../contexts/AuthContext.js';
 import { memberProfileFixture } from '../test/fixtures.js';
+import { APPEARANCE_STORAGE_KEY } from '../utils/appearance.js';
 
 const profile = memberProfileFixture;
 
@@ -33,6 +34,15 @@ const memberAuth: AuthContextShape = {
 
 const visitorAuth: AuthContextShape = { ...memberAuth, isAuthenticated: false, user: null };
 
+// A stored Member session not yet validated by /api/auth/me
+const pendingMemberAuth: AuthContextShape = { ...memberAuth, isAuthenticated: false };
+
+const staffAuth: AuthContextShape = {
+  ...memberAuth,
+  user: { id: 1, username: 'admin', role_id: 1, role_name: 'admin', is_system_role: true, permissions: [] },
+  isAdmin: true,
+};
+
 const renderHook = (auth: AuthContextShape) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -54,11 +64,13 @@ function Probe() {
 describe('useAppearance', () => {
   beforeEach(() => {
     document.documentElement.classList.remove('dark');
+    localStorage.clear();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     document.documentElement.classList.remove('dark');
+    localStorage.clear();
   });
 
   it('applies the dark class for a Member whose Appearance is dark', async () => {
@@ -103,11 +115,56 @@ describe('useAppearance', () => {
     await waitFor(() => {
       expect(document.documentElement.classList.contains('dark')).toBe(false);
     });
+    expect(localStorage.getItem(APPEARANCE_STORAGE_KEY)).toBeNull();
   });
 
   it('never fetches a profile for a Visitor', async () => {
     renderHook(visitorAuth);
 
     expect(getMemberProfile).not.toHaveBeenCalled();
+  });
+
+  it('remembers the persisted Appearance locally for the pre-paint script', async () => {
+    vi.mocked(getMemberProfile).mockResolvedValue(profile('dark'));
+
+    renderHook(memberAuth);
+
+    await waitFor(() => {
+      expect(localStorage.getItem(APPEARANCE_STORAGE_KEY)).toBe('dark');
+    });
+  });
+
+  it('keeps the pre-painted dark surface while the profile is loading', async () => {
+    vi.mocked(getMemberProfile).mockReturnValue(new Promise(() => {}));
+    document.documentElement.classList.add('dark');
+
+    renderHook(memberAuth);
+
+    await waitFor(() => {
+      expect(getMemberProfile).toHaveBeenCalled();
+    });
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  it('keeps the pre-painted dark surface while a stored Member session is being validated', () => {
+    document.documentElement.classList.add('dark');
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, 'dark');
+
+    renderHook(pendingMemberAuth);
+
+    expect(getMemberProfile).not.toHaveBeenCalled();
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(localStorage.getItem(APPEARANCE_STORAGE_KEY)).toBe('dark');
+  });
+
+  it('forgets the local copy for Staff (Appearance is Member-owned)', () => {
+    document.documentElement.classList.add('dark');
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, 'dark');
+
+    renderHook(staffAuth);
+
+    expect(getMemberProfile).not.toHaveBeenCalled();
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(localStorage.getItem(APPEARANCE_STORAGE_KEY)).toBeNull();
   });
 });

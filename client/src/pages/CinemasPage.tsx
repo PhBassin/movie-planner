@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/core.js';
 import { addToSelection, getMemberProfile, getSelection, removeFromSelection, submitTheater } from '../api/me.js';
+import { ME_QUERY_KEY } from '../api/query-keys.js';
 import { getTheaters } from '../api/theaters.js';
 import { AuthContext } from '../contexts/AuthContext.js';
 import type { Theater } from '../types/index.js';
@@ -33,7 +34,7 @@ export default function CinemasPage() {
     queryFn: getTheaters,
   });
   const profileQuery = useQuery({
-    queryKey: ['me'],
+    queryKey: ME_QUERY_KEY,
     queryFn: getMemberProfile,
     enabled: isMember,
   });
@@ -49,7 +50,7 @@ export default function CinemasPage() {
   );
   const refreshMemberSelection = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['selection'] }),
-    queryClient.invalidateQueries({ queryKey: ['me'] }),
+    queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
   ]);
 
   // Propose a new cinema (TheaterSubmission): the synchronous outcomes resolve
@@ -66,7 +67,7 @@ export default function CinemasPage() {
         return;
       }
       setNotice('Proposition enregistrée. Vous serez notifié dès que ce cinéma sera disponible.');
-      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
     onError: (error: Error) => {
       setNotice(error.message || 'Impossible de proposer ce cinéma.');
@@ -88,7 +89,7 @@ export default function CinemasPage() {
     onError: async (error: Error) => {
       if (error instanceof ApiError && error.status === 409) {
         setNotice(error.message);
-        await queryClient.invalidateQueries({ queryKey: ['me'] });
+        await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
         return;
       }
       setNotice(error.message || 'Impossible d’ajouter ce cinéma à votre Selection.');

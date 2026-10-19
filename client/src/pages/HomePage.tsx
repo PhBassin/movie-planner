@@ -6,6 +6,7 @@ import MovieCard from '../components/MovieCard.js';
 import FilterBar from '../components/FilterBar.js';
 import ScrollToTop from '../components/ScrollToTop.js';
 import AppearanceToggle from '../components/AppearanceToggle.js';
+import { ME_QUERY_KEY } from '../api/query-keys.js';
 import { AuthContext } from '../contexts/AuthContext.js';
 import TheatersQuickLinks from '../components/TheatersQuickLinks.js';
 import { LoadingSpinner, ErrorMessage } from '../components/ui/PageStates.js';
@@ -31,7 +32,7 @@ export default function HomePage() {
   const isSpecificDateView = selectedDate !== '' && !isMaintenant;
 
   const profileQuery = useQuery({
-    queryKey: ['me'],
+    queryKey: ME_QUERY_KEY,
     queryFn: getMemberProfile,
     enabled: isMember,
   });
@@ -144,9 +145,15 @@ export default function HomePage() {
   if (error) return <ErrorMessage message={error} />;
 
   // Empty Selection: the whole homepage is the add-cinema call to action.
+  // The Appearance toggle stays reachable here too (it is a homepage control).
   if (selectionEmpty) {
     return (
       <div className="max-w-5xl mx-auto">
+        {isMember && profile && (
+          <div className="flex justify-end mb-4">
+            <AppearanceToggle appearance={profile.appearance} />
+          </div>
+        )}
         <div className="bg-gray-50 rounded-2xl p-12 text-center border-2 border-dashed border-gray-200">
           <h1 className="text-2xl font-bold mb-3">Votre sélection est vide</h1>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">

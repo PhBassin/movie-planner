@@ -3,6 +3,9 @@ import type { ApiResponse, Theater, MemberNotice } from '../types/index.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
+/** A Member's Appearance (see CONTEXT.md → Appearance). */
+export type Appearance = 'light' | 'dark';
+
 export interface MemberProfile {
   id: number;
   email: string;
@@ -10,7 +13,7 @@ export interface MemberProfile {
   role_name: string;
   status: 'unverified' | 'active' | 'suspended';
   email_verified: boolean;
-  appearance: 'light' | 'dark';
+  appearance: Appearance;
   selectionCount: number;
   selectionLimit: number;
   created_at: string;
@@ -23,8 +26,6 @@ export async function getMemberProfile(): Promise<MemberProfile> {
   }
   return response.data.user;
 }
-
-export type Appearance = 'light' | 'dark';
 
 export async function updateAppearance(appearance: Appearance): Promise<Appearance> {
   const response = await apiClient.put<ApiResponse<{ id: number; appearance: Appearance }>>(

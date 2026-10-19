@@ -21,6 +21,7 @@ import RequirePermission from './components/RequirePermission';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useTheme } from './hooks/useTheme';
 import { useAppearance } from './hooks/useAppearance';
+import { useClearQueryCacheOnLogout } from './hooks/useClearQueryCacheOnLogout.js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ADMIN_PERMISSIONS } from './utils/adminPermissions';
 
@@ -73,6 +74,9 @@ function AppRoutes() {
 
   // Sync the Member Appearance (light/dark) onto the document root
   useAppearance();
+
+  // Per-account cached data must not outlive the session
+  useClearQueryCacheOnLogout();
 
   useEffect(() => {
     const handleUnauthorized = (event: Event) => {

@@ -58,6 +58,12 @@ test.describe('Member Appearance (light/dark)', () => {
     const password = 'Str0ng!Pass';
 
     await registerAndLogin(page, email, password);
+
+    // The homepage toggle is reachable even before any cinema is selected.
+    await page.goto('/');
+    await expect(page.getByTestId('empty-selection-cta')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('appearance-toggle')).toBeVisible();
+
     await selectOneCinema(page);
 
     // Homepage toggle control — light by default.
@@ -79,7 +85,36 @@ test.describe('Member Appearance (light/dark)', () => {
       )
     ).toBe('rgb(31, 41, 55)');
 
-    // Persists across a reload (server-side, not just client state).
+    // Branding is adapted, not replaced: the header keeps the secondary brand
+    // hue but is deepened so it stays distinct from the dark cards.
+    const headerColor = await page.evaluate(
+      () => getComputedStyle(document.querySelector('header')!).backgroundColor
+    );
+    expect(headerColor).not.toBe('rgb(31, 41, 55)');
+
+    // A dark primary brand color is lifted for text on the dark surface,
+    // while filled primary surfaces keep the admin's exact brand color.
+    const brand = await page.evaluate(() => {
+      const root = document.documentElement;
+      root.style.setProperty('--color-primary', 'rgb(30, 58, 138)');
+      const text = document.createElement('span');
+      text.className = 'text-primary';
+      const filled = document.createElement('span');
+      filled.className = 'bg-primary';
+      document.body.append(text, filled);
+      const result = {
+        text: getComputedStyle(text).color,
+        filled: getComputedStyle(filled).backgroundColor,
+      };
+      text.remove();
+      filled.remove();
+      root.style.removeProperty('--color-primary');
+      return result;
+    });
+    expect(brand.filled).toBe('rgb(30, 58, 138)');
+    expect(brand.text).not.toBe('rgb(30, 58, 138)');
+
+    // Persists across a reload, painted before the profile answers.
     await page.reload();
     await expect(page.getByTestId('appearance-toggle')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('html')).toHaveClass(/dark/);

@@ -329,7 +329,45 @@ GET /api/me
 }
 ```
 
-**Notes:** `status` is the Member lifecycle discriminator (`unverified | active | suspended`). A `suspended` Member cannot log in (`POST /api/auth/login` returns `401 Account suspended`); an unverified Member can.
+**Notes:** `status` is the Member lifecycle discriminator (`unverified | active | suspended`). A `suspended` Member cannot log in (`POST /api/auth/login` returns `401 Account suspended`); an unverified Member can. `appearance` defaults to `light` until the Member picks one.
+
+---
+
+### Update Member Appearance
+
+```http
+PUT /api/me/appearance
+```
+
+**Authentication:** Required (cookie or Bearer token)
+**Role:** Member only (Staff get `403`)
+**Rate limit:** protected limiter (see [Rate Limiting](./rate-limiting.md))
+
+**Description:** Set the authenticated Member's Appearance (light/dark) — the only visual control a Member owns. Persisted server-side in `member_preferences`, so the choice follows the Member across sessions and devices. No subscription gate: available to every Member.
+
+**Request Body:**
+```json
+{
+  "appearance": "dark"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 2,
+    "appearance": "dark"
+  }
+}
+```
+
+**Errors:**
+- `400` — `appearance` missing or not exactly `light` or `dark` (case-sensitive). Nothing is written.
+- `401` — not authenticated.
+- `403` — authenticated as Staff.
+- `429` — rate limit exceeded.
 
 ---
 

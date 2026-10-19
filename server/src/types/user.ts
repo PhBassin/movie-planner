@@ -7,6 +7,17 @@
  */
 export type MemberStatus = 'unverified' | 'active' | 'suspended';
 
+/**
+ * A Member's Appearance (see CONTEXT.md → Appearance): the light/dark flag
+ * stored in `member_preferences`. The only visual control a Member owns.
+ */
+export const APPEARANCES = ['light', 'dark'] as const;
+export type Appearance = (typeof APPEARANCES)[number];
+
+export function isAppearance(value: unknown): value is Appearance {
+  return typeof value === 'string' && (APPEARANCES as readonly string[]).includes(value);
+}
+
 // Public user data (no password hash)
 export interface UserPublic {
   id: number;

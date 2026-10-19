@@ -1,5 +1,5 @@
 import { type DB, type DBQueryExecutor } from './index.js';
-import { type MemberStatus } from '../types/user.js';
+import { type Appearance, type MemberStatus } from '../types/user.js';
 
 /**
  * Member queries — the Member specialization of the shared User identity
@@ -31,7 +31,7 @@ export interface MemberProfileRow {
   role_name: string;
   status: MemberStatus;
   email_verified_at: string | null;
-  appearance: 'light' | 'dark';
+  appearance: Appearance;
   selection_count: number;
   created_at: string;
 }
@@ -126,7 +126,7 @@ export async function createMember(
 export async function updateMemberAppearance(
   db: DB,
   userId: number,
-  appearance: 'light' | 'dark'
+  appearance: Appearance
 ): Promise<void> {
   await db.query(
     `INSERT INTO member_preferences (member_id, appearance)
