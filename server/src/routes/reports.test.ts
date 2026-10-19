@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import router from './reports.js';
 import { getRouteHandler } from '../test-utils/route-handler.js';
 import * as reportQueries from '../db/report-queries.js';
+import { getScrapeAttemptsByReport } from '../db/scrape-attempt-queries.js';
 import { db } from '../db/internal/client.js';
 
 // Mock dependencies
@@ -18,6 +19,10 @@ vi.mock('../db/internal/client.js', () => ({
 vi.mock('../db/report-queries.js', () => ({
   getScrapeReports: vi.fn(),
   getScrapeReport: vi.fn()
+}));
+
+vi.mock('../db/scrape-attempt-queries.js', () => ({
+  getScrapeAttemptsByReport: vi.fn(),
 }));
 
 vi.mock('../utils/logger.js', () => ({
@@ -124,11 +129,6 @@ describe('Routes - Reports', () => {
       ];
 
       vi.mocked(reportQueries.getScrapeReport).mockResolvedValue(mockReport as any);
-      
-      const { getScrapeAttemptsByReport } = await import('../db/scrape-attempt-queries.js');
-      vi.mock('../db/scrape-attempt-queries.js', () => ({
-        getScrapeAttemptsByReport: vi.fn(),
-      }));
       vi.mocked(getScrapeAttemptsByReport).mockResolvedValue(mockAttempts as any);
 
       const handler = getRouteHandler(router, '/:id/details', 'get');
