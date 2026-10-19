@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthContext, type User } from '../contexts/AuthContext.js';
+import { ME_QUERY_KEY } from '../api/query-keys.js';
 import { useClearQueryCacheOnLogout } from './useClearQueryCacheOnLogout.js';
 
 const member: User = {
@@ -38,14 +39,14 @@ const tree = (queryClient: QueryClient, user: User | null) => (
 describe('useClearQueryCacheOnLogout', () => {
   it('drops the cached account data when the session ends', () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(['me'], { appearance: 'dark' });
+    queryClient.setQueryData(ME_QUERY_KEY, { appearance: 'dark' });
 
     const { rerender } = render(tree(queryClient, member));
-    expect(queryClient.getQueryData(['me'])).toBeDefined();
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeDefined();
 
     rerender(tree(queryClient, null));
 
-    expect(queryClient.getQueryData(['me'])).toBeUndefined();
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeUndefined();
   });
 
   it('keeps the cache for a Visitor who never had a session', () => {
