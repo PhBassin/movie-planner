@@ -1,8 +1,10 @@
 import express, { Response, NextFunction } from 'express';
 import type { ApiResponse } from '../types/api.js';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { getMemberProfile } from '../db/member-queries.js';
-import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { requireAuth, requireMember, type AuthRequest } from '../middleware/auth.js';
+import { protectedLimiter } from '../middleware/rate-limit.js';
+import { getMemberProfile, updateMemberAppearance } from '../db/member-queries.js';
+import { isAppearance } from '../types/user.js';
+import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
 import { MAX_SELECTION_SIZE } from '../services/selection-service.js';
 
 /**
@@ -50,5 +52,34 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
         next(error);
     }
 });
+
+// PUT /api/me/appearance - Update the Member's own Appearance (light/dark).
+// The only visual control a Member owns; validated before the write so an
+// invalid value can never reach `member_preferences`. Rate-limited and
+// member-gated like the other Member-scoped writes (`/api/me/selection`).
+router.put(
+    '/appearance',
+    protectedLimiter,
+    requireAuth,
+    requireMember,
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+        try {
+            const { appearance } = req.body ?? {};
+            if (!isAppearance(appearance)) {
+                throw new ValidationError("Invalid appearance value. Use 'light' or 'dark'");
+            }
+
+            await updateMemberAppearance(req.app.get('db'), req.user!.id, appearance);
+
+            const response: ApiResponse = {
+                success: true,
+                data: { id: req.user!.id, appearance },
+            };
+            res.json(response);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
 
 export default router;

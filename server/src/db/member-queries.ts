@@ -1,5 +1,5 @@
 import { type DB, type DBQueryExecutor } from './index.js';
-import { type MemberStatus } from '../types/user.js';
+import { type Appearance, type MemberStatus } from '../types/user.js';
 
 /**
  * Member queries — the Member specialization of the shared User identity
@@ -31,7 +31,7 @@ export interface MemberProfileRow {
   role_name: string;
   status: MemberStatus;
   email_verified_at: string | null;
-  appearance: 'light' | 'dark';
+  appearance: Appearance;
   selection_count: number;
   created_at: string;
 }
@@ -118,9 +118,27 @@ export async function createMember(
 }
 
 /**
+ * Persist a Member's Appearance (light/dark) in `member_preferences` — the
+ * Member-owned preference row keyed by Member (see CONTEXT.md → Appearance).
+ * An upsert: the first write creates the row, later writes flip the flag.
+ * Values are validated at the route; this trusts its caller.
+ */
+export async function updateMemberAppearance(
+  db: DB,
+  userId: number,
+  appearance: Appearance
+): Promise<void> {
+  await db.query(
+    `INSERT INTO member_preferences (member_id, appearance)
+     VALUES ($1, $2)
+     ON CONFLICT (member_id) DO UPDATE SET appearance = EXCLUDED.appearance`,
+    [userId, appearance]
+  );
+}
+
+/**
  * Load a Member's own profile for `/api/me`. The appearance comes from
- * `member_preferences` and defaults to 'light' when no row exists yet
- * (the Appearance ticket owns preference writes).
+ * `member_preferences` and defaults to 'light' when no row exists yet.
  */
 export async function getMemberProfile(
   db: DB,

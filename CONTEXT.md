@@ -21,7 +21,7 @@ A User whose role is `member` — the cinema-goer, the consumer the SaaS exists 
 1. **Self-registration by email.** A Member creates their own account through a public sign-up route (`POST /api/auth/signup` in `server/src/routes/auth.ts`), identifying by **email** and a password. Staff, by contrast, identify by **username** and are created by an Admin (the existing `POST /auth/register` flow, which is staff-only). A freshly registered Member is **unverified**. The login path (`AuthService.login`) accepts either identifier: an identifier containing `@` is looked up by email, everything else by username.
 2. **Email verification.** A Member becomes **verified** by confirming ownership of their email — clicking the link the **Mailer** sent to their address (see *Mailer* under Authentication), which flips `email_verified_at` and moves the Member `unverified → active`. Verification splits the two Member powers: **selecting** from the catalog is open to any Member; **submitting** a new cinema is open only to a *verified* Member. Verification is the abuse control that complements the per-Member scrape throttle — see TheaterSubmission. It is load-bearing: there is no bypass flag.
 3. **No administrative reach.** A Member holds none of the scraper / settings / users / system permissions. A Member can read the shared cinema catalog (Theaters, Movies, Showtimes) and act only on their own data.
-4. **Personal data.** A Member owns a **Selection** of Theaters and an **Appearance** (light/dark) for their homepage — concepts Staff do not have.
+4. **Personal data.** A Member owns a **Selection** of Theaters and an **Appearance** (light/dark) for their pages — concepts Staff do not have.
 
 The Member is the reason movie-planner exists; Staff exist to operate it for them.
 
@@ -34,7 +34,7 @@ The Member is the reason movie-planner exists; Staff exist to operate it for the
 
 `unverified` and `suspended` both block submission; only `suspended` also blocks login (an unverified Member may still log in to read and curate their Selection). The suspension check lives in `AuthService.login` and runs only after the password has matched, so the failure ordering cannot be used to enumerate suspended accounts.
 
-The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance); it is the seam the Selection and Appearance tickets extend.
+The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance) and the Appearance is updated at `PUT /api/me/appearance` (same file — invalid values rejected before any write); this is the seam the Selection and Appearance tickets extend.
 
 **What a Member is *not*:**
 - Not **Staff**. A Member cannot trigger a scrape, cannot manage other Users, cannot touch admin Settings. Since a User has exactly one Role, a person who is both a Member and Staff does so across two accounts — never one Member that is also Staff.
@@ -103,9 +103,9 @@ This makes the link to Selection explicit: a *successful* TheaterSubmission term
 
 ### Appearance
 
-A Member's personal look for their homepage — concretely, a **light/dark mode** choice. Appearance is per-Member (a preferences row keyed by Member, alongside the Selection) and is the *only* visual control a Member owns.
+A Member's personal look across their pages — concretely, a **light/dark mode** choice. Appearance is per-Member (a preferences row keyed by Member, alongside the Selection) and is the *only* visual control a Member owns. It is read on the profile surface (`GET /api/me`, defaulting to `light` when no preference row exists) and updated at `PUT /api/me/appearance` (`server/src/routes/me.ts`), persisted in `member_preferences` (`server/src/db/member-queries.ts`); the homepage carries the toggle control (also on the empty-Selection homepage). Once chosen, the Appearance applies to every page the Member browses — homepage, Cinémas, theater and movie pages — so navigation never flips the surface back and forth (`client/src/hooks/useAppearance.ts`); Staff and Visitors always get the light surface. The last known choice is also remembered device-locally only to paint the right surface before the profile loads (`client/src/utils/appearance.ts`, `client/public/appearance-init.js`); the server copy stays authoritative. Appearance carries no subscription gate — it is available to every Member, not a paid perk.
 
-Appearance **adapts** the Branding; it does not fight it. A dark Appearance reuses the admin's brand colors on a dark surface. A Member cannot choose custom colors, fonts, a logo, or a site name — those are Branding.
+Appearance **adapts** the Branding; it does not fight it. A dark Appearance derives its colors from the admin's brand colors on a dark surface (`client/src/index.css`): filled brand surfaces keep the exact brand color, brand-colored text is lifted to a readable lightness, and the secondary (header/footer) is deepened to stay distinct from dark cards. Branding itself is never written. A Member cannot choose custom colors, fonts, a logo, or a site name — those are Branding.
 
 **What Appearance is *not*:**
 - Not **Branding**. Branding is admin-owned and instance-wide (see below); Appearance is Member-owned and personal. They never write to the same place.

@@ -12,6 +12,7 @@ import meRouter from './me.js';
 import { db } from '../db/internal/client.js';
 import * as memberQueries from '../db/member-queries.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { protectedLimiter } from '../middleware/rate-limit.js';
 
 const TEST_JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
 
@@ -24,6 +25,7 @@ vi.mock('../db/internal/client.js', () => ({
 
 vi.mock('../db/member-queries.js', () => ({
     getMemberProfile: vi.fn(),
+    updateMemberAppearance: vi.fn(),
 }));
 
 // Mock the auth middleware with proper JWT verification using test secret
@@ -52,7 +54,17 @@ vi.mock('../middleware/auth.js', () => ({
             });
         }
     }),
+    requireMember: vi.fn((req: AuthRequest, res, next) => {
+        if (req.user?.role_name !== 'member') {
+            return res.status(403).json({ success: false, error: 'This endpoint is for member accounts' });
+        }
+        next();
+    }),
     AuthRequest: {} as any,
+}));
+
+vi.mock('../middleware/rate-limit.js', () => ({
+    protectedLimiter: vi.fn((_req, _res, next) => next()),
 }));
 
 const app = express();
@@ -174,5 +186,82 @@ describe('GET /api/me', () => {
 
         expect(response.status).toBe(404);
         expect(response.body.success).toBe(false);
+    });
+});
+
+describe('PUT /api/me/appearance', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it.each(['light', 'dark'] as const)('should persist appearance=%s', async (appearance) => {
+        vi.mocked(memberQueries.updateMemberAppearance).mockResolvedValue(undefined);
+
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({ appearance });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.data).toEqual({ id: 7, appearance });
+        expect(memberQueries.updateMemberAppearance).toHaveBeenCalledWith(db, 7, appearance);
+    });
+
+    it('should reject a missing appearance without writing', async () => {
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({});
+
+        expect(response.status).toBe(400);
+        expect(response.body.success).toBe(false);
+        expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+    });
+
+    it.each([['system'], ['DARK'], [123], [null], [true]])(
+        'should reject the invalid appearance value %p without writing',
+        async (value) => {
+            const response = await request(app)
+                .put('/api/me/appearance')
+                .set('Authorization', `Bearer ${memberToken()}`)
+                .send({ appearance: value });
+
+            expect(response.status).toBe(400);
+            expect(response.body.success).toBe(false);
+            expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+        }
+    );
+
+    it('should return 401 without a token', async () => {
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .send({ appearance: 'dark' });
+
+        expect(response.status).toBe(401);
+        expect(response.body.success).toBe(false);
+        expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 for a Staff account (Appearance is Member-owned)', async () => {
+        const response = await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken(1, 'admin', 'admin')}`)
+            .send({ appearance: 'dark' });
+
+        expect(response.status).toBe(403);
+        expect(response.body.success).toBe(false);
+        expect(memberQueries.updateMemberAppearance).not.toHaveBeenCalled();
+    });
+
+    it('should go through the protected rate limiter (a Member-scoped write)', async () => {
+        vi.mocked(memberQueries.updateMemberAppearance).mockResolvedValue(undefined);
+
+        await request(app)
+            .put('/api/me/appearance')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({ appearance: 'dark' });
+
+        expect(protectedLimiter).toHaveBeenCalled();
     });
 });

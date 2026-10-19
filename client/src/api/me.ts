@@ -3,6 +3,9 @@ import type { ApiResponse, Theater, MemberNotice } from '../types/index.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
+/** A Member's Appearance (see CONTEXT.md → Appearance). */
+export type Appearance = 'light' | 'dark';
+
 export interface MemberProfile {
   id: number;
   email: string;
@@ -10,7 +13,7 @@ export interface MemberProfile {
   role_name: string;
   status: 'unverified' | 'active' | 'suspended';
   email_verified: boolean;
-  appearance: 'light' | 'dark';
+  appearance: Appearance;
   selectionCount: number;
   selectionLimit: number;
   created_at: string;
@@ -22,6 +25,17 @@ export async function getMemberProfile(): Promise<MemberProfile> {
     throw new Error(response.error || 'Failed to fetch member profile');
   }
   return response.data.user;
+}
+
+export async function updateAppearance(appearance: Appearance): Promise<Appearance> {
+  const response = await apiClient.put<ApiResponse<{ id: number; appearance: Appearance }>>(
+    '/me/appearance',
+    { appearance }
+  );
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to update appearance');
+  }
+  return response.data.appearance;
 }
 
 export async function getSelection(): Promise<Theater[]> {

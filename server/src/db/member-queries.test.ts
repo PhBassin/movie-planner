@@ -5,6 +5,7 @@ import {
   getMemberById,
   createMember,
   getMemberProfile,
+  updateMemberAppearance,
   isPendingVerification,
   type MemberCredentialRow,
 } from './member-queries.js';
@@ -162,6 +163,23 @@ describe('Member Queries', () => {
       const result = await getMemberProfile(mockDb, 999);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('updateMemberAppearance', () => {
+    it.each(['light', 'dark'] as const)('upserts the appearance to %s', async (appearance) => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
+
+      await updateMemberAppearance(mockDb, 7, appearance);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO member_preferences'),
+        [7, appearance]
+      );
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('ON CONFLICT (member_id) DO UPDATE'),
+        expect.any(Array)
+      );
     });
   });
 });

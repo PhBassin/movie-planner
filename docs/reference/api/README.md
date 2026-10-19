@@ -34,6 +34,7 @@ Member-owned theater Selection and cap information.
 
 **Endpoints:**
 - `GET /api/me` - Get Member profile and Selection count/limit
+- `PUT /api/me/appearance` - Set my Appearance, `light` or `dark` (Member only — see [auth.md](./auth.md#update-member-appearance))
 - `GET /api/me/selection` - List my Selection (Member only)
 - `GET /api/me/selection/movies` - List Selection homepage movies (Member only)
 - `GET /api/me/selection/movies/search` - Search Selection movies (Member only)

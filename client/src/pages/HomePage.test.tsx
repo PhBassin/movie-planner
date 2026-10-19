@@ -530,4 +530,13 @@ describe('HomePage — polymorphic root', () => {
     expect(screen.queryByTestId('new-this-week-section')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sticky-search-date-container')).not.toBeInTheDocument();
   });
+
+  it('keeps the Appearance toggle reachable when the Selection is empty', async () => {
+    setupMember({ movies: [], profile: { selectionCount: 0 }, selection: [] });
+
+    renderPage();
+
+    expect(await screen.findByTestId('empty-selection-cta')).toBeInTheDocument();
+    expect(screen.getByTestId('appearance-toggle')).toBeInTheDocument();
+  });
 });
