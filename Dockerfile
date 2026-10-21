@@ -10,6 +10,13 @@ COPY packages/scraper-protocol/package.json ./packages/scraper-protocol/
 RUN npm ci --legacy-peer-deps && \
     npm cache clean --force && \
     rm -rf ~/.npm /tmp/* /var/tmp/*
+# The lockfile decides where dependencies land: npm may hoist everything to
+# the root node_modules (its default), in which case no workspace-local
+# node_modules exists after `npm ci`. The builder stages below COPY those
+# directories unconditionally, so make sure they always exist — empty is
+# fine when every dependency is hoisted to the root.
+RUN mkdir -p client/node_modules server/node_modules scraper/node_modules \
+    packages/scraper-protocol/node_modules
 
 FROM node:24-slim AS frontend-builder
 WORKDIR /app
