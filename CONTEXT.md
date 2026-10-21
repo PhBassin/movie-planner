@@ -34,6 +34,8 @@ The Member is the reason movie-planner exists; Staff exist to operate it for the
 
 `unverified` and `suspended` both block submission; only `suspended` also blocks login (an unverified Member may still log in to read and curate their Selection). The suspension check lives in `AuthService.login` and runs only after the password has matched, so the failure ordering cannot be used to enumerate suspended accounts.
 
+**Staff surface (issue #65).** The Admin oversight of the Member base lives at `/api/members` (`server/src/routes/members.ts`, `MemberAdminService`): list, view, **suspend**, **reinstate**, **delete**. Suspension is a single transaction — status flip plus the password-change Session revocation (`revokeAllUserTokens`) — so a suspended Member loses every refresh token at once. Two transition rules keep the state machine honest: only an **active** Member can be suspended, and only a **suspended** Member can be reinstated (back to `active`). Suspending an `unverified` Member is rejected precisely because reinstatement restores `active` — the verified steady state — and must never bypass email verification; an abusive unverified Member is deleted instead. Deletion is the Admin-mediated erasure path (ADR 0004): cascades remove Member-owned data, never the Theaters they introduced. The surface is gated by the `members:list | read | update | delete` permission category, granted to the **admin** role only — operators keep no reach over Members.
+
 The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance) and the Appearance is updated at `PUT /api/me/appearance` (same file — invalid values rejected before any write); this is the seam the Selection and Appearance tickets extend.
 
 **What a Member is *not*:**
@@ -45,7 +47,7 @@ The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` 
 
 The collective term for the Users who **operate** the platform, as opposed to those who merely use it. Staff = the union of the `admin` and `operator` roles. "Staff" exists in the glossary primarily to draw a clean line against **Member**; it is not itself a single role.
 
-- **Admin** (`admin` role, system) — full access via the hardcoded permission bypass (`is_system_role === true && role_name === 'admin'`, enforced at `middleware/auth.ts:isAdminUser`). The French **"admin général"** is a *role description* for any holder of this role — not a distinct entity, sub-role, or flagged user. There is no singular owner/primary Admin in the model; multiple peer Admins are supported (a backup Admin is recommended), all with identical powers. An Admin owns the scraping pipeline, the catalog curation, the user roster, and every setting — all as peer Staff actions, no power reserved to a singular admin. See ADR 0007. The *first* admin comes into existence through the **Bootstrap admin** (see Database initialization), not via the staff-creation route.
+- **Admin** (`admin` role, system) — full access via the hardcoded permission bypass (`is_system_role === true && role_name === 'admin'`, enforced at `middleware/auth.ts:isAdminUser`). The French **"admin général"** is a *role description* for any holder of this role — not a distinct entity, sub-role, or flagged user. There is no singular owner/primary Admin in the model; multiple peer Admins are supported (a backup Admin is recommended), all with identical powers. An Admin owns the scraping pipeline, the catalog curation, the user roster, and every setting — all as peer Staff actions, no power reserved to a singular admin. The Admin also holds the exclusive Member-management surface (`members:*` permissions — see Member). See ADR 0007. The *first* admin comes into existence through the **Bootstrap admin** (see Database initialization), not via the staff-creation route.
 - **Operator** (`operator` role) — a scoped Staff role: may trigger scrapes and manage Theaters and reports, but not users or settings.
 
 Staff are created by an Admin (no self-registration), authenticate through the same Session mechanism as Members, and hold their permissions via the role-based permission model (the RBAC).
@@ -158,14 +160,14 @@ The act of removing a Member's identity and Member-owned data from movie-planner
 
 **What erasure does not remove.** A **Theater** — whether `active` or still `provisioning` — that the Member introduced into the shared catalog. The submitter is not the owner (a Member does not own Theater rows); the catalog is single-source and Staff-curated, and a Member's departure must not change what cinemas exist. A failed submission's stale `provisioning` Theater therefore lingers until Staff clean it up operationally; that cleanup is a separate Staff concern, not coupled to erasure.
 
-**Suspended Members.** A suspended Member cannot log in (only `suspended` blocks login), so cannot reach the self-service erasure path; their erasure is **Admin-mediated** through the existing Admin deletion path. This is deliberate: a Member suspended for submission abuse would otherwise erase their TheaterSubmission history — the evidence of the abuse. The right is routed through Staff, not refused (Article 17(3)(e)/(b) covers the holding period during investigation).
+**Suspended Members.** A suspended Member cannot log in (only `suspended` blocks login), so cannot reach the self-service erasure path; their erasure is **Admin-mediated** through the Admin Member deletion (`DELETE /api/members/:id`). This is deliberate: a Member suspended for submission abuse would otherwise erase their TheaterSubmission history — the evidence of the abuse. The right is routed through Staff, not refused (Article 17(3)(e)/(b) covers the holding period during investigation).
 
 **Re-registration.** Because erasure is clean (no retained email hash or tombstone), the email is immediately reusable and a former Member may re-register — which also resets their **submission throttle** (see ADR 0003). This bypass is accepted on the threat model: the payoff is near-zero, re-registration re-imposes verification friction, and the upstream source's rate limiting is the hard backstop.
 
 **What Member erasure is not:**
 - Not **soft-delete**. There is no `deleted_at`, no recoverable window, no scheduled purge. "Deleted" means gone now.
 - Not **theater deletion**. Erasing a Member never removes a Theater; the two have separate cascade targets and separate owners (ADR 0001).
-- Not **Admin-only**. The inherited Admin deletion path remains (and is the only path for suspended Members), but an active or unverified Member can self-serve.
+- Not **Admin-only**. The Admin Member deletion path remains (and is the only path for suspended Members), but an active or unverified Member can self-serve.
 
 ### Member data export
 

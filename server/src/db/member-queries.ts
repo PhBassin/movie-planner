@@ -158,3 +158,94 @@ export async function getMemberProfile(
   );
   return result.rows[0];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Member management (issue #65) — the Staff surface over the Member base.
+// See CONTEXT.md → Member (lifecycle) and Admin (peer Staff action).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The admin-facing Member view: identity + lifecycle + the Member-owned data
+ * counts an Admin needs to oversee the base. Excludes credentials.
+ */
+export interface MemberAdminRow {
+  id: number;
+  username: string;
+  email: string;
+  role_name: string;
+  status: MemberStatus;
+  email_verified_at: string | null;
+  appearance: Appearance;
+  selection_count: number;
+  submission_count: number;
+  created_at: string;
+}
+
+const MEMBER_ADMIN_SELECT = `
+  SELECT u.id, u.username, u.email, r.name AS role_name,
+         u.status, u.email_verified_at,
+         COALESCE(mp.appearance, 'light') AS appearance,
+         (SELECT COUNT(*)::int FROM member_selections ms WHERE ms.member_id = u.id) AS selection_count,
+         (SELECT COUNT(*)::int FROM theater_submissions ts WHERE ts.member_id = u.id) AS submission_count,
+         u.created_at
+  FROM users u
+  JOIN roles r ON r.id = u.role_id
+  LEFT JOIN member_preferences mp ON mp.member_id = u.id
+`;
+
+/**
+ * List Members (newest first) with their lifecycle state and Member-owned
+ * data counts. Staff rows are excluded: this is the Member-base view only.
+ */
+export async function listMembers(
+  db: DB,
+  options?: { limit?: number; offset?: number },
+): Promise<MemberAdminRow[]> {
+  const limit = options?.limit ?? 100;
+  const offset = options?.offset ?? 0;
+  const result = await db.query<MemberAdminRow>(
+    `${MEMBER_ADMIN_SELECT}
+     WHERE r.name = 'member'
+     ORDER BY u.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  return result.rows;
+}
+
+/**
+ * Load one Member for the admin detail view. Returns undefined for missing
+ * ids and for Staff ids alike, so the Member surface cannot be used to probe
+ * Staff accounts.
+ */
+export async function getMemberAdminDetail(
+  db: DB,
+  memberId: number,
+): Promise<MemberAdminRow | undefined> {
+  const result = await db.query<MemberAdminRow>(
+    `${MEMBER_ADMIN_SELECT}
+     WHERE u.id = $1 AND r.name = 'member'`,
+    [memberId],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Write a Member lifecycle transition (`users.status`). Accepts a
+ * transaction client so suspend can flip the status and revoke Sessions
+ * atomically. Role-guarded: only `member` rows can be touched, and the
+ * returned flag tells whether a row matched.
+ */
+export async function setMemberStatus(
+  db: DBQueryExecutor,
+  memberId: number,
+  status: MemberStatus,
+): Promise<boolean> {
+  const result = await db.query(
+    `UPDATE users SET status = $2
+     WHERE id = $1 AND role_id = (SELECT id FROM roles WHERE name = 'member')
+     RETURNING id`,
+    [memberId, status],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
+}
