@@ -143,6 +143,19 @@ type FetchResult =
   | { response: Response; retried: true; refreshFailed?: false }
   | { response: Response; retried: false; refreshFailed: true };
 
+/**
+ * Authentication endpoints answer 401 themselves (bad credentials, suspended
+ * account…). Treating that as a stale session would mask the server's error
+ * message behind a pointless refresh round-trip and a generic "Unauthorized",
+ * so these URLs never enter the refresh-retry path.
+ */
+function isAuthEndpoint(url: string): boolean {
+  return url.startsWith(`${API_BASE_URL}/auth/login`)
+    || url.startsWith(`${API_BASE_URL}/auth/signup`)
+    || url.startsWith(`${API_BASE_URL}/auth/refresh`)
+    || url.startsWith(`${API_BASE_URL}/auth/logout`);
+}
+
 async function executeWithRefresh(
   url: string,
   config: RequestInit,
@@ -150,7 +163,7 @@ async function executeWithRefresh(
   headers: Headers,
 ): Promise<FetchResult> {
   const response = await fetch(url, config);
-  if (response.status !== 401) {
+  if (response.status !== 401 || isAuthEndpoint(url)) {
     return { response, retried: false };
   }
 
@@ -187,7 +200,10 @@ async function fetchClient<T>(endpoint: string, options: RequestInit = {}): Prom
 
     const response = result.response;
 
-    if (response.status === 401) {
+    // A stale-session 401 (non-auth endpoint, refresh impossible) hides the
+    // body by contract; auth endpoints fall through so their error envelope
+    // (`Account suspended`, `Invalid credentials`…) reaches the caller.
+    if (response.status === 401 && !isAuthEndpoint(url)) {
       dispatchUnauthorizedEvent();
       throw new ApiError('Unauthorized', 401);
     }
