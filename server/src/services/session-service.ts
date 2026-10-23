@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import type { Response } from 'express';
 import type { DB } from '../db/index.js';
 import { AuthService, toSessionUser } from './auth-service.js';
+import { MemberAccountService } from './member-account-service.js';
 import {
   generateRefreshToken,
   validateRefreshToken,
@@ -239,5 +240,21 @@ export class SessionService {
     this.clearAccessTokenCookie();
 
     this.sendSuccess({ message: 'Password changed successfully' });
+  }
+
+  /**
+   * Member self-erasure (issue #66, ADR 0004): verify the password, delete
+   * the account (its refresh tokens cascade with the row), then clear the
+   * local cookie surface and write the success response. Throws on a wrong
+   * password or a suspended account, before anything is deleted or cleared.
+   */
+  async eraseMemberAccount(memberId: number, password: unknown): Promise<void> {
+    await new MemberAccountService(this.db).eraseSelf(memberId, password);
+
+    this.clearRefreshTokenCookie();
+    this.clearAccessTokenCookie();
+    this.clearCsrfCookie();
+
+    this.sendSuccess({ message: 'Account deleted' });
   }
 }

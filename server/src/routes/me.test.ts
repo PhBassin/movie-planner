@@ -12,7 +12,8 @@ import meRouter from './me.js';
 import { db } from '../db/internal/client.js';
 import * as memberQueries from '../db/member-queries.js';
 import type { AuthRequest } from '../middleware/auth.js';
-import { protectedLimiter } from '../middleware/rate-limit.js';
+import { authLimiter, protectedLimiter } from '../middleware/rate-limit.js';
+import { ForbiddenError, ValidationError } from '../utils/errors.js';
 
 const TEST_JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
 
@@ -65,6 +66,16 @@ vi.mock('../middleware/auth.js', () => ({
 
 vi.mock('../middleware/rate-limit.js', () => ({
     protectedLimiter: vi.fn((_req, _res, next) => next()),
+    authLimiter: vi.fn((_req, _res, next) => next()),
+}));
+
+const mockExportData = vi.fn();
+const mockEraseSelf = vi.fn();
+vi.mock('../services/member-account-service.js', () => ({
+    MemberAccountService: class {
+        exportData = mockExportData;
+        eraseSelf = mockEraseSelf;
+    },
 }));
 
 const app = express();
@@ -263,5 +274,107 @@ describe('PUT /api/me/appearance', () => {
             .send({ appearance: 'dark' });
 
         expect(protectedLimiter).toHaveBeenCalled();
+    });
+});
+
+describe('GET /api/me/export', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('returns the Member data export document, uncached', async () => {
+        const document = {
+            exported_at: '2026-10-23T00:00:00.000Z',
+            account: { email: 'jane@example.com', status: 'active', email_verified_at: null, created_at: '2026-01-01T00:00:00Z' },
+            appearance: 'light',
+            selection: [],
+            submissions: [],
+        };
+        mockExportData.mockResolvedValue(document);
+
+        const response = await request(app)
+            .get('/api/me/export')
+            .set('Authorization', `Bearer ${memberToken()}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, data: document });
+        expect(response.headers['cache-control']).toBe('no-store');
+        // Member-scoped: the Session's own id, never a client-supplied one.
+        expect(mockExportData).toHaveBeenCalledWith(7);
+        expect(protectedLimiter).toHaveBeenCalled();
+    });
+
+    it('rejects Staff with 403', async () => {
+        const response = await request(app)
+            .get('/api/me/export')
+            .set('Authorization', `Bearer ${memberToken(1, 'admin', 'admin')}`);
+
+        expect(response.status).toBe(403);
+        expect(mockExportData).not.toHaveBeenCalled();
+    });
+
+    it('requires a Session', async () => {
+        const response = await request(app).get('/api/me/export');
+        expect(response.status).toBe(401);
+    });
+});
+
+describe('POST /api/me/delete', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('erases the Member with their password and clears the whole cookie surface', async () => {
+        mockEraseSelf.mockResolvedValue(undefined);
+
+        const response = await request(app)
+            .post('/api/me/delete')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({ password: 'Str0ng!Pass', id: 99 });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true, data: { message: 'Account deleted' } });
+        // The Session's id — a body-supplied id is ignored.
+        expect(mockEraseSelf).toHaveBeenCalledWith(7, 'Str0ng!Pass');
+        const cookies = ([] as string[]).concat(response.headers['set-cookie'] ?? []);
+        for (const name of ['access_token', 'refresh_token', 'csrf_token']) {
+            expect(cookies.some((c) => c.startsWith(`${name}=;`))).toBe(true);
+        }
+        expect(authLimiter).toHaveBeenCalled();
+    });
+
+    it('rejects a wrong password with 403 and keeps the cookies', async () => {
+        mockEraseSelf.mockRejectedValue(new ForbiddenError('Password is incorrect'));
+
+        const response = await request(app)
+            .post('/api/me/delete')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({ password: 'wrong' });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error).toBe('Password is incorrect');
+        expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('rejects a missing password with 400', async () => {
+        mockEraseSelf.mockRejectedValue(new ValidationError('Password is required'));
+
+        const response = await request(app)
+            .post('/api/me/delete')
+            .set('Authorization', `Bearer ${memberToken()}`)
+            .send({});
+
+        expect(response.status).toBe(400);
+        expect(mockEraseSelf).toHaveBeenCalledWith(7, undefined);
+    });
+
+    it('rejects Staff with 403 without erasing anything', async () => {
+        const response = await request(app)
+            .post('/api/me/delete')
+            .set('Authorization', `Bearer ${memberToken(1, 'admin', 'admin')}`)
+            .send({ password: 'x' });
+
+        expect(response.status).toBe(403);
+        expect(mockEraseSelf).not.toHaveBeenCalled();
     });
 });

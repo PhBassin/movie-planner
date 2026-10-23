@@ -179,6 +179,26 @@ describe('Layout - Header navigation changes', () => {
       expect(screen.getByTestId('change-password-link')).toBeInTheDocument();
     });
 
+    it('hides the My account link from Staff', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(mockAuthContext);
+      await user.click(screen.getByTestId('user-menu-button'));
+      expect(screen.queryByTestId('account-link')).not.toBeInTheDocument();
+    });
+
+    it('shows the My account link to a Member', async () => {
+      // A Member session opens the live notification stream (jsdom has none).
+      vi.stubGlobal('EventSource', class { onmessage = null; onerror = null; close() {} });
+      const user = userEvent.setup();
+      renderWithProviders({
+        ...mockNonAdminAuthContext,
+        user: { ...mockNonAdminAuthContext.user, role_name: 'member' },
+      });
+      await user.click(screen.getByTestId('user-menu-button'));
+      expect(screen.getByTestId('account-link')).toHaveAttribute('href', '/account');
+      vi.unstubAllGlobals();
+    });
+
     it('should still display Déconnexion button in dropdown', async () => {
       const user = userEvent.setup();
       renderWithProviders(mockAuthContext);

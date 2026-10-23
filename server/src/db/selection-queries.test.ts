@@ -5,6 +5,7 @@ import {
   lockMemberForSelection,
   getSelection,
   getSelectionCount,
+  getSelectionForExport,
 } from './selection-queries.js';
 
 describe('Selection queries', () => {
@@ -54,5 +55,17 @@ describe('Selection queries', () => {
       expect.stringContaining('COUNT(*)::int'),
       [7],
     );
+  });
+
+  it('exports the whole Selection, whatever the Theater status', async () => {
+    const rows = [{ theater_id: 'C0001', name: 'UGC', city: 'Paris', url: null, status: 'provisioning' }];
+    const db = { query: vi.fn().mockResolvedValue({ rows }) } as unknown as DB;
+
+    await expect(getSelectionForExport(db, 7)).resolves.toEqual(rows);
+
+    const sql = db.query.mock.calls[0][0] as string;
+    expect(sql).toContain('WHERE ms.member_id = $1');
+    expect(sql).not.toContain("status = 'active'");
+    expect(db.query.mock.calls[0][1]).toEqual([7]);
   });
 });

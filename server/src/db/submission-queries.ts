@@ -137,3 +137,27 @@ export async function resolveSubmission(
   );
   return result.rows[0];
 }
+
+/**
+ * A Member's full TheaterSubmission history for the data export (ADR 0004
+ * sub-decision 6), newest first. Internal plumbing (`member_id`,
+ * `report_id`) stays out: the export carries the Member's own acts only.
+ */
+export type SubmissionExportRow = Pick<
+  TheaterSubmissionRow,
+  'id' | 'url' | 'theater_id' | 'status' | 'created_at' | 'resolved_at'
+>;
+
+export async function getSubmissionHistoryForExport(
+  db: QueryableDB,
+  memberId: number,
+): Promise<SubmissionExportRow[]> {
+  const result = await db.query<SubmissionExportRow>(
+    `SELECT id, url, theater_id, status, created_at, resolved_at
+     FROM theater_submissions
+     WHERE member_id = $1
+     ORDER BY created_at DESC, id DESC`,
+    [memberId],
+  );
+  return result.rows;
+}
