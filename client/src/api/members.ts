@@ -100,9 +100,7 @@ export async function reinstateMember(id: number): Promise<MemberAdminView> {
  * @param id Member ID
  */
 export async function deleteMember(id: number): Promise<void> {
-  const response = await apiClient.delete<ApiResponse<void>>(`/members/${id}`);
-
-  if (!response.success) {
-    throw new Error(response.error || 'Failed to delete member');
-  }
+  // 204 No Content: there is no envelope to inspect. Failures surface as
+  // ApiError from the client (non-2xx), so resolving means it was deleted.
+  await apiClient.delete(`/members/${id}`);
 }

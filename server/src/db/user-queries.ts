@@ -63,7 +63,15 @@ export async function getMemberLifecycle(
 }
 
 /**
- * Get all users without passwords (for admin panel)
+ * Role guard shared by the Staff user-roster statements: Members are managed
+ * through `/api/members` (`member-queries.ts`), never through the Staff
+ * roster, so these statements cannot see or touch `member` rows.
+ */
+const NOT_MEMBER_ROLE = `(SELECT id FROM roles WHERE name = 'member')`;
+
+/**
+ * Get all Staff users without passwords (for admin panel). Members are
+ * excluded — they live on the Member surface (`member-queries.ts:listMembers`).
  * Uses JOIN on roles table to get role_name
  * @param db - Database client
  * @param options - Pagination options (limit, offset)
@@ -80,6 +88,7 @@ export async function getAllUsers(
     `SELECT u.id, u.username, u.role_id, r.name as role_name, u.created_at
      FROM users u
      JOIN roles r ON r.id = u.role_id
+     WHERE u.role_id <> ${NOT_MEMBER_ROLE}
      ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
     [limit, offset]
   );
@@ -88,11 +97,12 @@ export async function getAllUsers(
 }
 
 /**
- * Get user by ID without password
+ * Get a Staff user by ID without password. A Member id resolves to undefined
+ * (a 404 at the route), so the Staff roster cannot be used to read Members.
  * Uses JOIN on roles table to get role_name
  * @param db - Database client
  * @param userId - User ID
- * @returns User without password hash, or undefined if not found
+ * @returns User without password hash, or undefined if not found or a Member
  */
 export async function getUserById(
   db: DB,
@@ -102,7 +112,7 @@ export async function getUserById(
     `SELECT u.id, u.username, u.role_id, r.name as role_name, u.created_at
      FROM users u
      JOIN roles r ON r.id = u.role_id
-     WHERE u.id = $1`,
+     WHERE u.id = $1 AND u.role_id <> ${NOT_MEMBER_ROLE}`,
     [userId]
   );
 
@@ -140,7 +150,8 @@ export async function getUserWithRoleById(
 }
 
 /**
- * Update user role by role ID
+ * Update a Staff user's role by role ID. Role-guarded in the statement, so a
+ * Member row is never changed through the Staff roster.
  * @param db - Database client
  * @param userId - User ID
  * @param roleId - New role ID (must reference a valid role in the roles table)
@@ -151,23 +162,25 @@ export async function updateUserRole(
   roleId: number
 ): Promise<void> {
   await db.query(
-    'UPDATE users SET role_id = $1 WHERE id = $2',
+    `UPDATE users SET role_id = $1 WHERE id = $2 AND role_id <> ${NOT_MEMBER_ROLE}`,
     [roleId, userId]
   );
 }
 
 /**
- * Delete user by ID
+ * Delete a Staff user by ID. Role-guarded in the statement, so a Member row
+ * is never deleted through the Staff roster (Member erasure goes through
+ * `member-queries.ts:deleteMemberRow`).
  * @param db - Database client
  * @param userId - User ID
- * @returns true if deleted, false if user didn't exist
+ * @returns true if deleted, false if no Staff user with that id existed
  */
 export async function deleteUser(
   db: DB,
   userId: number
 ): Promise<boolean> {
   const result = await db.query(
-    'DELETE FROM users WHERE id = $1',
+    `DELETE FROM users WHERE id = $1 AND role_id <> ${NOT_MEMBER_ROLE}`,
     [userId]
   );
 

@@ -270,39 +270,29 @@ describe('Users API Client', () => {
   });
 
   describe('deleteUser', () => {
-    it('should delete user successfully', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValueOnce({
-        success: true,
-      });
+    it('should resolve on the 204 No Content response (no body)', async () => {
+      // The real client resolves `undefined` for a 204: there is no envelope.
+      vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
 
-      await deleteUser(2);
+      await expect(deleteUser(2)).resolves.toBeUndefined();
 
       expect(apiClient.delete).toHaveBeenCalledWith('/users/2');
     });
 
-    it('should throw error when trying to delete self', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValueOnce({
-        success: false,
-        error: 'Cannot delete your own account',
-      });
+    it('should propagate the client error when trying to delete self', async () => {
+      vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('Cannot delete your own account'));
 
       await expect(deleteUser(1)).rejects.toThrow('Cannot delete your own account');
     });
 
-    it('should throw error when trying to delete last admin', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValueOnce({
-        success: false,
-        error: 'Cannot delete the last admin user',
-      });
+    it('should propagate the client error when trying to delete last admin', async () => {
+      vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('Cannot delete the last admin user'));
 
       await expect(deleteUser(1)).rejects.toThrow('Cannot delete the last admin user');
     });
 
-    it('should throw error when user not found', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValueOnce({
-        success: false,
-        error: 'User not found',
-      });
+    it('should propagate the client error when user not found', async () => {
+      vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('User not found'));
 
       await expect(deleteUser(999)).rejects.toThrow('User not found');
     });

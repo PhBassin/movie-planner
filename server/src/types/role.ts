@@ -3,6 +3,8 @@
 // Canonical message for endpoints restricted to Member accounts; shared by
 // requireMember middleware and service-layer role guards.
 export const MEMBER_ONLY_ENDPOINT_MESSAGE = 'This endpoint is for member accounts';
+/** Answer for a suspended Member (login, and Member routes with a still-valid access token). */
+export const SUSPENDED_ACCOUNT_MESSAGE = 'Account suspended';
 
 export interface Role {
   id: number;
