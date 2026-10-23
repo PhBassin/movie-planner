@@ -74,7 +74,9 @@ export class MemberAccountService {
    * The password is checked before the transaction (scrypt is slow; no lock
    * is held while hashing). The suspension check is repeated under the row
    * lock so a concurrent Admin suspension always wins: a suspended Member
-   * cannot erase their submission history (sub-decision 7).
+   * cannot erase their submission history (sub-decision 7). The password
+   * hash is re-read under that lock too: a password change or reset that
+   * commits after the check (the remedy for a hijacked Session) voids it.
    *
    * The log carries the id only — erasure leaves no email behind.
    */
@@ -98,6 +100,10 @@ export class MemberAccountService {
       }
       if (lifecycle.status === 'suspended') {
         throw new ForbiddenError('This account is suspended');
+      }
+      const locked = await getMemberById(tx, memberId);
+      if (!locked || locked.password_hash !== member.password_hash) {
+        throw new ForbiddenError(INCORRECT_PASSWORD_MESSAGE);
       }
       if (!(await deleteMemberRow(tx, memberId))) {
         throw new NotFoundError('Member not found');

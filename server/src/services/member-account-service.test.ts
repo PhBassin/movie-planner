@@ -10,7 +10,7 @@ vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
-import { MemberAccountService } from './member-account-service.js';
+import { MemberAccountService, INCORRECT_PASSWORD_MESSAGE } from './member-account-service.js';
 import * as memberQueries from '../db/member-queries.js';
 import * as userQueries from '../db/user-queries.js';
 import * as selectionQueries from '../db/selection-queries.js';
@@ -141,6 +141,7 @@ describe('MemberAccountService', () => {
 
       expect(comparePassword).toHaveBeenCalledWith('Str0ng!Pass', 'scrypt:hash');
       expect(userQueries.getMemberLifecycle).toHaveBeenCalledWith(txClient, 7, { forUpdate: true });
+      expect(memberQueries.getMemberById).toHaveBeenCalledWith(txClient, 7);
       expect(memberQueries.deleteMemberRow).toHaveBeenCalledWith(txClient, 7);
       // Erasure leaves no email behind, logs included.
       expect(logger.info).toHaveBeenCalledWith('Member erased own account', { memberId: 7 });
@@ -152,6 +153,20 @@ describe('MemberAccountService', () => {
       vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('suspended'));
 
       await expect(service.eraseSelf(7, 'pw')).rejects.toMatchObject({ statusCode: 403 });
+      expect(memberQueries.deleteMemberRow).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the password changed between the check and the lock', async () => {
+      vi.mocked(memberQueries.getMemberById)
+        .mockResolvedValueOnce(credentialRow())
+        .mockResolvedValueOnce({ ...credentialRow(), password_hash: 'scrypt:new-hash' });
+      vi.mocked(comparePassword).mockResolvedValue(true);
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('active'));
+
+      await expect(service.eraseSelf(7, 'old-pw')).rejects.toMatchObject({
+        statusCode: 403,
+        message: INCORRECT_PASSWORD_MESSAGE,
+      });
       expect(memberQueries.deleteMemberRow).not.toHaveBeenCalled();
     });
 

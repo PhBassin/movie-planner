@@ -78,7 +78,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(newUser);
     };
 
-    const logout = async () => {
+    const logout = async (options?: { skipServerLogout?: boolean }) => {
+        if (options?.skipServerLogout) {
+            setUser(null);
+            return;
+        }
         try {
             const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1];
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };

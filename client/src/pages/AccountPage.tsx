@@ -16,7 +16,9 @@ function downloadJson(document_: unknown, filename: string): void {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // Some browsers (Firefox, Safari) start the download asynchronously;
+    // revoking right away can cancel it.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /**
@@ -67,10 +69,12 @@ const AccountPage: React.FC = () => {
         setIsDeleting(true);
         try {
             await deleteOwnAccount(password);
-            // The server already ended the Session; leave the protected page
-            // before dropping the local user so no login redirect flashes.
+            // The server already ended the Session and cleared its cookies:
+            // drop the local user in the same batch as the navigation, with
+            // no server logout. A pending user would let the home page's
+            // Member queries 401 into a "session expired" redirect.
             navigate('/', { replace: true });
-            logout();
+            logout({ skipServerLogout: true });
         } catch (err) {
             setDeleteError(getApiErrorMessage(err, 'Could not delete your account. Please try again.'));
             setIsDeleting(false);

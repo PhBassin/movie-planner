@@ -93,7 +93,7 @@ describe('AccountPage', () => {
     const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
     expect(anchor.download).toBe('movie-planner-data-2026-10-23.json');
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:export');
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:export'));
     click.mockRestore();
   });
 
@@ -133,6 +133,7 @@ describe('AccountPage', () => {
 
     await waitFor(() => expect(meApi.deleteOwnAccount).toHaveBeenCalledWith('Str0ng!Pass'));
     expect(await screen.findByTestId('home')).toBeInTheDocument();
-    expect(logout).toHaveBeenCalled();
+    // The server already ended the Session: local-only sign-out.
+    expect(logout).toHaveBeenCalledWith({ skipServerLogout: true });
   });
 });
