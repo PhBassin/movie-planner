@@ -148,6 +148,36 @@ describe('apiClient', () => {
     window.removeEventListener('auth:unauthorized', listener);
   });
 
+  it('skipAuthRefresh: a 401 surfaces the server message without refresh or global logout', async () => {
+    const { fn } = mockFetchSequence([{ status: 401, body: { error: 'Account suspended' } }]);
+    const listener = vi.fn();
+    window.addEventListener('auth:unauthorized', listener);
+    await expect(
+      apiClient.post('/auth/login', { username: 'u', password: 'p' }, { skipAuthRefresh: true }),
+    ).rejects.toMatchObject({ name: 'ApiError', status: 401, message: 'Account suspended' });
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener('auth:unauthorized', listener);
+  });
+
+  it('treats a 401 that survives a successful refresh as the endpoint answer, not a logout', async () => {
+    setCookie('csrf_token', 'csrf-1');
+    mockFetchSequence([
+      { status: 401, body: { error: 'Current password is incorrect' } },
+      { status: 200, body: { success: true } },
+      { status: 401, body: { error: 'Current password is incorrect' } },
+    ]);
+    const listener = vi.fn();
+    window.addEventListener('auth:unauthorized', listener);
+    await expect(apiClient.post('/auth/change-password', {})).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 401,
+      message: 'Current password is incorrect',
+    });
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener('auth:unauthorized', listener);
+  });
+
   it('reuses a single in-flight refresh across concurrent 401s', async () => {
     setCookie('csrf_token', 'csrf-1');
     let refreshCalls = 0;

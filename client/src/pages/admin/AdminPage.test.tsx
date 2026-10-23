@@ -274,6 +274,16 @@ describe('AdminPage', () => {
       expect(screen.queryByRole('tab', { name: 'Members' })).not.toBeInTheDocument();
     });
 
+    it('should show the Members tab only with members:list (the page needs the list)', () => {
+      const readOnly: User = { ...operatorUser, id: 4, role_name: 'custom', is_system_role: false, permissions: ['members:read', 'members:delete'] as PermissionName[] };
+      const { unmount } = renderWithRouter('/admin', readOnly);
+      expect(screen.queryByRole('tab', { name: 'Members' })).not.toBeInTheDocument();
+      unmount();
+
+      renderWithRouter('/admin', { ...readOnly, permissions: ['members:list'] as PermissionName[] });
+      expect(screen.getByRole('tab', { name: 'Members' })).toBeInTheDocument();
+    });
+
     it('should NOT show Roles tab for operator', () => {
       renderWithRouter('/admin', operatorUser);
 

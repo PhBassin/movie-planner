@@ -295,14 +295,18 @@ describe('Admin Member management routes', () => {
   describe('DELETE /api/members/:id', () => {
     it('should delete the Member and cascade Member-owned data (204)', async () => {
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(makeMember());
-      vi.mocked(userQueries.deleteUser).mockResolvedValue(true);
+      vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(true);
 
       const response = await request(app)
         .delete('/api/members/7')
         .set('Authorization', 'Bearer valid-admin-token');
 
       expect(response.status).toBe(204);
-      expect(userQueries.deleteUser).toHaveBeenCalledWith(db, 7);
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(memberQueries.deleteMemberRow).toHaveBeenCalledWith(
+        expect.objectContaining({ query: expect.any(Function) }),
+        7,
+      );
     });
 
     it('should return 404 when deleting a missing Member (or a Staff id)', async () => {
@@ -313,7 +317,7 @@ describe('Admin Member management routes', () => {
         .set('Authorization', 'Bearer valid-admin-token');
 
       expect(response.status).toBe(404);
-      expect(userQueries.deleteUser).not.toHaveBeenCalled();
+      expect(memberQueries.deleteMemberRow).not.toHaveBeenCalled();
     });
 
     it('should return 403 without members:delete', async () => {

@@ -144,16 +144,16 @@ type FetchResult =
   | { response: Response; retried: false; refreshFailed: true };
 
 /**
- * Authentication endpoints answer 401 themselves (bad credentials, suspended
- * account…). Treating that as a stale session would mask the server's error
- * message behind a pointless refresh round-trip and a generic "Unauthorized",
- * so these URLs never enter the refresh-retry path.
+ * Per-request client options.
+ *
+ * `skipAuthRefresh` is for requests made without a session (login, signup,
+ * email verification, password reset): a 401 there is the server's answer
+ * (bad credentials, suspended account…), not a stale session, so it must not
+ * trigger a refresh round-trip or the global `auth:unauthorized` event — the
+ * error envelope reaches the caller as an `ApiError`.
  */
-function isAuthEndpoint(url: string): boolean {
-  return url.startsWith(`${API_BASE_URL}/auth/login`)
-    || url.startsWith(`${API_BASE_URL}/auth/signup`)
-    || url.startsWith(`${API_BASE_URL}/auth/refresh`)
-    || url.startsWith(`${API_BASE_URL}/auth/logout`);
+export interface RequestOptions {
+  skipAuthRefresh?: boolean;
 }
 
 async function executeWithRefresh(
@@ -161,9 +161,10 @@ async function executeWithRefresh(
   config: RequestInit,
   method: string,
   headers: Headers,
+  skipAuthRefresh: boolean,
 ): Promise<FetchResult> {
   const response = await fetch(url, config);
-  if (response.status !== 401 || isAuthEndpoint(url)) {
+  if (response.status !== 401 || skipAuthRefresh) {
     return { response, retried: false };
   }
 
@@ -186,28 +187,26 @@ function wrapNetworkError(error: unknown): never {
   throw new ApiError(error instanceof Error ? error.message : 'Unknown network error', 0);
 }
 
-async function fetchClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+async function fetchClient<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  { skipAuthRefresh = false }: RequestOptions = {},
+): Promise<T> {
   const { url, config, method } = buildRequestConfig(endpoint, options);
   const headers = config.headers instanceof Headers ? config.headers : new Headers(config.headers);
 
   try {
-    const result = await executeWithRefresh(url, config, method, headers);
+    const result = await executeWithRefresh(url, config, method, headers, skipAuthRefresh);
 
+    // Only a failed refresh means the session is gone. A 401 that survives a
+    // successful refresh is the endpoint's own answer (e.g. "Current password
+    // is incorrect") and falls through to the error envelope below.
     if ('refreshFailed' in result && result.refreshFailed) {
       dispatchUnauthorizedEvent();
       throw new ApiError('Unauthorized', 401);
     }
 
     const response = result.response;
-
-    // A stale-session 401 (non-auth endpoint, refresh impossible) hides the
-    // body by contract; auth endpoints fall through so their error envelope
-    // (`Account suspended`, `Invalid credentials`…) reaches the caller.
-    if (response.status === 401 && !isAuthEndpoint(url)) {
-      dispatchUnauthorizedEvent();
-      throw new ApiError('Unauthorized', 401);
-    }
-
     const data = await readBody(response);
 
     if (!response.ok) {
@@ -249,8 +248,8 @@ const apiClient = {
     return fetchClient<T>(url, { method: 'GET' });
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  post: <T>(endpoint: string, data?: any) =>
-    fetchClient<T>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  post: <T>(endpoint: string, data?: any, requestOptions?: RequestOptions) =>
+    fetchClient<T>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }, requestOptions),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   put: <T>(endpoint: string, data?: any) =>
     fetchClient<T>(endpoint, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),

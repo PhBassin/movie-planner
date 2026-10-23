@@ -169,4 +169,79 @@ describe('MembersPage', () => {
 
     expect(await screen.findByTestId('members-error')).toHaveTextContent(/boom/i);
   });
+
+  it('requests one page plus a sentinel row and paginates with Next / Previous', async () => {
+    const page = Array.from({ length: 51 }, (_, i) => makeMember({ id: 100 + i, email: `m${i}@example.com` }));
+    vi.mocked(membersApi.getMembers)
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce([makeMember({ id: 500, email: 'last@example.com' })])
+      .mockResolvedValueOnce(page);
+    renderWithAuth(<MembersPage />);
+
+    await screen.findByTestId('members-table');
+    expect(membersApi.getMembers).toHaveBeenLastCalledWith({ limit: 51, offset: 0 });
+    // The sentinel row is not rendered.
+    expect(screen.getAllByTestId(/^member-row-/)).toHaveLength(50);
+    expect(screen.getByTestId('members-prev-page')).toBeDisabled();
+
+    await userEvent.click(screen.getByTestId('members-next-page'));
+    await waitFor(() => expect(membersApi.getMembers).toHaveBeenLastCalledWith({ limit: 51, offset: 50 }));
+    expect(await screen.findByText('last@example.com')).toBeInTheDocument();
+    expect(screen.getByTestId('members-next-page')).toBeDisabled();
+
+    await userEvent.click(screen.getByTestId('members-prev-page'));
+    await waitFor(() => expect(membersApi.getMembers).toHaveBeenLastCalledWith({ limit: 51, offset: 0 }));
+  });
+
+  it('hides pagination when everything fits on one page', async () => {
+    renderWithAuth(<MembersPage />);
+
+    await screen.findByTestId('members-table');
+    expect(screen.queryByTestId('members-pagination')).not.toBeInTheDocument();
+  });
+
+  it('shows a reinstate failure inside the open detail modal', async () => {
+    vi.mocked(membersApi.reinstateMember).mockRejectedValue(new Error('Member is not suspended'));
+    renderWithAuth(<MembersPage />);
+
+    await screen.findByTestId('members-table');
+    await userEvent.click(screen.getByTestId('view-member-8'));
+    await userEvent.click(screen.getByTestId('detail-reinstate-member'));
+
+    expect(await screen.findByTestId('member-detail-error')).toHaveTextContent('Member is not suspended');
+    expect(screen.queryByTestId('members-error')).not.toBeInTheDocument();
+  });
+
+  it('keeps the table and modal mounted while refetching after an action', async () => {
+    let resolveRefetch: (rows: MemberAdminView[]) => void = () => {};
+    vi.mocked(membersApi.reinstateMember).mockResolvedValue(makeMember({ id: 8, status: 'active' }));
+    vi.mocked(membersApi.getMembers)
+      .mockResolvedValueOnce([activeMember, suspendedMember])
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveRefetch = resolve; }));
+    renderWithAuth(<MembersPage />);
+
+    await screen.findByTestId('members-table');
+    await userEvent.click(screen.getByTestId('view-member-8'));
+    await userEvent.click(screen.getByTestId('detail-reinstate-member'));
+
+    await waitFor(() => expect(membersApi.getMembers).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/loading members/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('members-table')).toBeInTheDocument();
+    expect(screen.getByTestId('member-detail-heading')).toBeInTheDocument();
+
+    resolveRefetch([activeMember, makeMember({ id: 8, email: 'abuse@example.com', status: 'active' })]);
+    await waitFor(() => expect(screen.queryByTestId('detail-reinstate-member')).not.toBeInTheDocument());
+  });
+
+  it('disables the row Reinstate while a status change is in flight', async () => {
+    vi.mocked(membersApi.reinstateMember).mockImplementation(() => new Promise(() => {}));
+    renderWithAuth(<MembersPage />);
+
+    await screen.findByTestId('members-table');
+    await userEvent.click(screen.getByTestId('reinstate-member-8'));
+
+    expect(screen.getByTestId('reinstate-member-8')).toBeDisabled();
+    await userEvent.click(screen.getByTestId('reinstate-member-8'));
+    expect(membersApi.reinstateMember).toHaveBeenCalledTimes(1);
+  });
 });

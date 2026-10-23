@@ -15,6 +15,7 @@ import * as memberQueries from '../db/member-queries.js';
 import * as userQueries from '../db/user-queries.js';
 import { revokeAllUserTokens } from '../repositories/refresh-token-repository.js';
 import { NotFoundError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 const acting = { id: 1, username: 'admin' };
 
@@ -70,6 +71,7 @@ describe('MemberAdminService', () => {
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
 
       await expect(service.getMember(7, acting)).resolves.toMatchObject({ id: 7, role_name: 'member' });
+      expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('member@example.com');
     });
 
     it('throws NotFoundError for missing or Staff ids', async () => {
@@ -91,6 +93,8 @@ describe('MemberAdminService', () => {
       expect(userQueries.getMemberLifecycle).toHaveBeenCalledWith(txClient, 7, { forUpdate: true });
       expect(memberQueries.setMemberStatus).toHaveBeenCalledWith(txClient, 7, 'suspended');
       expect(revokeAllUserTokens).toHaveBeenCalledWith(txClient, 7);
+      // The returned view is read inside the transaction, not after commit.
+      expect(memberQueries.getMemberAdminDetail).toHaveBeenCalledWith(txClient, 7);
     });
 
     it('rejects an already suspended Member', async () => {
@@ -131,6 +135,7 @@ describe('MemberAdminService', () => {
 
       expect(result.status).toBe('active');
       expect(memberQueries.setMemberStatus).toHaveBeenCalledWith(txClient, 7, 'active');
+      expect(memberQueries.getMemberAdminDetail).toHaveBeenCalledWith(txClient, 7);
       expect(revokeAllUserTokens).not.toHaveBeenCalled();
     });
 
@@ -145,25 +150,41 @@ describe('MemberAdminService', () => {
   });
 
   describe('deleteMember', () => {
-    it('deletes the row through the shared users delete (cascades Member data)', async () => {
+    it('deletes through the role-guarded Member delete inside one transaction', async () => {
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
-      vi.mocked(userQueries.deleteUser).mockResolvedValue(true);
+      vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(true);
 
       await expect(service.deleteMember(7, acting)).resolves.toBeUndefined();
 
-      expect(userQueries.deleteUser).toHaveBeenCalledWith(expect.anything(), 7);
+      expect(memberQueries.getMemberAdminDetail).toHaveBeenCalledWith(txClient, 7);
+      expect(memberQueries.deleteMemberRow).toHaveBeenCalledWith(txClient, 7);
+      expect(userQueries.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it('keeps the erased email out of the audit log', async () => {
+      vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
+      vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(true);
+
+      await service.deleteMember(7, acting);
+
+      expect(logger.info).toHaveBeenCalledWith('Admin deleted member', expect.objectContaining({
+        deletedMemberId: 7,
+        deletedSelectionCount: 5,
+        deletedSubmissionCount: 2,
+      }));
+      expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('member@example.com');
     });
 
     it('throws NotFoundError when no Member row matches', async () => {
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(undefined);
 
       await expect(service.deleteMember(99, acting)).rejects.toThrow(NotFoundError);
-      expect(userQueries.deleteUser).not.toHaveBeenCalled();
+      expect(memberQueries.deleteMemberRow).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundError when the row vanishes between read and delete', async () => {
+    it('throws NotFoundError when the role-guarded delete matches nothing (e.g. promoted to Staff meanwhile)', async () => {
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
-      vi.mocked(userQueries.deleteUser).mockResolvedValue(false);
+      vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(false);
 
       await expect(service.deleteMember(7, acting)).rejects.toThrow(NotFoundError);
     });

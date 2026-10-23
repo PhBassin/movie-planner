@@ -12,6 +12,8 @@ interface MemberDetailModalProps {
   canUpdate: boolean;
   canDelete: boolean;
   isSwitchingStatus?: boolean;
+  /** Failure of an action started from this modal (e.g. reinstate). */
+  error?: string | null;
 }
 
 const formatDate = (dateString: string | null): string => {
@@ -42,6 +44,7 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
   canUpdate,
   canDelete,
   isSwitchingStatus = false,
+  error = null,
 }) => {
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget && !isSwitchingStatus) {
@@ -79,6 +82,12 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             <DetailRow label="Appearance">{member.appearance === 'dark' ? 'Dark' : 'Light'}</DetailRow>
             <DetailRow label="Member since">{formatDate(member.created_at)}</DetailRow>
           </dl>
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md" data-testid="member-detail-error">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
 
           {member.status === 'suspended' && (
             <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">

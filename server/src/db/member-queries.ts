@@ -219,7 +219,7 @@ export async function listMembers(
  * Staff accounts.
  */
 export async function getMemberAdminDetail(
-  db: DB,
+  db: DBQueryExecutor,
   memberId: number,
 ): Promise<MemberAdminRow | undefined> {
   const result = await db.query<MemberAdminRow>(
@@ -246,6 +246,24 @@ export async function setMemberStatus(
      WHERE id = $1 AND role_id = (SELECT id FROM roles WHERE name = 'member')
      RETURNING id`,
     [memberId, status],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
+/**
+ * Delete a Member row (the Admin-mediated erasure path). Role-guarded in the
+ * statement itself, so a concurrent promotion to Staff can never turn a
+ * Member deletion into a Staff deletion. Member-owned data cascades at the
+ * database level. Returns whether a Member row was removed.
+ */
+export async function deleteMemberRow(
+  db: DBQueryExecutor,
+  memberId: number,
+): Promise<boolean> {
+  const result = await db.query(
+    `DELETE FROM users
+     WHERE id = $1 AND role_id = (SELECT id FROM roles WHERE name = 'member')`,
+    [memberId],
   );
   return result.rowCount !== null && result.rowCount > 0;
 }

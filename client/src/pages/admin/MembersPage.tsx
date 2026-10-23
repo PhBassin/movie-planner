@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useContext, useCallback } from 'react';
 import {
   getMembers,
   suspendMember as suspendMemberApi,
@@ -12,6 +12,9 @@ import MemberDetailModal from '../../components/admin/MemberDetailModal';
 import SuspendMemberDialog from '../../components/admin/SuspendMemberDialog';
 import DeleteMemberDialog from '../../components/admin/DeleteMemberDialog';
 import LinkButton from '../../components/ui/LinkButton';
+import Button from '../../components/ui/Button';
+
+const PAGE_SIZE = 50;
 
 /**
  * The Staff Members section (issue #65): list + detail with the three Admin
@@ -25,7 +28,12 @@ const MembersPage: React.FC = () => {
   const canDelete = hasPermission('members:delete');
 
   const [members, setMembers] = useState<MemberAdminView[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  // `loading` gates the first render only; later refetches keep the table
+  // (and any open modal) mounted and just flag `refreshing`.
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Modal/dialog states
@@ -36,23 +44,32 @@ const MembersPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [suspendError, setSuspendError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [reinstateError, setReinstateError] = useState<string | null>(null);
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       setError(null);
-      const data = await getMembers();
-      setMembers(data);
+      // One extra row tells whether a next page exists.
+      const data = await getMembers({ limit: PAGE_SIZE + 1, offset });
+      if (data.length === 0 && offset > 0) {
+        // The page emptied (e.g. its last Member was deleted): step back.
+        setOffset((current) => Math.max(0, current - PAGE_SIZE));
+        return;
+      }
+      setHasNextPage(data.length > PAGE_SIZE);
+      setMembers(data.slice(0, PAGE_SIZE));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch members');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [offset]);
 
   useEffect(() => {
     fetchMembers();
-  }, []);
+  }, [fetchMembers]);
 
   // After the list refetch, sync the open detail modal with the fresh rows
   useEffect(() => {
@@ -76,13 +93,14 @@ const MembersPage: React.FC = () => {
   };
 
   const handleReinstate = async (member: MemberAdminView) => {
+    if (isSwitchingStatus) return;
     try {
       setIsSwitchingStatus(true);
-      setError(null);
+      setReinstateError(null);
       await reinstateMemberApi(member.id);
       await fetchMembers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reinstate member');
+      setReinstateError(err instanceof Error ? err.message : 'Failed to reinstate member');
     } finally {
       setIsSwitchingStatus(false);
     }
@@ -134,10 +152,10 @@ const MembersPage: React.FC = () => {
         </h1>
       </div>
 
-      {/* Error Message */}
-      {error && (
+      {/* Error Message (a reinstate failure shows in the detail modal when it is open) */}
+      {(error || (reinstateError && !memberToView)) && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md" data-testid="members-error">
-          <p className="text-sm text-red-800">{error}</p>
+          <p className="text-sm text-red-800">{error ?? reinstateError}</p>
         </div>
       )}
 
@@ -201,7 +219,10 @@ const MembersPage: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-2">
                       <LinkButton
-                        onClick={() => setMemberToView(member)}
+                        onClick={() => {
+                          setReinstateError(null);
+                          setMemberToView(member);
+                        }}
                         data-testid={`view-member-${member.id}`}
                       >
                         View
@@ -218,6 +239,7 @@ const MembersPage: React.FC = () => {
                       {canUpdate && member.status === 'suspended' && (
                         <LinkButton
                           variant="success"
+                          disabled={isSwitchingStatus}
                           onClick={() => handleReinstate(member)}
                           data-testid={`reinstate-member-${member.id}`}
                         >
@@ -242,11 +264,41 @@ const MembersPage: React.FC = () => {
         </div>
       )}
 
+      {/* Pagination */}
+      {(offset > 0 || hasNextPage) && (
+        <div className="flex justify-between items-center mt-4" data-testid="members-pagination">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
+            disabled={offset === 0 || refreshing}
+            data-testid="members-prev-page"
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-gray-600">
+            {offset + 1}–{offset + members.length}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setOffset((current) => current + PAGE_SIZE)}
+            disabled={!hasNextPage || refreshing}
+            data-testid="members-next-page"
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
       {/* Detail Modal */}
       {memberToView && (
         <MemberDetailModal
           member={memberToView}
-          onClose={() => setMemberToView(null)}
+          onClose={() => {
+            setMemberToView(null);
+            setReinstateError(null);
+          }}
           onSuspend={(member) => {
             setMemberToSuspend(member);
             setMemberToView(null);
@@ -259,6 +311,7 @@ const MembersPage: React.FC = () => {
           canUpdate={canUpdate}
           canDelete={canDelete}
           isSwitchingStatus={isSwitchingStatus}
+          error={reinstateError}
         />
       )}
 

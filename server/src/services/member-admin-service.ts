@@ -1,11 +1,12 @@
-import type { DB } from '../db/index.js';
+import type { DB, DBQueryExecutor } from '../db/index.js';
 import type { MemberAdminRow } from '../db/member-queries.js';
 import {
   listMembers as dbListMembers,
   getMemberAdminDetail,
   setMemberStatus,
+  deleteMemberRow,
 } from '../db/member-queries.js';
-import { getMemberLifecycle, deleteUser as dbDeleteUser } from '../db/user-queries.js';
+import { getMemberLifecycle } from '../db/user-queries.js';
 import { revokeAllUserTokens } from '../repositories/refresh-token-repository.js';
 import { logger } from '../utils/logger.js';
 import { AppError, NotFoundError } from '../utils/errors.js';
@@ -46,12 +47,11 @@ export class MemberAdminService {
 
   /** Fetch one Member. Staff ids and missing ids are indistinguishable (404). */
   async getMember(memberId: number, acting: ActingUser): Promise<MemberAdminRow> {
-    const member = await this.requireMember(memberId);
+    const member = await requireMember(this.db, memberId);
     logger.info('Admin retrieved member details', {
       adminId: acting.id,
       adminUsername: acting.username,
       memberId,
-      memberEmail: member.email,
     });
     return member;
   }
@@ -64,12 +64,15 @@ export class MemberAdminService {
    * refresh token (the password-change mechanism, reused — see
    * `PasswordResetService.confirmPasswordReset`).
    *
+   * The returned view is read inside the same transaction, so it is the
+   * state this call committed — never a concurrent change made after it.
+   *
    * Only `active` Members can be suspended: reinstatement restores `active`
    * (CONTEXT.md: `suspended ↔ active` reversible), and suspending an
    * `unverified` Member would let reinstatement bypass email verification.
    */
   async suspendMember(memberId: number, acting: ActingUser): Promise<MemberAdminRow> {
-    await this.db.transaction(async (tx) => {
+    const updated = await this.db.transaction(async (tx) => {
       const member = await getMemberLifecycle(tx, memberId, { forUpdate: true });
       if (!member || member.role_name !== 'member') {
         throw new NotFoundError('Member not found');
@@ -82,6 +85,7 @@ export class MemberAdminService {
       }
       await setMemberStatus(tx, memberId, 'suspended');
       await revokeAllUserTokens(tx, memberId);
+      return requireMember(tx, memberId);
     });
 
     logger.info('Admin suspended member', {
@@ -90,7 +94,7 @@ export class MemberAdminService {
       memberId,
     });
 
-    return this.requireMember(memberId);
+    return updated;
   }
 
   /**
@@ -100,7 +104,7 @@ export class MemberAdminService {
    * simply logs in again.
    */
   async reinstateMember(memberId: number, acting: ActingUser): Promise<MemberAdminRow> {
-    await this.db.transaction(async (tx) => {
+    const updated = await this.db.transaction(async (tx) => {
       const member = await getMemberLifecycle(tx, memberId, { forUpdate: true });
       if (!member || member.role_name !== 'member') {
         throw new NotFoundError('Member not found');
@@ -109,6 +113,7 @@ export class MemberAdminService {
         throw new AppError('Member is not suspended', 409);
       }
       await setMemberStatus(tx, memberId, 'active');
+      return requireMember(tx, memberId);
     });
 
     logger.info('Admin reinstated member', {
@@ -117,7 +122,7 @@ export class MemberAdminService {
       memberId,
     });
 
-    return this.requireMember(memberId);
+    return updated;
   }
 
   /**
@@ -127,35 +132,39 @@ export class MemberAdminService {
    * Theaters the Member introduced are NOT Member-owned and remain in the
    * catalog.
    *
-   * The UserService guards are satisfied by construction here: the
-   * member-scoped lookup 404s before any write for Staff targets (so no
-   * last-admin or self-delete case can reach the delete), and a suspended
-   * Member is exactly the case self-service erasure delegates to Admin.
+   * The UserService guards are satisfied by construction here: the DELETE
+   * itself is role-guarded (`deleteMemberRow`), so a Staff target — even one
+   * promoted concurrently — is a 404 and no last-admin or self-delete case
+   * can reach it. A suspended Member is exactly the case self-service
+   * erasure delegates to Admin.
+   *
+   * The audit log carries ids and counts only: erasure leaves no email
+   * behind, logs included (CONTEXT.md → Member erasure).
    */
   async deleteMember(memberId: number, acting: ActingUser): Promise<void> {
-    const member = await this.requireMember(memberId);
-
-    const deleted = await dbDeleteUser(this.db, memberId);
-    if (!deleted) {
-      throw new NotFoundError('Member not found');
-    }
+    const member = await this.db.transaction(async (tx) => {
+      const existing = await requireMember(tx, memberId);
+      if (!(await deleteMemberRow(tx, memberId))) {
+        throw new NotFoundError('Member not found');
+      }
+      return existing;
+    });
 
     logger.info('Admin deleted member', {
       adminId: acting.id,
       adminUsername: acting.username,
       deletedMemberId: memberId,
-      deletedMemberEmail: member.email,
       deletedSelectionCount: member.selection_count,
       deletedSubmissionCount: member.submission_count,
     });
   }
+}
 
-  /** Fetch a Member or throw the shared 404 used for missing and Staff ids. */
-  private async requireMember(memberId: number): Promise<MemberAdminRow> {
-    const member = await getMemberAdminDetail(this.db, memberId);
-    if (!member) {
-      throw new NotFoundError('Member not found');
-    }
-    return member;
+/** Fetch a Member or throw the shared 404 used for missing and Staff ids. */
+async function requireMember(db: DBQueryExecutor, memberId: number): Promise<MemberAdminRow> {
+  const member = await getMemberAdminDetail(db, memberId);
+  if (!member) {
+    throw new NotFoundError('Member not found');
   }
+  return member;
 }
