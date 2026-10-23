@@ -141,7 +141,7 @@ export async function updateMemberAppearance(
  * `member_preferences` and defaults to 'light' when no row exists yet.
  */
 export async function getMemberProfile(
-  db: DB,
+  db: DBQueryExecutor,
   userId: number
 ): Promise<MemberProfileRow | undefined> {
   const result = await db.query<MemberProfileRow>(

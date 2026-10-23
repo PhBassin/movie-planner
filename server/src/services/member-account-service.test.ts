@@ -89,16 +89,19 @@ describe('MemberAccountService', () => {
         submissions,
       });
       expect(JSON.stringify(result)).not.toMatch(/password|hash/i);
-      expect(selectionQueries.getSelectionForExport).toHaveBeenCalledWith(db, 7);
-      expect(submissionQueries.getSubmissionHistoryForExport).toHaveBeenCalledWith(db, 7);
+      // One read-only snapshot for the whole document.
+      expect(txClient.query).toHaveBeenCalledWith('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      expect(memberQueries.getMemberProfile).toHaveBeenCalledWith(txClient, 7);
+      expect(selectionQueries.getSelectionForExport).toHaveBeenCalledWith(txClient, 7);
+      expect(submissionQueries.getSubmissionHistoryForExport).toHaveBeenCalledWith(txClient, 7);
     });
 
-    it('404s when the profile is missing or not a Member', async () => {
+    it('404s when the profile is missing or not a Member, before reading the rest', async () => {
       vi.mocked(memberQueries.getMemberProfile).mockResolvedValue(undefined);
-      vi.mocked(selectionQueries.getSelectionForExport).mockResolvedValue([]);
-      vi.mocked(submissionQueries.getSubmissionHistoryForExport).mockResolvedValue([]);
 
       await expect(service.exportData(7)).rejects.toMatchObject({ statusCode: 404 });
+      expect(selectionQueries.getSelectionForExport).not.toHaveBeenCalled();
+      expect(submissionQueries.getSubmissionHistoryForExport).not.toHaveBeenCalled();
     });
   });
 

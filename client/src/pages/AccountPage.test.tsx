@@ -79,6 +79,29 @@ describe('AccountPage', () => {
     expect(await screen.findByTestId('account-email')).toHaveTextContent('jane@example.com');
   });
 
+  it('says so when the account details fail to load', async () => {
+    vi.mocked(meApi.getMemberProfile).mockRejectedValue(new ApiError('Internal server error', 500));
+    renderPage();
+    expect(await screen.findByTestId('account-profile-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('account-email')).not.toBeInTheDocument();
+  });
+
+  it('dates the export file in local time, not UTC', async () => {
+    // 00:30 local on Oct 23 — still Oct 22 in UTC for any zone east of UTC.
+    const exportedAt = new Date(2026, 9, 23, 0, 30).toISOString();
+    vi.mocked(meApi.exportMemberData).mockResolvedValue({ ...exportDocument, exported_at: exportedAt });
+    Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:export'), revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderPage();
+    await userEvent.click(screen.getByTestId('export-data-button'));
+
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
+    expect(anchor.download).toBe('movie-planner-data-2026-10-23.json');
+    click.mockRestore();
+  });
+
   it('downloads the export as a dated JSON file', async () => {
     vi.mocked(meApi.exportMemberData).mockResolvedValue(exportDocument);
     const createObjectURL = vi.fn(() => 'blob:export');

@@ -21,6 +21,14 @@ function downloadJson(document_: unknown, filename: string): void {
     setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** `YYYY-MM-DD` in the viewer's local time zone (the ISO string is UTC). */
+function localDateStamp(isoTimestamp: string): string {
+    const date = new Date(isoTimestamp);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${date.getFullYear()}-${month}-${day}`;
+}
+
 /**
  * The Member's account page (issue #66, ADR 0004): the two RGPD self-service
  * rights — data export (Article 20) and erasure (Article 17, gated by
@@ -54,7 +62,7 @@ const AccountPage: React.FC = () => {
         setIsExporting(true);
         try {
             const data = await exportMemberData();
-            downloadJson(data, `movie-planner-data-${data.exported_at.slice(0, 10)}.json`);
+            downloadJson(data, `movie-planner-data-${localDateStamp(data.exported_at)}.json`);
         } catch (err) {
             setExportError(getApiErrorMessage(err, 'Could not export your data. Please try again.'));
         } finally {
@@ -86,6 +94,12 @@ const AccountPage: React.FC = () => {
     return (
         <div className="max-w-2xl mx-auto mt-10 px-4 sm:px-6 space-y-6">
             <h1 className="text-2xl font-bold text-gray-800" data-testid="account-heading">My account</h1>
+
+            {profileQuery.isError && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm" role="alert" data-testid="account-profile-error">
+                    {getApiErrorMessage(profileQuery.error, 'Could not load your account details. Please reload the page.')}
+                </div>
+            )}
 
             {profile && (
                 <div className="bg-white p-6 rounded-lg shadow-md">

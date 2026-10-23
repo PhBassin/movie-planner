@@ -25,13 +25,20 @@ async function login(page: Page, email: string, password: string): Promise<void>
 }
 
 test.describe('Member erasure and data export', () => {
-  test('export, then self-delete with password re-entry; the email is reusable', async ({ page }) => {
+  test('export, then self-delete with password re-entry; the email is reusable', async ({ page, browser }) => {
     const email = `e2e-erasure-${Date.now()}@example.com`;
     const password = 'Str0ng!Pass';
 
     await signup(page, email, password);
     await login(page, email, password);
     await expect(page.getByTestId('user-menu-button')).toBeVisible({ timeout: 10000 });
+
+    // A second Session (another device) that erasure must end too.
+    const otherDevice = await browser.newContext();
+    const otherPage = await otherDevice.newPage();
+    await login(otherPage, email, password);
+    await expect(otherPage.getByTestId('user-menu-button')).toBeVisible({ timeout: 10000 });
+    expect((await otherPage.request.get('/api/me')).status()).toBe(200);
 
     // Reach the account page through the user menu.
     await page.getByTestId('user-menu-button').click();
@@ -64,6 +71,12 @@ test.describe('Member erasure and data export', () => {
     await page.getByTestId('delete-account-submit').click();
     await expect(page).toHaveURL(/\/$/, { timeout: 10000 });
     await expect(page.getByTestId('user-menu-button')).not.toBeVisible();
+
+    // The other device's Session is gone with the account (refresh tokens
+    // cascade; requireMember finds no row behind its access token).
+    expect((await otherPage.request.get('/api/me')).status()).toBe(401);
+    expect((await otherPage.request.post('/api/auth/refresh')).ok()).toBe(false);
+    await otherDevice.close();
 
     // The account is gone: login fails.
     await login(page, email, password);

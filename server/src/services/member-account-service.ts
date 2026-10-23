@@ -38,16 +38,22 @@ export const INCORRECT_PASSWORD_MESSAGE = 'Password is incorrect';
 export class MemberAccountService {
   constructor(private readonly db: DB) {}
 
-  /** Assemble the export document. Read-only, so the Session is the only gate. */
+  /**
+   * Assemble the export document. Read-only, so the Session is the only gate.
+   * The three reads share one REPEATABLE READ snapshot, so a concurrent edit
+   * (or erasure) cannot mix states into the document.
+   */
   async exportData(memberId: number): Promise<MemberDataExport> {
-    const [profile, selection, submissions] = await Promise.all([
-      getMemberProfile(this.db, memberId),
-      getSelectionForExport(this.db, memberId),
-      getSubmissionHistoryForExport(this.db, memberId),
-    ]);
-    if (!profile || profile.role_name !== 'member') {
-      throw new NotFoundError('Member not found');
-    }
+    const { profile, selection, submissions } = await this.db.transaction(async (tx) => {
+      await tx.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const profile = await getMemberProfile(tx, memberId);
+      if (!profile || profile.role_name !== 'member') {
+        throw new NotFoundError('Member not found');
+      }
+      const selection = await getSelectionForExport(tx, memberId);
+      const submissions = await getSubmissionHistoryForExport(tx, memberId);
+      return { profile, selection, submissions };
+    });
 
     logger.info('Member exported own data', { memberId });
 
