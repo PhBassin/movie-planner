@@ -2,7 +2,7 @@ import apiClient, { type RequestOptions } from './core.js';
 import type { ApiResponse } from '../types/index.js';
 
 /** These routes are called without a session: a 401 is the answer, not a stale session. */
-const NO_SESSION: RequestOptions = { skipAuthRefresh: true };
+export const NO_SESSION: RequestOptions = { skipAuthRefresh: true };
 
 /** The public shape returned by `POST /auth/signup` for a new Member. */
 export interface MemberSignupResponse {

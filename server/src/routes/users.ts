@@ -5,28 +5,15 @@ import { requirePermission } from '../middleware/permission.js';
 import { protectedLimiter } from '../middleware/rate-limit.js';
 import type { ApiResponse } from '../types/api.js';
 import type { UserPublic } from '../types/user.js';
-import { ValidationError } from '../utils/errors.js';
+import { actingUserFrom, parseIdOrThrow, parsePaginationOrThrow } from './_helpers/admin-route-helpers.js';
 import { UserService } from '../services/user-service.js';
 
 const router = express.Router();
-const MAX_LIST_LIMIT = 100;
-
-const actingUserFrom = (req: AuthRequest) => ({ id: req.user!.id, username: req.user!.username });
-
-const parseIdOrThrow = (raw: unknown, label: string): number => {
-  const id = parseStrictInt(raw);
-  if (Number.isNaN(id)) throw new ValidationError(`Invalid ${label}`);
-  return id;
-};
 
 router.get('/', protectedLimiter, requireAuth, requirePermission('users:list'), async (req: AuthRequest, res, next) => {
   try {
     const userService = new UserService(req.app.get('db'));
-    const requestedLimit = req.query.limit ? parseStrictInt(req.query.limit) : MAX_LIST_LIMIT;
-    const offset = req.query.offset ? parseStrictInt(req.query.offset) : 0;
-    if (Number.isNaN(requestedLimit) || requestedLimit < 1) return next(new ValidationError('Invalid limit parameter'));
-    if (Number.isNaN(offset) || offset < 0) return next(new ValidationError('Invalid offset parameter'));
-    const users = await userService.listUsers({ limit: Math.min(requestedLimit, MAX_LIST_LIMIT), offset }, actingUserFrom(req));
+    const users = await userService.listUsers(parsePaginationOrThrow(req.query), actingUserFrom(req));
     res.json({ success: true, data: users } as ApiResponse<UserPublic[]>);
   } catch (error) {
     next(error);

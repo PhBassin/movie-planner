@@ -132,6 +132,18 @@ describe('Admin Member management routes', () => {
         .get('/api/members?offset=-1')
         .set('Authorization', 'Bearer valid-admin-token');
       expect(invalidOffset.status).toBe(400);
+
+      const tooDeep = await request(app)
+        .get('/api/members?offset=10001')
+        .set('Authorization', 'Bearer valid-admin-token');
+      expect(tooDeep.status).toBe(400);
+      expect(tooDeep.body.error).toBe('Invalid offset parameter');
+
+      const maxOffset = await request(app)
+        .get('/api/members?offset=10000')
+        .set('Authorization', 'Bearer valid-admin-token');
+      expect(maxOffset.status).toBe(200);
+      expect(memberQueries.listMembers).toHaveBeenLastCalledWith(db, { limit: 100, offset: 10000 });
     });
   });
 
@@ -211,7 +223,7 @@ describe('Admin Member management routes', () => {
         .set('Authorization', 'Bearer valid-admin-token');
 
       expect(response.status).toBe(409);
-      expect(response.body.error).toBe('Member is already suspended');
+      expect(response.body.error).toBe('Only active members can be suspended (member is suspended)');
       expect(memberQueries.setMemberStatus).not.toHaveBeenCalled();
       expect(revokeAllUserTokens).not.toHaveBeenCalled();
     });
@@ -224,7 +236,7 @@ describe('Admin Member management routes', () => {
         .set('Authorization', 'Bearer valid-admin-token');
 
       expect(response.status).toBe(409);
-      expect(response.body.error).toBe('Only active members can be suspended');
+      expect(response.body.error).toBe('Only active members can be suspended (member is unverified)');
     });
 
     it('should return 404 for a missing Member or a Staff id', async () => {
@@ -294,6 +306,7 @@ describe('Admin Member management routes', () => {
 
   describe('DELETE /api/members/:id', () => {
     it('should delete the Member and cascade Member-owned data (204)', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(activeLifecycle);
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(makeMember());
       vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(true);
 
@@ -310,7 +323,7 @@ describe('Admin Member management routes', () => {
     });
 
     it('should return 404 when deleting a missing Member (or a Staff id)', async () => {
-      vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(undefined);
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(undefined);
 
       const response = await request(app)
         .delete('/api/members/99')

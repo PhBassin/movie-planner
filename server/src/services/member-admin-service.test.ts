@@ -102,8 +102,9 @@ describe('MemberAdminService', () => {
 
       await expect(service.suspendMember(7, acting)).rejects.toMatchObject({
         statusCode: 409,
-        message: 'Member is already suspended',
+        message: 'Only active members can be suspended (member is suspended)',
       });
+      expect(memberQueries.setMemberStatus).not.toHaveBeenCalled();
       expect(revokeAllUserTokens).not.toHaveBeenCalled();
     });
 
@@ -112,7 +113,7 @@ describe('MemberAdminService', () => {
 
       await expect(service.suspendMember(7, acting)).rejects.toMatchObject({
         statusCode: 409,
-        message: 'Only active members can be suspended',
+        message: 'Only active members can be suspended (member is unverified)',
       });
       expect(memberQueries.setMemberStatus).not.toHaveBeenCalled();
     });
@@ -122,6 +123,14 @@ describe('MemberAdminService', () => {
 
       await expect(service.suspendMember(2, acting)).rejects.toThrow(NotFoundError);
       expect(memberQueries.setMemberStatus).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundError when the role-guarded status update matches nothing', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('active'));
+      vi.mocked(memberQueries.setMemberStatus).mockResolvedValue(false);
+
+      await expect(service.suspendMember(7, acting)).rejects.toThrow(NotFoundError);
+      expect(revokeAllUserTokens).not.toHaveBeenCalled();
     });
   });
 
@@ -146,22 +155,37 @@ describe('MemberAdminService', () => {
         statusCode: 409,
         message: 'Member is not suspended',
       });
+      expect(memberQueries.setMemberStatus).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundError when the role-guarded status update matches nothing', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('suspended'));
+      vi.mocked(memberQueries.setMemberStatus).mockResolvedValue(false);
+
+      await expect(service.reinstateMember(7, acting)).rejects.toThrow(NotFoundError);
+      expect(memberQueries.getMemberAdminDetail).not.toHaveBeenCalled();
     });
   });
 
   describe('deleteMember', () => {
-    it('deletes through the role-guarded Member delete inside one transaction', async () => {
+    it('locks the Member, then deletes through the role-guarded Member delete inside one transaction', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('active'));
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
       vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(true);
 
       await expect(service.deleteMember(7, acting)).resolves.toBeUndefined();
 
+      expect(userQueries.getMemberLifecycle).toHaveBeenCalledWith(txClient, 7, { forUpdate: true });
+      // The lock is taken before the counts are read.
+      expect(vi.mocked(userQueries.getMemberLifecycle).mock.invocationCallOrder[0])
+        .toBeLessThan(vi.mocked(memberQueries.getMemberAdminDetail).mock.invocationCallOrder[0]);
       expect(memberQueries.getMemberAdminDetail).toHaveBeenCalledWith(txClient, 7);
       expect(memberQueries.deleteMemberRow).toHaveBeenCalledWith(txClient, 7);
       expect(userQueries.deleteUser).not.toHaveBeenCalled();
     });
 
     it('keeps the erased email out of the audit log', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('active'));
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
       vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(true);
 
@@ -176,13 +200,22 @@ describe('MemberAdminService', () => {
     });
 
     it('throws NotFoundError when no Member row matches', async () => {
-      vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(undefined);
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(undefined);
 
       await expect(service.deleteMember(99, acting)).rejects.toThrow(NotFoundError);
       expect(memberQueries.deleteMemberRow).not.toHaveBeenCalled();
     });
 
+    it('rejects a Staff id like a missing one', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue({ ...lifecycle('active'), role_name: 'admin' });
+
+      await expect(service.deleteMember(1, acting)).rejects.toThrow(NotFoundError);
+      expect(memberQueries.getMemberAdminDetail).not.toHaveBeenCalled();
+      expect(memberQueries.deleteMemberRow).not.toHaveBeenCalled();
+    });
+
     it('throws NotFoundError when the role-guarded delete matches nothing (e.g. promoted to Staff meanwhile)', async () => {
+      vi.mocked(userQueries.getMemberLifecycle).mockResolvedValue(lifecycle('active'));
       vi.mocked(memberQueries.getMemberAdminDetail).mockResolvedValue(memberRow());
       vi.mocked(memberQueries.deleteMemberRow).mockResolvedValue(false);
 
