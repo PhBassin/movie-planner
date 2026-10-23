@@ -7,7 +7,7 @@ import { validatePasswordStrength } from '../utils/security.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import { logger } from '../utils/logger.js';
 import { parseJwtExpiration } from '../utils/jwt-config.js';
-import type { PermissionName } from '../types/role.js';
+import { SUSPENDED_ACCOUNT_MESSAGE, type PermissionName } from '../types/role.js';
 import { getCurrentSecret } from '../utils/jwt-secrets.js';
 import { ValidationError, AuthError, NotFoundError, isUniqueViolation } from '../utils/errors.js';
 
@@ -141,7 +141,7 @@ export class AuthService {
     }
 
     if (user.role_name === 'member' && user.status === 'suspended') {
-      throw new AuthError('Account suspended');
+      throw new AuthError(SUSPENDED_ACCOUNT_MESSAGE);
     }
 
     const token = await this.mintAccessToken(user, this.db);

@@ -235,7 +235,7 @@ describe('AdminPage', () => {
   });
 
   describe('Tab order (admin)', () => {
-    it('should display all 8 tabs in correct order for admin: Theaters, Schedules, Rapports, Users, Roles, Settings, Rate Limits, System', () => {
+    it('should display all 9 tabs in correct order for admin: Theaters, Schedules, Rapports, Users, Members, Roles, Settings, Rate Limits, System', () => {
       renderWithRouter('/admin');
 
       const tabs = screen.getAllByRole('tab');
@@ -244,10 +244,11 @@ describe('AdminPage', () => {
       expect(tabs[1]).toHaveTextContent('Schedules');
       expect(tabs[2]).toHaveTextContent('Rapports');
       expect(tabs[3]).toHaveTextContent('Users');
-      expect(tabs[4]).toHaveTextContent('Roles');
-      expect(tabs[5]).toHaveTextContent('Settings');
-      expect(tabs[6]).toHaveTextContent('Rate Limits');
-      expect(tabs[7]).toHaveTextContent('System');
+      expect(tabs[4]).toHaveTextContent('Members');
+      expect(tabs[5]).toHaveTextContent('Roles');
+      expect(tabs[6]).toHaveTextContent('Settings');
+      expect(tabs[7]).toHaveTextContent('Rate Limits');
+      expect(tabs[8]).toHaveTextContent('System');
     });
   });
 
@@ -265,6 +266,22 @@ describe('AdminPage', () => {
       renderWithRouter('/admin', operatorUser);
 
       expect(screen.queryByRole('tab', { name: 'Users' })).not.toBeInTheDocument();
+    });
+
+    it('should NOT show Members tab for operator (admin-only surface, issue #65)', () => {
+      renderWithRouter('/admin', operatorUser);
+
+      expect(screen.queryByRole('tab', { name: 'Members' })).not.toBeInTheDocument();
+    });
+
+    it('should show the Members tab only with members:list (the page needs the list)', () => {
+      const readOnly: User = { ...operatorUser, id: 4, role_name: 'custom', is_system_role: false, permissions: ['members:read', 'members:delete'] as PermissionName[] };
+      const { unmount } = renderWithRouter('/admin', readOnly);
+      expect(screen.queryByRole('tab', { name: 'Members' })).not.toBeInTheDocument();
+      unmount();
+
+      renderWithRouter('/admin', { ...readOnly, permissions: ['members:list'] as PermissionName[] });
+      expect(screen.getByRole('tab', { name: 'Members' })).toBeInTheDocument();
     });
 
     it('should NOT show Roles tab for operator', () => {

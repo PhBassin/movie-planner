@@ -33,6 +33,15 @@ const USERNAME_REGEX = /^[a-zA-Z0-9]{3,15}$/;
 const ADMIN_ROLE_NAME = 'admin';
 
 /**
+ * The Staff roster never handles Members: they are listed, suspended and
+ * erased through `/api/members` (`MemberAdminService`, `members:*`
+ * permissions). Member rows are invisible to the user queries, and this
+ * service refuses to turn a Staff account into a Member.
+ */
+const MEMBER_ROLE_NAME = 'member';
+const MEMBER_ROLE_REJECTED = 'The member role cannot be assigned to Staff users';
+
+/**
  * Minimal acting-user context the service needs for self-delete checks and
  * structured audit logging. Matches the shape produced by `requireAuth`
  * (see `middleware/auth.ts:AuthRequest['user']`) but the service is
@@ -117,6 +126,10 @@ export class UserService {
       throw new ValidationError('Invalid role_id: role does not exist');
     }
 
+    if ((await getRoleNameById(this.db, roleId)) === MEMBER_ROLE_NAME) {
+      throw new ValidationError(MEMBER_ROLE_REJECTED);
+    }
+
     const passwordHash = await hashPassword(password);
 
     let newUser: UserPublic;
@@ -155,6 +168,10 @@ export class UserService {
     const newRoleName = await getRoleNameById(this.db, roleId);
     if (!newRoleName) {
       throw new ValidationError('Invalid role_id: role does not exist');
+    }
+
+    if (newRoleName === MEMBER_ROLE_NAME) {
+      throw new ValidationError(MEMBER_ROLE_REJECTED);
     }
 
     await this.assertNotLastAdmin(targetUser.role_name, newRoleName);

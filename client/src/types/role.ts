@@ -12,6 +12,7 @@ export type { Permission, RoleWithPermissions, PermissionCategoryLabel } from '.
 // This is duplicated from the server to ensure strict typing in the client
 export type PermissionName =
   | 'users:list' | 'users:create' | 'users:update' | 'users:delete' | 'users:read'
+  | 'members:list' | 'members:read' | 'members:update' | 'members:delete'
   | 'scraper:trigger' | 'scraper:trigger_single'
   | 'scraper:schedules:list' | 'scraper:schedules:create' | 'scraper:schedules:update' | 'scraper:schedules:delete'
   | 'theaters:create' | 'theaters:update' | 'theaters:delete' | 'theaters:read'

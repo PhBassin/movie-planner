@@ -7,6 +7,7 @@ import {
   getMemberProfile,
   updateMemberAppearance,
   isPendingVerification,
+  deleteMemberRow,
   type MemberCredentialRow,
 } from './member-queries.js';
 
@@ -180,6 +181,25 @@ describe('Member Queries', () => {
         expect.stringContaining('ON CONFLICT (member_id) DO UPDATE'),
         expect.any(Array)
       );
+    });
+  });
+
+  describe('deleteMemberRow', () => {
+    it('deletes only a member-role row (role guard inside the statement)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
+
+      await expect(deleteMemberRow(mockDb, 7)).resolves.toBe(true);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringMatching(/DELETE FROM users[\s\S]*WHERE id = \$1 AND role_id = \(SELECT id FROM roles WHERE name = 'member'\)/),
+        [7],
+      );
+    });
+
+    it('returns false when no Member row matched (missing or Staff id)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await expect(deleteMemberRow(mockDb, 2)).resolves.toBe(false);
     });
   });
 });

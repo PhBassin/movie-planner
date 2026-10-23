@@ -144,6 +144,15 @@ describe('UserService', () => {
       expect(roleQueries.roleExists).not.toHaveBeenCalled();
     });
 
+    it('refuses to create a Staff user with the member role', async () => {
+      vi.mocked(roleQueries.roleExists).mockResolvedValue(true);
+      vi.mocked(roleQueries.getRoleNameById).mockResolvedValueOnce('member');
+      await expect(
+        service.createUser({ username: 'newuser', password: 'Str0ng!Passw0rd', roleId: 3 }, ACTING),
+      ).rejects.toThrow('The member role cannot be assigned to Staff users');
+      expect(userQueries.createUser).not.toHaveBeenCalled();
+    });
+
     it('rejects an unknown roleId', async () => {
       vi.mocked(roleQueries.roleExists).mockResolvedValue(false);
       await expect(
@@ -218,6 +227,16 @@ describe('UserService', () => {
       vi.mocked(userQueries.getUserById).mockResolvedValue(makeUser(2, 'user1', 2, 'operator'));
       vi.mocked(roleQueries.getRoleNameById).mockResolvedValue(undefined);
       await expect(service.updateUserRole(2, 999, ACTING)).rejects.toThrow('Invalid role_id: role does not exist');
+    });
+
+    it('refuses to turn a Staff user into a Member (members live on /api/members)', async () => {
+      vi.mocked(userQueries.getUserById).mockResolvedValue(makeUser(2, 'user1', 2, 'operator'));
+      vi.mocked(roleQueries.getRoleNameById).mockResolvedValueOnce('member');
+      await expect(service.updateUserRole(2, 3, ACTING)).rejects.toMatchObject({
+        name: 'ValidationError',
+        message: 'The member role cannot be assigned to Staff users',
+      });
+      expect(userQueries.updateUserRole).not.toHaveBeenCalled();
     });
 
     it('throws AuthError when demoting the only admin', async () => {

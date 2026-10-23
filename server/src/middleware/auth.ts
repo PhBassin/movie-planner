@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ApiResponse } from '../types/api.js';
-import { MEMBER_ONLY_ENDPOINT_MESSAGE, type PermissionName } from '../types/role.js';
+import { MEMBER_ONLY_ENDPOINT_MESSAGE, SUSPENDED_ACCOUNT_MESSAGE, type PermissionName } from '../types/role.js';
+import { getMemberLifecycle } from '../db/user-queries.js';
 import { getSecrets, verifyWithMultipleSecrets } from '../utils/jwt-secrets.js';
 
 // Fail-fast: validate secrets at module load
@@ -76,12 +77,31 @@ export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction)
     }
 };
 
-export const requireMember = (req: AuthRequest, res: Response, next: NextFunction): void | Response => {
+/**
+ * Gate a Member-scoped route. Beyond the role claim, re-reads the lifecycle
+ * row: the access JWT is stateless, so suspension (and Admin deletion) only
+ * revoke refresh tokens — without this check a suspended Member would keep
+ * acting until the access token expires. Both cases answer 401 so the client
+ * attempts a refresh, which fails (tokens revoked), and drops the session.
+ */
+export const requireMember = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void | Response> => {
     if (req.user?.role_name !== 'member') {
         return res.status(403).json({
             success: false,
             error: MEMBER_ONLY_ENDPOINT_MESSAGE,
         });
+    }
+
+    try {
+        const member = await getMemberLifecycle(req.app.get('db'), req.user.id);
+        if (!member || member.role_name !== 'member') {
+            return res.status(401).json({ success: false, error: 'Invalid or expired token.' } satisfies ApiResponse);
+        }
+        if (member.status === 'suspended') {
+            return res.status(401).json({ success: false, error: SUSPENDED_ACCOUNT_MESSAGE } satisfies ApiResponse);
+        }
+    } catch (error) {
+        return next(error);
     }
 
     next();

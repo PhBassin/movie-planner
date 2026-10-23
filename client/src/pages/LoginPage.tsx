@@ -30,7 +30,7 @@ const LoginPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const response = await apiClient.post<any>('/auth/login', { username, password });
+            const response = await apiClient.post<any>('/auth/login', { username, password }, { skipAuthRefresh: true });
 
             if (response.success) {
                 // API returns { success: true, data: { token, user } }

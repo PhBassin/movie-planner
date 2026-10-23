@@ -39,6 +39,17 @@ describe('User Management Queries', () => {
       );
     });
 
+    it('excludes Members (managed on /api/members, not the Staff roster)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await getAllUsers(mockDb);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("u.role_id <> (SELECT id FROM roles WHERE name = 'member')"),
+        expect.any(Array)
+      );
+    });
+
     it('should select role_id and role_name via JOIN', async () => {
       vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
 
@@ -119,6 +130,17 @@ describe('User Management Queries', () => {
   });
 
   describe('getUserById', () => {
+    it('cannot resolve a Member id (Staff roster only)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await getUserById(mockDb, 7);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("u.id = $1 AND u.role_id <> (SELECT id FROM roles WHERE name = 'member')"),
+        [7]
+      );
+    });
+
     it('should return user by ID with role_id and role_name (no password_hash)', async () => {
       const mockUser: UserPublic = {
         id: 1,
@@ -244,7 +266,7 @@ describe('User Management Queries', () => {
       await updateUserRole(mockDb, 2, 1);
 
       expect(mockDb.query).toHaveBeenCalledWith(
-        'UPDATE users SET role_id = $1 WHERE id = $2',
+        "UPDATE users SET role_id = $1 WHERE id = $2 AND role_id <> (SELECT id FROM roles WHERE name = 'member')",
         [1, 2]
       );
     });
@@ -255,7 +277,7 @@ describe('User Management Queries', () => {
       await updateUserRole(mockDb, 5, 2);
 
       expect(mockDb.query).toHaveBeenCalledWith(
-        'UPDATE users SET role_id = $1 WHERE id = $2',
+        "UPDATE users SET role_id = $1 WHERE id = $2 AND role_id <> (SELECT id FROM roles WHERE name = 'member')",
         [2, 5]
       );
     });
@@ -275,7 +297,7 @@ describe('User Management Queries', () => {
 
       expect(result).toBe(true);
       expect(mockDb.query).toHaveBeenCalledWith(
-        'DELETE FROM users WHERE id = $1',
+        "DELETE FROM users WHERE id = $1 AND role_id <> (SELECT id FROM roles WHERE name = 'member')",
         [2]
       );
     });

@@ -24,6 +24,12 @@ export const ADMIN_PERMISSIONS: PermissionName[] = [
   'users:delete',
   'users:read',
   
+  // Member permissions (issue #65 — admin-only surface over the Member base)
+  'members:list',
+  'members:read',
+  'members:update',
+  'members:delete',
+  
   // Role permissions
   'roles:read',
   'roles:list',

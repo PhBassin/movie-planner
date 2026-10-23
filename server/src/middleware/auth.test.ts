@@ -133,3 +133,72 @@ describe('isAdminUser', () => {
     expect(isAdminUser(undefined)).toBe(false);
   });
 });
+
+describe('requireMember (lifecycle re-check)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.JWT_SECRET = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6';
+  });
+
+  async function runWithLifecycle(row: unknown, roleName = 'member') {
+    const query = vi.fn().mockResolvedValue({ rows: row === undefined ? [] : [row] });
+    const { requireMember } = await import('./auth.js');
+    const req = {
+      user: { id: 7, username: 'm@example.com', role_name: roleName, is_system_role: true, permissions: [] },
+      app: { get: () => ({ query }) },
+    } as any;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireMember(req, res as any, next);
+    return { query, res, next };
+  }
+
+  it('rejects a non-member role with 403 without touching the database', async () => {
+    const { query, res, next } = await runWithLifecycle(undefined, 'operator');
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(query).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('lets an active Member through', async () => {
+    const { next, res } = await runWithLifecycle({ id: 7, role_name: 'member', status: 'active', email_verified_at: null });
+    expect(next).toHaveBeenCalledWith();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('lets an unverified Member through (only suspension blocks)', async () => {
+    const { next } = await runWithLifecycle({ id: 7, role_name: 'member', status: 'unverified', email_verified_at: null });
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('rejects a suspended Member holding a still-valid access token with 401', async () => {
+    const { next, res } = await runWithLifecycle({ id: 7, role_name: 'member', status: 'suspended', email_verified_at: null });
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'Account suspended' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('rejects a deleted Member (no row) with 401', async () => {
+    const { next, res } = await runWithLifecycle(undefined);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('rejects a token whose user was promoted to Staff with 401', async () => {
+    const { next, res } = await runWithLifecycle({ id: 7, role_name: 'operator', status: 'active', email_verified_at: null });
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('forwards a database failure to the error handler', async () => {
+    const failure = new Error('db down');
+    const query = vi.fn().mockRejectedValue(failure);
+    const { requireMember } = await import('./auth.js');
+    const req = { user: { id: 7, role_name: 'member' }, app: { get: () => ({ query }) } } as any;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireMember(req, res as any, next);
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+});

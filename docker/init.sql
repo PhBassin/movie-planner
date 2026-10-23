@@ -63,6 +63,13 @@ INSERT INTO permissions (name, description, category) VALUES
   ('users:update',               'Update users',                            'users'),
   ('users:delete',               'Delete users',                            'users'),
   ('users:read',                 'View user details',                       'users'),
+  -- Member management (issue #65): Admin-only Staff surface over the Member
+  -- base. NOT granted to the operator role below — Members are manageable by
+  -- Admins only (see CONTEXT.md → Member / Admin).
+  ('members:list',               'List members',                            'members'),
+  ('members:read',               'View member details',                     'members'),
+  ('members:update',             'Suspend and reinstate members',           'members'),
+  ('members:delete',             'Delete members',                          'members'),
   ('scraper:trigger',            'Trigger a global scrape',                 'scraper'),
   ('scraper:trigger_single',     'Trigger a scrape for one theater',        'scraper'),
   ('scraper:schedules:list',     'View scrape schedules',                   'scraper'),
@@ -281,6 +288,7 @@ CREATE INDEX idx_permission_category_labels_key ON permission_category_labels(ca
 
 INSERT INTO permission_category_labels (category_key, label_en, label_fr) VALUES
   ('users',    'Users',     'Utilisateurs'),
+  ('members',  'Members',   'Membres'),
   ('roles',    'Roles',     'Rôles'),
   ('scraper',  'Scraping',  'Scraping'),
   ('schedules','Schedules', 'Planification'),
