@@ -37,8 +37,9 @@ import { logger } from '../utils/logger.js';
 const FAILED_NOTICE_REASON = 'Source injoignable';
 
 /**
- * Stale-pending expiry (ADR 0010): a submission still pending after this long
- * has a scrape that will never go terminal on its own (worker died mid-job).
+ * Stale-pending expiry (ADR 0010): a submission scrape a worker claimed this
+ * long ago and that is still running will never go terminal on its own
+ * (worker died mid-job).
  */
 export const STALE_PENDING_SUBMISSION_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -78,14 +79,20 @@ export class SubmissionResolutionService {
    * submissions this run resolved.
    */
   async reconcilePendingSubmissions(): Promise<number> {
-    const expired = await expireStalePendingSubmissionReports(
-      this.db,
-      new Date(Date.now() - STALE_PENDING_SUBMISSION_TIMEOUT_MS),
-    );
-    if (expired.length > 0) {
-      logger.warn(
-        `[submission-resolver] Expired ${expired.length} stale submission scrape report(s): ${expired.join(', ')}`,
+    // Best-effort: an expiry failure must never block resolving the
+    // submissions whose reports already went terminal.
+    try {
+      const expired = await expireStalePendingSubmissionReports(
+        this.db,
+        new Date(Date.now() - STALE_PENDING_SUBMISSION_TIMEOUT_MS),
       );
+      if (expired.length > 0) {
+        logger.warn(
+          `[submission-resolver] Expired ${expired.length} stale submission scrape report(s): ${expired.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      logger.error('[submission-resolver] Stale-pending expiry failed', { error });
     }
 
     const resolvable = await getResolvablePendingSubmissions(this.db);

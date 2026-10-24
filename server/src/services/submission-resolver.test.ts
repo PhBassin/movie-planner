@@ -257,6 +257,21 @@ describe('SubmissionResolutionService', () => {
       }
     });
 
+    it('still resolves terminal submissions when the stale-pending expiry fails', async () => {
+      vi.mocked(expireStalePendingSubmissionReports).mockRejectedValue(new Error('deadlock detected'));
+      vi.mocked(getResolvablePendingSubmissions).mockResolvedValue([
+        { ...pendingSubmission, report_status: 'failed' as const },
+      ]);
+      vi.mocked(resolveSubmission).mockResolvedValue({ ...pendingSubmission, status: 'failed' });
+
+      await expect(service.reconcilePendingSubmissions()).resolves.toBe(1);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        '[submission-resolver] Stale-pending expiry failed',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
     it('uses a 30-minute stale-pending timeout', () => {
       expect(STALE_PENDING_SUBMISSION_TIMEOUT_MS).toBe(30 * 60 * 1000);
     });

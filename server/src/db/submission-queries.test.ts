@@ -57,7 +57,7 @@ describe('Submission queries', () => {
     await expect(countSubmissionAttempts(db, 'C0013')).resolves.toEqual({ total: 0, pending: 0 });
   });
 
-  it('expires only running reports of stale pending submissions and drops their queued jobs', async () => {
+  it('expires only running, long-claimed reports of pending submissions', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 42 }, { id: 43 }] }) } as unknown as DB;
     const cutoff = new Date('2026-01-01T11:30:00Z');
 
@@ -66,8 +66,9 @@ describe('Submission queries', () => {
     const [sql, params] = vi.mocked(db.query).mock.calls[0];
     expect(sql).toContain("SET status = 'failed'");
     expect(sql).toContain("WHERE r.status = 'running'");
-    expect(sql).toContain("s.status = 'pending' AND s.created_at < $1");
-    expect(sql).toContain('DELETE FROM scrape_jobs');
+    expect(sql).toContain('r.claimed_at < $1');
+    expect(sql).toContain("s.status = 'pending'");
+    expect(sql).not.toContain('created_at');
     expect(params?.[0]).toBe(cutoff);
     expect(JSON.parse(params?.[1] as string)).toEqual([
       { theater_name: 'System', error: 'Submission scrape timed out' },

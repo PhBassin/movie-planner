@@ -81,9 +81,11 @@ export async function executeJob(job: ScrapeJob, progress: ProgressPublisher): P
   const jobType = ('type' in job) ? job.type : 'scrape';
   const taggedProgress = tagTerminalEvents(job, progress);
 
-  // Update report status
+  // Update report status. `claimed_at` starts the stale-pending expiry clock
+  // (ADR 0010): the server only expires a submission scrape a worker has
+  // actually been running for too long, never one still queued.
   try {
-    await updateScrapeReport(db, job.reportId, { status: 'running' });
+    await updateScrapeReport(db, job.reportId, { status: 'running', claimed_at: new Date().toISOString() });
   } catch (err) {
     logger.warn(`[scraper] Could not update report ${job.reportId}:`, err);
   }

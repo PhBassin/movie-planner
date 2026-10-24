@@ -310,8 +310,9 @@ describe.runIf(Boolean(TEST_URL))(
       `);
        // 001 (scrape_jobs queue), 002 (auth_email_tokens), 003 (verification
        // rate-limit arm), 004 (password-reset rate-limit arms), 005
-       // (auth-email-token uniqueness), 006 (member selections), and 007
-       // (theater submissions) — all idempotent over the baseline.
+       // (auth-email-token uniqueness), 006 (member selections), 007
+       // (theater submissions), 008 (member admin permissions), and 009
+       // (scrape report claimed_at) — all idempotent over the baseline.
       expect(result.rows.map((r) => r.version)).toEqual([
         '001_scrape_jobs_queue.sql',
         '002_auth_email_tokens.sql',
@@ -320,6 +321,8 @@ describe.runIf(Boolean(TEST_URL))(
         '005_auth_email_token_uniqueness.sql',
         '006_member_selections.sql',
         '007_theater_submissions.sql',
+        '008_member_admin_permissions.sql',
+        '009_scrape_report_claimed_at.sql',
       ]);
 
       // The queue table is present (created by the baseline; the migration is

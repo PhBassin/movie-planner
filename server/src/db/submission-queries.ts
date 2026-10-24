@@ -59,6 +59,12 @@ export async function countNewSubmissionsSince(
   return result.rows[0]?.count ?? 0;
 }
 
+export interface LockedTheaterRow {
+  id: string;
+  url: string;
+  status: 'provisioning' | 'active';
+}
+
 /**
  * Lock an existing Theater row for the retry decision (ADR 0010): serializes
  * concurrent re-submissions of the same URL — by any Member — so exactly one
@@ -67,9 +73,9 @@ export async function countNewSubmissionsSince(
 export async function lockTheaterForSubmission(
   db: QueryableDB,
   theaterId: string,
-): Promise<{ id: string; status: 'provisioning' | 'active' } | undefined> {
-  const result = await db.query<{ id: string; status: 'provisioning' | 'active' }>(
-    'SELECT id, status FROM theaters WHERE id = $1 FOR UPDATE',
+): Promise<LockedTheaterRow | undefined> {
+  const result = await db.query<LockedTheaterRow>(
+    'SELECT id, url, status FROM theaters WHERE id = $1 FOR UPDATE',
     [theaterId],
   );
   return result.rows[0];
@@ -149,37 +155,30 @@ export async function getResolvablePendingSubmissions(
 
 /**
  * Stale-pending expiry (ADR 0010): fail the still-`running` ScrapeReport of
- * every pending submission created before `createdBefore` — a worker that
- * died mid-scrape never makes it terminal — and drop its queued job if the
- * worker never claimed it, so no zombie scrape runs after the expiry. The
- * reconciliation sweep then resolves those submissions `failed` through the
- * normal routine. Only submission-linked reports are touched; Staff scrapes
- * are not. Returns the expired report ids.
+ * every pending submission whose job a worker claimed before `claimedBefore`
+ * — a worker that died mid-scrape never makes it terminal. The clock is the
+ * report's `claimed_at`, never the submission's `created_at`, so a job still
+ * queued (`claimed_at IS NULL`, e.g. behind a long Staff scrape) never
+ * expires. The reconciliation sweep then resolves those submissions `failed`
+ * through the normal routine. Only submission-linked reports are touched;
+ * Staff scrapes are not. Returns the expired report ids.
  */
 export async function expireStalePendingSubmissionReports(
   db: QueryableDB,
-  createdBefore: Date,
+  claimedBefore: Date,
 ): Promise<number[]> {
   const result = await db.query<{ id: number }>(
-    `WITH expired AS (
-       UPDATE scrape_reports r
-       SET status = 'failed', completed_at = NOW(), errors = $2::jsonb
-       WHERE r.status = 'running'
-         AND r.id IN (
-           SELECT s.report_id FROM theater_submissions s
-           WHERE s.status = 'pending' AND s.created_at < $1
-         )
-       RETURNING r.id
-     ), dropped AS (
-       DELETE FROM scrape_jobs j
-       USING expired e
-       WHERE j.payload->>'reportId' = e.id::text
-       RETURNING j.id
-     )
-     SELECT id FROM expired ORDER BY id`,
-    [createdBefore, JSON.stringify([{ theater_name: 'System', error: 'Submission scrape timed out' }])],
+    `UPDATE scrape_reports r
+     SET status = 'failed', completed_at = NOW(), errors = $2::jsonb
+     WHERE r.status = 'running'
+       AND r.claimed_at < $1
+       AND r.id IN (
+         SELECT s.report_id FROM theater_submissions s WHERE s.status = 'pending'
+       )
+     RETURNING r.id`,
+    [claimedBefore, JSON.stringify([{ theater_name: 'System', error: 'Submission scrape timed out' }])],
   );
-  return result.rows.map((row) => row.id);
+  return result.rows.map((row) => row.id).sort((a, b) => a - b);
 }
 
 /**

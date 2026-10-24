@@ -70,6 +70,20 @@ function assertMemberEligible(member: SubmissionMemberRow): void {
   }
 }
 
+/** A Theater row is already being introduced and cannot take a new attempt. */
+function inProgressConflict(): AppError {
+  return new AppError('This cinema is already being added to the catalog', 409);
+}
+
+/**
+ * Retry rule (ADR 0010): a `provisioning` Theater takes a new attempt only if
+ * it has at least one attempt (a Staff-introduced row has none) and none is
+ * still pending.
+ */
+function isRetryable(attempts: { total: number; pending: number }): boolean {
+  return attempts.total > 0 && attempts.pending === 0;
+}
+
 /** The synchronous outcome of `submit`: a dedup Selection add or a queued submission. */
 export type SubmitResult =
   | { outcome: 'selection_added'; theater: Theater }
@@ -101,16 +115,13 @@ export class SubmissionService {
     assertMemberEligible(gate);
 
     // Dedup fast path (read-only): a URL matching an active Theater degrades to
-    // a Selection add — no new row, no scrape. Delegating to SelectionService
-    // keeps the cap check (409 when full) and idempotency in one place, and
-    // avoids holding the Member lock while the Selection transaction runs.
+    // a Selection add — no new row, no scrape.
     const existing = await getTheaterById(this.db, theaterId);
     if (existing?.status === 'active') {
-      const theater = await new SelectionService(this.db).add(memberId, theaterId);
-      return { outcome: 'selection_added', theater };
+      return this.addToSelection(memberId, theaterId);
     }
 
-    return this.db.transaction(async (transaction) => {
+    const result = await this.db.transaction(async (transaction): Promise<SubmitResult | 'theater_active'> => {
       const tx = transaction;
 
       // Authoritative re-check under the Member lock: closes the race between
@@ -125,21 +136,19 @@ export class SubmissionService {
         throw new ForbiddenError('You must verify your email before submitting a cinema');
       }
 
-      // A Theater row already exists for this id. Retry rule (ADR 0010): a
-      // `provisioning` Theater whose every submission attempt is terminal
-      // (the last one failed) gets a new attempt against the same row. A
-      // pending attempt, a Staff-introduced row with no submission, or a
-      // Theater that just went active (raced the fast path) is a conflict —
-      // never a duplicate row or scrape. The row lock serializes concurrent
-      // retries of the same URL across Members.
+      // A Theater row already exists for this id. A Theater that just went
+      // active (raced the fast path) degrades to the dedup Selection add once
+      // this transaction ends. A `provisioning` Theater gets a new attempt
+      // against the same row only under the retry rule (ADR 0010); a pending
+      // attempt or a Staff-introduced row is a conflict — never a duplicate
+      // row or scrape. The row lock serializes concurrent retries of the same
+      // URL across Members.
       const existingRow = await lockTheaterForSubmission(tx, theaterId);
-      if (existingRow) {
-        const attempts = existingRow.status === 'provisioning'
-          ? await countSubmissionAttempts(tx, theaterId)
-          : undefined;
-        if (!attempts || attempts.total === 0 || attempts.pending > 0) {
-          throw new AppError('This cinema is already being added to the catalog', 409);
-        }
+      if (existingRow?.status === 'active') {
+        return 'theater_active';
+      }
+      if (existingRow && !isRetryable(await countSubmissionAttempts(tx, theaterId))) {
+        throw inProgressConflict();
       }
 
       // Throttle: only genuinely-new cinemas and retries count — dedup never
@@ -149,7 +158,7 @@ export class SubmissionService {
       const recent = await countNewSubmissionsSince(tx, memberId, new Date(Date.now() - windowMs));
       if (recent >= max) {
         throw new AppError(
-          `You have reached the limit of ${max} new cinema submissions. Please wait before submitting another cinema.`,
+          `You have reached the limit of ${max} cinema submissions (retries included). Please wait before submitting another cinema.`,
           429,
         );
       }
@@ -159,14 +168,16 @@ export class SubmissionService {
       // insert, and submission can never be observed half-done.
       let reportId: number;
       try {
+        // A retry scrapes the row's stored URL, so a Staff correction of a
+        // failed Theater's URL is honoured.
         reportId = existingRow
-          ? await enqueueAddTheaterScrape(tx, cleanedUrl)
+          ? await enqueueAddTheaterScrape(tx, existingRow.url)
           : (await addTheaterWithScrapeJob(tx, { id: theaterId, name: theaterId, url: cleanedUrl })).reportId;
       } catch (error) {
         // A concurrent submitter raced the fast-path dedup read above: the
         // Theater now exists, so degrade to a conflict rather than duplicating.
         if (isUniqueViolation(error)) {
-          throw new AppError('This cinema is already being added to the catalog', 409);
+          throw inProgressConflict();
         }
         throw error;
       }
@@ -183,5 +194,17 @@ export class SubmissionService {
       );
       return { outcome: 'submitted', submission };
     });
+
+    return result === 'theater_active' ? this.addToSelection(memberId, theaterId) : result;
+  }
+
+  /**
+   * Dedup outcome: delegating to SelectionService keeps the cap check (409
+   * when full) and idempotency in one place, and avoids holding the Member
+   * lock while the Selection transaction runs.
+   */
+  private async addToSelection(memberId: number, theaterId: string): Promise<SubmitResult> {
+    const theater = await new SelectionService(this.db).add(memberId, theaterId);
+    return { outcome: 'selection_added', theater };
   }
 }
