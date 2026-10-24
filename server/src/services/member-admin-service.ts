@@ -77,13 +77,12 @@ export class MemberAdminService {
       if (!member || member.role_name !== 'member') {
         throw new NotFoundError('Member not found');
       }
-      if (member.status === 'suspended') {
-        throw new AppError('Member is already suspended', 409);
-      }
       if (member.status !== 'active') {
-        throw new AppError('Only active members can be suspended', 409);
+        throw new AppError(`Only active members can be suspended (member is ${member.status})`, 409);
       }
-      await setMemberStatus(tx, memberId, 'suspended');
+      if (!(await setMemberStatus(tx, memberId, 'suspended'))) {
+        throw new NotFoundError('Member not found');
+      }
       await revokeAllUserTokens(tx, memberId);
       return requireMember(tx, memberId);
     });
@@ -112,7 +111,9 @@ export class MemberAdminService {
       if (member.status !== 'suspended') {
         throw new AppError('Member is not suspended', 409);
       }
-      await setMemberStatus(tx, memberId, 'active');
+      if (!(await setMemberStatus(tx, memberId, 'active'))) {
+        throw new NotFoundError('Member not found');
+      }
       return requireMember(tx, memberId);
     });
 
@@ -138,11 +139,18 @@ export class MemberAdminService {
    * can reach it. A suspended Member is exactly the case self-service
    * erasure delegates to Admin.
    *
+   * The lifecycle row is locked first (as suspend/reinstate do), so the
+   * Selection/submission counts logged are the ones actually cascaded.
+   *
    * The audit log carries ids and counts only: erasure leaves no email
    * behind, logs included (CONTEXT.md → Member erasure).
    */
   async deleteMember(memberId: number, acting: ActingUser): Promise<void> {
     const member = await this.db.transaction(async (tx) => {
+      const lifecycle = await getMemberLifecycle(tx, memberId, { forUpdate: true });
+      if (!lifecycle || lifecycle.role_name !== 'member') {
+        throw new NotFoundError('Member not found');
+      }
       const existing = await requireMember(tx, memberId);
       if (!(await deleteMemberRow(tx, memberId))) {
         throw new NotFoundError('Member not found');
