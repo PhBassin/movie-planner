@@ -80,3 +80,31 @@ export async function removeSelection(
   );
   return (result.rowCount ?? 0) > 0;
 }
+
+/**
+ * A Member's whole Selection for the data export (ADR 0004 sub-decision 6):
+ * every `member_selections` row, whatever the Theater's status — unlike
+ * `getSelection`, which serves the Member-facing view of active Theaters.
+ */
+export interface SelectionExportRow {
+  theater_id: string;
+  name: string;
+  city: string | null;
+  url: string | null;
+  status: 'provisioning' | 'active';
+}
+
+export async function getSelectionForExport(
+  db: QueryableDB,
+  memberId: number,
+): Promise<SelectionExportRow[]> {
+  const result = await db.query<SelectionExportRow>(
+    `SELECT t.id AS theater_id, t.name, t.city, t.url, t.status
+     FROM member_selections ms
+     JOIN theaters t ON t.id = ms.theater_id
+     WHERE ms.member_id = $1
+     ORDER BY t.name, t.id`,
+    [memberId],
+  );
+  return result.rows;
+}

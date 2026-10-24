@@ -30,6 +30,7 @@ export default function Layout({ children, title }: LayoutProps) {
         logo={logo}
         isAuthenticated={isAuthenticated}
         username={user?.username ?? undefined}
+        isMember={user?.role_name === 'member'}
         hasAdminAccess={hasAdminAccess}
         onLogout={() => {
           logout();
@@ -52,11 +53,12 @@ interface HeaderProps {
   logo?: string;
   isAuthenticated: boolean;
   username?: string;
+  isMember: boolean;
   hasAdminAccess: boolean;
   onLogout: () => void;
 }
 
-function Header({ appName, logo, isAuthenticated, username, hasAdminAccess, onLogout }: HeaderProps) {
+function Header({ appName, logo, isAuthenticated, username, isMember, hasAdminAccess, onLogout }: HeaderProps) {
   const isHeaderVisible = useScrollHeader();
 
   useLayoutHeaderOffset(isHeaderVisible);
@@ -76,7 +78,7 @@ function Header({ appName, logo, isAuthenticated, username, hasAdminAccess, onLo
             )}
             <div className="border-l border-gray-600 h-6"></div>
             {isAuthenticated ? (
-              <UserMenu username={username} onLogout={onLogout} />
+              <UserMenu username={username} isMember={isMember} onLogout={onLogout} />
             ) : (
               <Link
                 to="/login"
@@ -114,7 +116,7 @@ function BrandLink({ appName, logo }: { appName: string; logo?: string }) {
   );
 }
 
-function UserMenu({ username, onLogout }: { username?: string; onLogout: () => void }) {
+function UserMenu({ username, isMember, onLogout }: { username?: string; isMember: boolean; onLogout: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useClickOutside<HTMLDivElement>(isOpen, () => setIsOpen(false));
 
@@ -140,6 +142,9 @@ function UserMenu({ username, onLogout }: { username?: string; onLogout: () => v
           className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-10"
           data-testid="user-dropdown-menu"
         >
+          {isMember && (
+            <MenuLink to="/account" icon="user" label="My account" testId="account-link" onClose={() => setIsOpen(false)} />
+          )}
           <MenuLink to="/change-password" icon="key" label="Change Password" testId="change-password-link" onClose={() => setIsOpen(false)} />
           <div className="border-t border-gray-100"></div>
           <button
@@ -160,7 +165,7 @@ function UserMenu({ username, onLogout }: { username?: string; onLogout: () => v
 
 function MenuLink({ to, icon, label, testId, onClose }: {
   to: string;
-  icon: 'key';
+  icon: 'key' | 'user';
   label: string;
   testId: string;
   onClose: () => void;
@@ -174,6 +179,7 @@ function MenuLink({ to, icon, label, testId, onClose }: {
     >
       <div className="flex items-center gap-2">
         {icon === 'key' && <KeyIcon />}
+        {icon === 'user' && <UserIcon />}
         <span>{label}</span>
       </div>
     </Link>
@@ -184,6 +190,14 @@ function KeyIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
     </svg>
   );
 }

@@ -91,6 +91,53 @@ export async function submitTheater(url: string): Promise<SubmitTheaterResult> {
 }
 
 /**
+ * The Member data export document (`GET /api/me/export`, ADR 0004 → RGPD
+ * Article 20): the Member's own data, never credentials.
+ */
+export interface MemberDataExport {
+  exported_at: string;
+  account: {
+    email: string;
+    status: MemberProfile['status'];
+    email_verified_at: string | null;
+    created_at: string;
+  };
+  appearance: Appearance;
+  selection: Array<{
+    theater_id: string;
+    name: string;
+    city: string | null;
+    url: string | null;
+    status: 'provisioning' | 'active';
+  }>;
+  submissions: Array<{
+    id: number;
+    url: string;
+    theater_id: string;
+    status: 'pending' | 'succeeded' | 'failed';
+    created_at: string;
+    resolved_at: string | null;
+  }>;
+}
+
+export async function exportMemberData(): Promise<MemberDataExport> {
+  const response = await apiClient.get<ApiResponse<MemberDataExport>>('/me/export');
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to export your data');
+  }
+  return response.data;
+}
+
+/**
+ * Member self-erasure (`POST /api/me/delete`, ADR 0004 → RGPD Article 17):
+ * immediate and irreversible, gated by the current password. Server errors
+ * (wrong password, suspended account) reject as `ApiError`.
+ */
+export async function deleteOwnAccount(password: string): Promise<void> {
+  await apiClient.post<ApiResponse<{ message: string }>>('/me/delete', { password });
+}
+
+/**
  * Live-only SSE subscription to the Member's submission-outcome notices
  * (`GET /api/me/notifications`, ADR 0005). Auth rides the session cookie at
  * the handshake; no backlog is replayed on connect. Returns an unsubscribe.

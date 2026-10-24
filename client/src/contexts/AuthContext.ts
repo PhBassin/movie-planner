@@ -16,7 +16,12 @@ interface AuthContextType {
     isAdmin: boolean;
     hasPermission: (permission: PermissionName) => boolean;
     login: (user: User) => void;
-    logout: () => void;
+    /**
+     * End the session. `skipServerLogout` drops only the local user, for when
+     * the server already ended the Session (e.g. Member self-erasure): the
+     * user is cleared synchronously, with no `/api/auth/logout` round-trip.
+     */
+    logout: (options?: { skipServerLogout?: boolean }) => void;
 }
 
 export const AuthContext = createContext<AuthContextType>({

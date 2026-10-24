@@ -156,6 +156,8 @@ A transient, best-effort push from the server to a Member's open SSE connection,
 
 The act of removing a Member's identity and Member-owned data from movie-planner — the **RGPD right to erasure** (Article 17) made operational. Member erasure is **self-service**: a Member may erase themselves without filing a ticket. Erasure is **immediate, hard, and terminal** — a single irreversible transition into the `deleted` state, with no soft-delete, grace window, or reactivation. It is gated by **password re-entry** (the Member's current password, verified server-side), because the Session's CSRF token alone cannot defend against a hijacked Session or a shared device.
 
+**Where it lives (issue #66).** `POST /api/me/delete` with `{ password }` (`server/src/routes/me.ts` → `SessionService.eraseMemberAccount` → `MemberAccountService.eraseSelf`, `server/src/services/member-account-service.ts`); the client entry point is the Member's account page (`/account`, `client/src/pages/AccountPage.tsx`). The password is verified before any lock; the suspension check is repeated under the users-row lock so a concurrent Admin suspension always wins, and the role-guarded `deleteMemberRow` performs the delete. A wrong password is a 403 (`Password is incorrect`), never a 401, so the client does not mistake it for an expired Session. On success the whole cookie surface is cleared. The audit log carries the Member id only.
+
 **What erasure removes.** The Member's identity and credentials, all their **Sessions** (via the existing refresh-token cascade), their **Selection**, their **Appearance**, and their **TheaterSubmission** rows. Concretely, the Member-owned tables (`member_selections`, `member_preferences`, `theater_submissions`) cascade on the Member's id.
 
 **What erasure does not remove.** A **Theater** — whether `active` or still `provisioning` — that the Member introduced into the shared catalog. The submitter is not the owner (a Member does not own Theater rows); the catalog is single-source and Staff-curated, and a Member's departure must not change what cinemas exist. A failed submission's stale `provisioning` Theater therefore lingers until Staff clean it up operationally; that cleanup is a separate Staff concern, not coupled to erasure.
@@ -172,6 +174,8 @@ The act of removing a Member's identity and Member-owned data from movie-planner
 ### Member data export
 
 A read-only JSON document of a Member's personal data — the **RGPD right to data portability** (Article 20) made operational. The export contains the Member's account (`email`, `created_at`, status — never the password hash), their **Selection**, their **Appearance**, and their full **TheaterSubmission** history (each submission's url, status, timestamps, and resolved `theater_id`). It is the natural pair to Member erasure: "here is your data" before "here is the door."
+
+It is served at `GET /api/me/export` (`MemberAccountService.exportData`; `Cache-Control: no-store`) and downloaded from the account page as `movie-planner-data-<date>.json`. The Selection part lists every `member_selections` row whatever the Theater's status (`getSelectionForExport`), and submissions omit internal plumbing (`member_id`, `report_id` — `getSubmissionHistoryForExport`).
 
 The export is **Session-gated and ungated otherwise** — it is non-destructive, so it requires no password re-entry (unlike erasure). The submission history is included because submissions are the Member's own acts and are erased on deletion, making the export the only moment those records remain visible to them.
 
