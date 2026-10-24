@@ -98,9 +98,19 @@ export async function addTheaterWithScrapeJob(
   input: TheaterInput,
 ): Promise<{ theater: TheaterInput; reportId: number }> {
   const theater = await addTheater(db, input);
-  const reportId = await createScrapeReport(db, 'manual');
-  await getBusProducer().enqueueAddTheaterJob(reportId, input.url, db);
+  const reportId = await enqueueAddTheaterScrape(db, input.url);
   return { theater, reportId };
+}
+
+/**
+ * Report + `add_theater` job for a Theater row that already exists — the
+ * TheaterSubmission retry of a `provisioning` Theater (ADR 0010). Returns the
+ * new report id.
+ */
+export async function enqueueAddTheaterScrape(db: TransactionClient, url: string): Promise<number> {
+  const reportId = await createScrapeReport(db, 'manual');
+  await getBusProducer().enqueueAddTheaterJob(reportId, url, db);
+  return reportId;
 }
 
 export interface TheaterUpdateInput {

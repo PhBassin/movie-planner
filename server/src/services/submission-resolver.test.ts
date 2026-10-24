@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '../db/index.js';
-import { SubmissionResolutionService } from './submission-resolver.js';
+import { STALE_PENDING_SUBMISSION_TIMEOUT_MS, SubmissionResolutionService } from './submission-resolver.js';
 import {
+  expireStalePendingSubmissionReports,
   getPendingSubmissionByReport,
   getResolvablePendingSubmissions,
   resolveSubmission,
@@ -18,6 +19,7 @@ import { getBusProducer } from './bus-producer.js';
 import { logger } from '../utils/logger.js';
 
 vi.mock('../db/submission-queries.js', () => ({
+  expireStalePendingSubmissionReports: vi.fn(),
   getPendingSubmissionByReport: vi.fn(),
   getResolvablePendingSubmissions: vi.fn(),
   resolveSubmission: vi.fn(),
@@ -78,6 +80,7 @@ describe('SubmissionResolutionService', () => {
     vi.mocked(getBusProducer).mockReturnValue({ publishMemberNotice } as never);
     vi.mocked(getTheaterById).mockResolvedValue(activeTheater);
     vi.mocked(lockMemberForSelection).mockResolvedValue(member);
+    vi.mocked(expireStalePendingSubmissionReports).mockResolvedValue([]);
     vi.mocked(isTheaterSelected).mockResolvedValue(false);
     vi.mocked(getSelectionCount).mockResolvedValue(0);
     vi.mocked(insertSelection).mockResolvedValue(undefined);
@@ -224,6 +227,40 @@ describe('SubmissionResolutionService', () => {
   });
 
   describe('reconcilePendingSubmissions', () => {
+    it('expires stale pending submissions before resolving, so they fail in the same run (ADR 0010)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T12:00:00Z'));
+      try {
+        vi.mocked(expireStalePendingSubmissionReports).mockResolvedValue([42]);
+        vi.mocked(getResolvablePendingSubmissions).mockResolvedValue([
+          { ...pendingSubmission, report_status: 'failed' as const },
+        ]);
+        vi.mocked(resolveSubmission).mockResolvedValue({ ...pendingSubmission, status: 'failed' });
+
+        await expect(service.reconcilePendingSubmissions()).resolves.toBe(1);
+
+        expect(expireStalePendingSubmissionReports).toHaveBeenCalledWith(
+          db,
+          new Date(Date.parse('2026-01-01T12:00:00Z') - STALE_PENDING_SUBMISSION_TIMEOUT_MS),
+        );
+        expect(vi.mocked(expireStalePendingSubmissionReports).mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(getResolvablePendingSubmissions).mock.invocationCallOrder[0],
+        );
+        expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'failed');
+        expect(insertSelection).not.toHaveBeenCalled();
+        expect(publishMemberNotice).toHaveBeenCalledWith(
+          expect.objectContaining({ submissionId: 9, outcome: 'failed', reason: 'Source injoignable' }),
+        );
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Expired 1 stale'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('uses a 30-minute stale-pending timeout', () => {
+      expect(STALE_PENDING_SUBMISSION_TIMEOUT_MS).toBe(30 * 60 * 1000);
+    });
+
     it('runs the same routine for pending submissions with a terminal report', async () => {
       vi.mocked(getResolvablePendingSubmissions).mockResolvedValue([
         { ...pendingSubmission, id: 9, report_status: 'success' as const },

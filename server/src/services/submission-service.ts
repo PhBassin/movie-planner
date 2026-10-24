@@ -1,14 +1,16 @@
 import type { DB } from '../db/index.js';
 import {
   countNewSubmissionsSince,
+  countSubmissionAttempts,
   getMemberForSubmission,
   insertSubmission,
   lockMemberForSubmission,
+  lockTheaterForSubmission,
   type SubmissionMemberRow,
   type TheaterSubmissionRow,
 } from '../db/submission-queries.js';
 import { getTheaterById } from '../db/theater-queries.js';
-import { addTheaterWithScrapeJob } from './theater-service.js';
+import { addTheaterWithScrapeJob, enqueueAddTheaterScrape } from './theater-service.js';
 import { SelectionService } from './selection-service.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError, isUniqueViolation } from '../utils/errors.js';
 import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
@@ -123,15 +125,25 @@ export class SubmissionService {
         throw new ForbiddenError('You must verify your email before submitting a cinema');
       }
 
-      // A provisioning Theater already exists for this id (someone is already
-      // introducing it, or a prior attempt is still pending): never duplicate
-      // the row or the scrape.
-      const provisioning = await getTheaterById(tx, theaterId);
-      if (provisioning) {
-        throw new AppError('This cinema is already being added to the catalog', 409);
+      // A Theater row already exists for this id. Retry rule (ADR 0010): a
+      // `provisioning` Theater whose every submission attempt is terminal
+      // (the last one failed) gets a new attempt against the same row. A
+      // pending attempt, a Staff-introduced row with no submission, or a
+      // Theater that just went active (raced the fast path) is a conflict —
+      // never a duplicate row or scrape. The row lock serializes concurrent
+      // retries of the same URL across Members.
+      const existingRow = await lockTheaterForSubmission(tx, theaterId);
+      if (existingRow) {
+        const attempts = existingRow.status === 'provisioning'
+          ? await countSubmissionAttempts(tx, theaterId)
+          : undefined;
+        if (!attempts || attempts.total === 0 || attempts.pending > 0) {
+          throw new AppError('This cinema is already being added to the catalog', 409);
+        }
       }
 
-      // Throttle: only genuinely-new cinemas count — dedup never creates a row.
+      // Throttle: only genuinely-new cinemas and retries count — dedup never
+      // creates a row.
       const max = submissionThrottleMax();
       const windowMs = submissionThrottleWindowMs();
       const recent = await countNewSubmissionsSince(tx, memberId, new Date(Date.now() - windowMs));
@@ -142,12 +154,14 @@ export class SubmissionService {
         );
       }
 
-      // Immediate scrape: provisioning Theater + add_theater job + pending row,
-      // all atomic so the catalog write, report, queue insert, and submission
-      // can never be observed half-done.
+      // Immediate scrape: provisioning Theater (reused on retry) + add_theater
+      // job + pending row, all atomic so the catalog write, report, queue
+      // insert, and submission can never be observed half-done.
       let reportId: number;
       try {
-        ({ reportId } = await addTheaterWithScrapeJob(tx, { id: theaterId, name: theaterId, url: cleanedUrl }));
+        reportId = existingRow
+          ? await enqueueAddTheaterScrape(tx, cleanedUrl)
+          : (await addTheaterWithScrapeJob(tx, { id: theaterId, name: theaterId, url: cleanedUrl })).reportId;
       } catch (error) {
         // A concurrent submitter raced the fast-path dedup read above: the
         // Theater now exists, so degrade to a conflict rather than duplicating.
@@ -165,7 +179,7 @@ export class SubmissionService {
       });
 
       logger.info(
-        `🎬 member submission queued for ${cleanedUrl} (theater=${theaterId}, reportId=${reportId})`,
+        `🎬 member submission ${existingRow ? 'retry ' : ''}queued for ${cleanedUrl} (theater=${theaterId}, reportId=${reportId})`,
       );
       return { outcome: 'submitted', submission };
     });
