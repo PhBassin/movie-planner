@@ -3,9 +3,11 @@ import type { DB } from '../db/index.js';
 import { SubmissionService } from './submission-service.js';
 import {
   countNewSubmissionsSince,
+  countSubmissionAttempts,
   getMemberForSubmission,
   insertSubmission,
   lockMemberForSubmission,
+  lockTheaterForSubmission,
 } from '../db/submission-queries.js';
 import { addTheater, getTheaterById } from '../db/theater-queries.js';
 import { createScrapeReport } from '../db/report-queries.js';
@@ -20,6 +22,8 @@ vi.mock('../db/submission-queries.js', () => ({
   getMemberForSubmission: vi.fn(),
   countNewSubmissionsSince: vi.fn(),
   insertSubmission: vi.fn(),
+  lockTheaterForSubmission: vi.fn(),
+  countSubmissionAttempts: vi.fn(),
 }));
 
 vi.mock('../db/theater-queries.js', () => ({
@@ -70,6 +74,8 @@ describe('SubmissionService.submit', () => {
     vi.mocked(getMemberForSubmission).mockResolvedValue(verifiedMember);
     vi.mocked(getTheaterById).mockResolvedValue(undefined);
     vi.mocked(countNewSubmissionsSince).mockResolvedValue(0);
+    vi.mocked(lockTheaterForSubmission).mockResolvedValue(undefined);
+    vi.mocked(countSubmissionAttempts).mockResolvedValue({ total: 0, pending: 0 });
     vi.mocked(getBusProducer).mockReturnValue({ enqueueAddTheaterJob } as never);
   });
 
@@ -114,14 +120,95 @@ describe('SubmissionService.submit', () => {
     expect(insertSubmission).not.toHaveBeenCalled();
   });
 
-  it('rejects a URL whose theater is still provisioning (no duplicate, no scrape)', async () => {
-    vi.mocked(getTheaterById).mockResolvedValue({ id: 'C0013', name: 'C0013', status: 'provisioning' });
+  describe('retry of a provisioning Theater (ADR 0010)', () => {
+    const url = 'https://www.allocine.fr/seance/salle_gen_csalle=C0013.html';
+    const storedUrl = 'https://www.allocine.fr/seance/salle_gen_csalle=C0013.html?corrected';
+    const provisioningRow = { id: 'C0013', url: storedUrl, status: 'provisioning' as const };
 
-    await expect(service.submit(7, 'https://www.allocine.fr/seance/salle_gen_csalle=C0013.html')).rejects.toEqual(
-      expect.objectContaining({ statusCode: 409 }),
-    );
-    expect(addTheater).not.toHaveBeenCalled();
-    expect(createScrapeReport).not.toHaveBeenCalled();
+    beforeEach(() => {
+      vi.mocked(getTheaterById).mockResolvedValue({ id: 'C0013', name: 'C0013', status: 'provisioning' });
+      vi.mocked(lockTheaterForSubmission).mockResolvedValue(provisioningRow);
+    });
+
+    it('rejects while an attempt is still pending (no duplicate, no scrape)', async () => {
+      vi.mocked(countSubmissionAttempts).mockResolvedValue({ total: 1, pending: 1 });
+
+      await expect(service.submit(7, url)).rejects.toEqual(expect.objectContaining({ statusCode: 409 }));
+      expect(lockTheaterForSubmission).toHaveBeenCalledWith(transactionDb, 'C0013');
+      expect(addTheater).not.toHaveBeenCalled();
+      expect(createScrapeReport).not.toHaveBeenCalled();
+      expect(insertSubmission).not.toHaveBeenCalled();
+    });
+
+    it('rejects a Staff-introduced provisioning Theater that has no submission attempt', async () => {
+      vi.mocked(countSubmissionAttempts).mockResolvedValue({ total: 0, pending: 0 });
+
+      await expect(service.submit(7, url)).rejects.toEqual(expect.objectContaining({ statusCode: 409 }));
+      expect(createScrapeReport).not.toHaveBeenCalled();
+    });
+
+    it('degrades to a Selection add when the Theater went active under the lock (raced the fast path)', async () => {
+      vi.mocked(lockTheaterForSubmission).mockResolvedValue({ id: 'C0013', url: storedUrl, status: 'active' });
+      mockSelectionAdd.mockResolvedValue(activeTheater);
+
+      const result = await service.submit(7, url);
+
+      expect(result).toEqual({ outcome: 'selection_added', theater: activeTheater });
+      expect(mockSelectionAdd).toHaveBeenCalledWith(7, 'C0013');
+      expect(countSubmissionAttempts).not.toHaveBeenCalled();
+      expect(createScrapeReport).not.toHaveBeenCalled();
+      expect(insertSubmission).not.toHaveBeenCalled();
+    });
+
+    it('re-enqueues add_theater on the existing row (its stored URL) and inserts a new pending attempt', async () => {
+      vi.mocked(countSubmissionAttempts).mockResolvedValue({ total: 2, pending: 0 });
+      vi.mocked(createScrapeReport).mockResolvedValue(43);
+      enqueueAddTheaterJob.mockResolvedValue(1);
+      vi.mocked(insertSubmission).mockResolvedValue({
+        id: 10,
+        member_id: 7,
+        url,
+        theater_id: 'C0013',
+        status: 'pending',
+        report_id: 43,
+        created_at: '2024-01-02T00:00:00Z',
+        resolved_at: null,
+      });
+
+      const result = await service.submit(7, url);
+
+      expect(result).toEqual({ outcome: 'submitted', submission: expect.objectContaining({ id: 10, report_id: 43 }) });
+      expect(addTheater).not.toHaveBeenCalled();
+      expect(createScrapeReport).toHaveBeenCalledWith(transactionDb, 'manual');
+      expect(enqueueAddTheaterJob).toHaveBeenCalledWith(43, storedUrl, transactionDb);
+      expect(insertSubmission).toHaveBeenCalledWith(transactionDb, {
+        memberId: 7,
+        url,
+        theaterId: 'C0013',
+        reportId: 43,
+      });
+    });
+
+    it('counts a retry toward the per-Member throttle', async () => {
+      vi.mocked(countSubmissionAttempts).mockResolvedValue({ total: 1, pending: 0 });
+      vi.mocked(countNewSubmissionsSince).mockResolvedValue(3);
+
+      await expect(service.submit(7, url)).rejects.toEqual(
+        expect.objectContaining({ statusCode: 429, message: expect.stringContaining('retries included') }),
+      );
+      expect(createScrapeReport).not.toHaveBeenCalled();
+      expect(enqueueAddTheaterJob).not.toHaveBeenCalled();
+    });
+
+    it('still requires a verified Member to retry', async () => {
+      vi.mocked(getMemberForSubmission).mockResolvedValue(unverifiedMember);
+      vi.mocked(lockMemberForSubmission).mockResolvedValue(unverifiedMember);
+      vi.mocked(countSubmissionAttempts).mockResolvedValue({ total: 1, pending: 0 });
+
+      await expect(service.submit(7, url)).rejects.toEqual(expect.objectContaining({ statusCode: 403 }));
+      expect(lockTheaterForSubmission).not.toHaveBeenCalled();
+      expect(createScrapeReport).not.toHaveBeenCalled();
+    });
   });
 
   it('blocks an unverified Member from a genuinely-new submission with a verification message', async () => {

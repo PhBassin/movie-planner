@@ -439,7 +439,10 @@ CREATE TABLE scrape_reports (
   errors JSONB,
   progress_log JSONB,
   schedule_id INTEGER REFERENCES scrape_schedules(id),
-  parent_report_id INTEGER REFERENCES scrape_reports(id)
+  parent_report_id INTEGER REFERENCES scrape_reports(id),
+  -- When a worker claimed the job (NULL while queued); stale-pending expiry
+  -- (ADR 0010) measures a submission scrape's age from it.
+  claimed_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_scrape_reports_started_at ON scrape_reports(started_at DESC);

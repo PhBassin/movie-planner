@@ -1,5 +1,6 @@
 import type { MemberNotice, MemberNoticeOutcome, ProgressEvent } from '@movie-planner/scraper-protocol';import type { DB } from '../db/index.js';
 import {
+  expireStalePendingSubmissionReports,
   getPendingSubmissionByReport,
   getResolvablePendingSubmissions,
   resolveSubmission as writeTerminalStatus,
@@ -35,6 +36,13 @@ import { logger } from '../utils/logger.js';
 /** Sanitized Member-facing failure copy — never the scrape error type/status. */
 const FAILED_NOTICE_REASON = 'Source injoignable';
 
+/**
+ * Stale-pending expiry (ADR 0010): a submission scrape a worker claimed this
+ * long ago and that is still running will never go terminal on its own
+ * (worker died mid-job).
+ */
+export const STALE_PENDING_SUBMISSION_TIMEOUT_MS = 30 * 60 * 1000;
+
 /** Terminal ScrapeReport statuses that mean the add_theater scrape itself worked. */
 const SCRAPE_OK_STATUSES = new Set(['success', 'partial_success']);
 
@@ -66,9 +74,27 @@ export class SubmissionResolutionService {
    * Resolve every pending submission whose ScrapeReport already went terminal.
    * Runs at server startup and on a ~60s sweep (ADR 0005 sub-decision 8);
    * idempotence lives in the `UPDATE … WHERE status = 'pending'` guard.
-   * Returns the number of submissions this run resolved.
+   * First expires stale pending submissions' still-running reports (ADR
+   * 0010), so they resolve `failed` in this same run. Returns the number of
+   * submissions this run resolved.
    */
   async reconcilePendingSubmissions(): Promise<number> {
+    // Best-effort: an expiry failure must never block resolving the
+    // submissions whose reports already went terminal.
+    try {
+      const expired = await expireStalePendingSubmissionReports(
+        this.db,
+        new Date(Date.now() - STALE_PENDING_SUBMISSION_TIMEOUT_MS),
+      );
+      if (expired.length > 0) {
+        logger.warn(
+          `[submission-resolver] Expired ${expired.length} stale submission scrape report(s): ${expired.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      logger.error('[submission-resolver] Stale-pending expiry failed', { error });
+    }
+
     const resolvable = await getResolvablePendingSubmissions(this.db);
     let resolved = 0;
     for (const submission of resolvable) {

@@ -5,6 +5,7 @@ export interface ScrapeReport {
   id: number;
   started_at: string;
   completed_at?: string;
+  claimed_at?: string;
   status: 'running' | 'success' | 'partial_success' | 'failed';
   trigger_type: 'manual' | 'cron';
   total_theaters?: number;
@@ -43,6 +44,10 @@ export async function updateScrapeReport(
   if (data.completed_at !== undefined) {
     fields.push(`completed_at = $${paramIndex++}`);
     values.push(data.completed_at);
+  }
+  if (data.claimed_at !== undefined) {
+    fields.push(`claimed_at = $${paramIndex++}`);
+    values.push(data.claimed_at);
   }
   if (data.status) {
     fields.push(`status = $${paramIndex++}`);

@@ -171,6 +171,21 @@ describe('executeJob dispatcher', () => {
     );
   });
 
+  it('stamps claimed_at when the worker starts a job (stale-pending expiry clock, ADR 0010)', async () => {
+    mockAddTheaterAndScrape.mockRejectedValue(new Error('boom'));
+
+    const { executeJob } = await import('../../src/index.js');
+
+    await executeJob({ type: 'add_theater', triggerType: 'manual', reportId: 46, url: 'u' }, mockProgress);
+
+    expect(mockUpdateScrapeReport).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      46,
+      { status: 'running', claimed_at: expect.any(String) },
+    );
+  });
+
   it('tags a terminal scrape event with the job reportId and passes through non-terminal events', async () => {
     mockRunScraper.mockImplementation(async (progress: { emit: (event: any) => Promise<void> }) => {
       await progress.emit({ type: 'theater_started', theater_name: 'X', theater_id: 'C1', index: 1 });
