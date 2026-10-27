@@ -1,6 +1,6 @@
 # 0011. Billing behind a `BillingProvider` port, provider choice deferred
 
-- **Status:** Proposed — the port (decision 1) is approved by the owner; the provider-independent policies (decision 2) are proposed defaults awaiting owner validation in #96.
+- **Status:** Accepted (owner approved the port and D1–D15 on 2026-10-27)
 - **Date:** 2026-10-27
 
 ## Context
@@ -35,7 +35,7 @@ The codebase already has a precedent for this shape: the **Bus port** (`BusProdu
 5. **Billing mode.** One setting, `BILLING_PROVIDER = disabled | fake | <provider>`, default `disabled`. In `disabled` mode the Entitlement policy keeps today's behavior (**every Member may hold 50**), so production is unchanged until the paid launch. In `fake` mode the freemium quotas (3/50) apply and are fully testable.
 6. **No dependency** is added by the port or the fake adapter. The real adapter's SDK (if any) needs explicit owner consent.
 
-### 2. Provider-independent policies (proposed defaults)
+### 2. Provider-independent policies
 
 **Entitlement and Selection**
 
