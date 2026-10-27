@@ -4,9 +4,12 @@ import {
   countSubmissionAttempts,
   getMemberForSubmission,
   insertSubmission,
+  listMemberSubmissionsByTheater,
   lockMemberForSubmission,
   lockTheaterForSubmission,
+  type MemberSubmissionRow,
   type SubmissionMemberRow,
+  type SubmissionStatus,
   type TheaterSubmissionRow,
 } from '../db/submission-queries.js';
 import { getTheaterById } from '../db/theater-queries.js';
@@ -27,6 +30,12 @@ import { logger } from '../utils/logger.js';
 // ---------------------------------------------------------------------------
 
 const THEATER_URL_MAX_LENGTH = 2048;
+
+/**
+ * Sanitized Member-facing failure copy, shared by the resolver's notice and
+ * the "Mes soumissions" view — never the scrape error type/status.
+ */
+export const FAILED_NOTICE_REASON = 'Source injoignable';
 
 /** Per-Member new-cinema submission throttle (ADR 0003), env-tunable. */
 const DEFAULT_SUBMISSION_THROTTLE_MAX = 3;
@@ -89,8 +98,60 @@ export type SubmitResult =
   | { outcome: 'selection_added'; theater: Theater }
   | { outcome: 'submitted'; submission: TheaterSubmissionRow };
 
+/**
+ * One "Mes soumissions" item (issue #120): the latest attempt for a Theater.
+ * A `provisioning` Theater's name is only its id placeholder, so `name`/`city`
+ * are exposed for `active` Theaters alone, and so is `in_selection`: a
+ * `failed` attempt whose Theater another Member's retry later activated can
+ * still be added. `reason` (the sanitized notice copy, never scrape error
+ * details) is set for `failed` items only.
+ */
+export interface MemberSubmissionView {
+  id: number;
+  url: string;
+  status: SubmissionStatus;
+  created_at: string;
+  resolved_at: string | null;
+  attempts: number;
+  theater: { id: string; status: 'provisioning' | 'active'; name?: string; city?: string | null };
+  in_selection?: boolean;
+  reason?: string;
+}
+
+export interface MemberSubmissionPage {
+  items: MemberSubmissionView[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export function toMemberSubmissionView(row: MemberSubmissionRow): MemberSubmissionView {
+  const active = row.theater_status === 'active';
+  return {
+    id: row.id,
+    url: row.url,
+    status: row.status,
+    created_at: row.created_at,
+    resolved_at: row.resolved_at,
+    attempts: row.attempts,
+    theater: {
+      id: row.theater_id,
+      status: row.theater_status,
+      ...(active ? { name: row.theater_name, city: row.theater_city } : {}),
+    },
+    ...(active ? { in_selection: row.in_selection } : {}),
+    ...(row.status === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
+  };
+}
+
 export class SubmissionService {
   constructor(private readonly db: DB) {}
+
+  /** The Member's "Mes soumissions" page: one item per Theater, newest attempt first. */
+  async listForMember(memberId: number, page: { limit: number; offset: number }): Promise<MemberSubmissionPage> {
+    const { rows, total } = await listMemberSubmissionsByTheater(this.db, memberId, page);
+    return { items: rows.map(toMemberSubmissionView), total, ...page };
+  }
 
   async submit(memberId: number, url: string): Promise<SubmitResult> {
     validateSubmissionUrl(url);

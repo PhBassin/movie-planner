@@ -143,7 +143,10 @@ function UserMenu({ username, isMember, onLogout }: { username?: string; isMembe
           data-testid="user-dropdown-menu"
         >
           {isMember && (
-            <MenuLink to="/account" icon="user" label="My account" testId="account-link" onClose={() => setIsOpen(false)} />
+            <>
+              <MenuLink to="/account" icon="user" label="My account" testId="account-link" onClose={() => setIsOpen(false)} />
+              <MenuLink to="/submissions" icon="list" label="Mes soumissions" testId="submissions-link" onClose={() => setIsOpen(false)} />
+            </>
           )}
           <MenuLink to="/change-password" icon="key" label="Change Password" testId="change-password-link" onClose={() => setIsOpen(false)} />
           <div className="border-t border-gray-100"></div>
@@ -165,7 +168,7 @@ function UserMenu({ username, isMember, onLogout }: { username?: string; isMembe
 
 function MenuLink({ to, icon, label, testId, onClose }: {
   to: string;
-  icon: 'key' | 'user';
+  icon: 'key' | 'user' | 'list';
   label: string;
   testId: string;
   onClose: () => void;
@@ -180,6 +183,7 @@ function MenuLink({ to, icon, label, testId, onClose }: {
       <div className="flex items-center gap-2">
         {icon === 'key' && <KeyIcon />}
         {icon === 'user' && <UserIcon />}
+        {icon === 'list' && <ListIcon />}
         <span>{label}</span>
       </div>
     </Link>
@@ -198,6 +202,14 @@ function UserIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
     </svg>
   );
 }

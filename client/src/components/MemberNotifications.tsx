@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthContext } from '../contexts/AuthContext.js';
 import { subscribeToMemberNotifications } from '../api/me.js';
-import { ME_QUERY_KEY } from '../api/query-keys.js';
+import { MEMBER_SUBMISSIONS_QUERY_KEY, ME_QUERY_KEY } from '../api/query-keys.js';
 import type { MemberNotice } from '../types/index.js';
 
 /**
@@ -16,8 +16,11 @@ export interface MemberNotificationToast {
   id: number;
   kind: 'success' | 'cap-blocked' | 'error';
   message: string;
-  action?: { label: string; to: string };
+  actions?: Array<{ label: string; to: string }>;
 }
+
+/** Every resolution outcome is also durable on "Mes soumissions". */
+const SUBMISSIONS_ACTION = { label: 'Mes soumissions', to: '/submissions' };
 
 const TOAST_DURATION_MS = 8000;
 
@@ -28,17 +31,23 @@ export function noticeToToast(notice: MemberNotice, id: number): MemberNotificat
         id,
         kind: 'success',
         message: `« ${notice.theaterName} » a rejoint votre Selection.`,
+        actions: [SUBMISSIONS_ACTION],
       };
     case 'succeeded_selection_full':
       return {
         id,
         kind: 'cap-blocked',
         message: `« ${notice.theaterName} » est dans le catalogue, mais votre Selection est pleine. Libérez une place puis ajoutez-le depuis la liste des cinémas.`,
-        action: { label: 'Voir les cinémas', to: '/cinemas' },
+        actions: [{ label: 'Voir les cinémas', to: '/cinemas' }, SUBMISSIONS_ACTION],
       };
     case 'failed':
       // Only the sanitized Member-facing reason rides the wire.
-      return { id, kind: 'error', message: notice.reason ?? 'La soumission a échoué.' };
+      return {
+        id,
+        kind: 'error',
+        message: notice.reason ?? 'La soumission a échoué.',
+        actions: [SUBMISSIONS_ACTION],
+      };
   }
 }
 
@@ -63,6 +72,7 @@ export function useMemberNotifications() {
         queryClient.invalidateQueries({ queryKey: ['selection'] }),
         queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['selection-movies'] }),
+        queryClient.invalidateQueries({ queryKey: MEMBER_SUBMISSIONS_QUERY_KEY }),
       ]);
       counter.current += 1;
       setToast(noticeToToast(notice, counter.current));
@@ -100,15 +110,16 @@ export default function MemberNotifications() {
     >
       <span className="flex-1">
         {toast.message}
-        {toast.action && (
+        {toast.actions?.map((action) => (
           <Link
-            to={toast.action.to}
+            key={action.to}
+            to={action.to}
             className="ml-2 font-semibold underline underline-offset-2 hover:opacity-80"
             onClick={dismiss}
           >
-            {toast.action.label}
+            {action.label}
           </Link>
-        )}
+        ))}
       </span>
       <button
         type="button"

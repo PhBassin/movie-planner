@@ -4,6 +4,7 @@ import {
   countSubmissionAttempts,
   expireStalePendingSubmissionReports,
   getSubmissionHistoryForExport,
+  listMemberSubmissionsByTheater,
   lockTheaterForSubmission,
 } from './submission-queries.js';
 
@@ -73,5 +74,50 @@ describe('Submission queries', () => {
     expect(JSON.parse(params?.[1] as string)).toEqual([
       { theater_name: 'System', error: 'Submission scrape timed out' },
     ]);
+  });
+
+  it('lists the latest attempt per Theater for one Member, with attempts, derived Selection state and the total', async () => {
+    const row = {
+      total: 3,
+      id: 9,
+      url: 'u',
+      status: 'failed',
+      created_at: '2026-01-01T00:00:00Z',
+      resolved_at: null,
+      attempts: 2,
+      theater_id: 'C0013',
+      theater_status: 'active',
+      theater_name: 'UGC',
+      theater_city: null,
+      in_selection: true,
+    };
+    const db = { query: vi.fn().mockResolvedValue({ rows: [row] }) } as unknown as DB;
+
+    const { total: _total, ...expected } = row;
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 })).resolves.toEqual({
+      rows: [expected],
+      total: 3,
+    });
+
+    const [sql, params] = vi.mocked(db.query).mock.calls[0];
+    expect(sql).toContain('WHERE s.member_id = $1');
+    expect(sql).toContain('PARTITION BY s.theater_id');
+    expect(sql).toContain('WHERE rank = 1');
+    expect(sql).toContain('COUNT(*)::int AS total FROM latest');
+    expect(sql).toContain('ms.member_id = $1');
+    expect(sql).toContain('LIMIT $2 OFFSET $3');
+    expect(params).toEqual([7, 20, 40]);
+  });
+
+  it('keeps the total when the page is past the end', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [{ total: 4, id: null }] }) } as unknown as DB;
+
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 })).resolves.toEqual({ rows: [], total: 4 });
+  });
+
+  it('defaults the total to zero', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
+
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 0 })).resolves.toEqual({ rows: [], total: 0 });
   });
 });

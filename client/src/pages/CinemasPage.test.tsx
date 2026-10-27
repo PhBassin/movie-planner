@@ -187,6 +187,7 @@ describe('CinemasPage', () => {
       ),
     );
     expect(await screen.findByTestId('selection-toast')).toHaveTextContent('Proposition enregistrée');
+    expect(screen.getByTestId('submission-track-link')).toHaveAttribute('href', '/submissions');
     expect((screen.getByTestId('submission-url') as HTMLInputElement).value).toBe('');
   });
 

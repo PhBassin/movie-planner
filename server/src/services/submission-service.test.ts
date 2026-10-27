@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '../db/index.js';
-import { SubmissionService } from './submission-service.js';
+import { SubmissionService, toMemberSubmissionView } from './submission-service.js';
 import {
   countNewSubmissionsSince,
   countSubmissionAttempts,
   getMemberForSubmission,
   insertSubmission,
+  listMemberSubmissionsByTheater,
   lockMemberForSubmission,
   lockTheaterForSubmission,
 } from '../db/submission-queries.js';
@@ -24,6 +25,7 @@ vi.mock('../db/submission-queries.js', () => ({
   insertSubmission: vi.fn(),
   lockTheaterForSubmission: vi.fn(),
   countSubmissionAttempts: vi.fn(),
+  listMemberSubmissionsByTheater: vi.fn(),
 }));
 
 vi.mock('../db/theater-queries.js', () => ({
@@ -341,5 +343,77 @@ describe('SubmissionService.submit', () => {
     vi.mocked(addTheater).mockRejectedValue(boom);
 
     await expect(service.submit(7, 'https://www.allocine.fr/seance/salle_gen_csalle=C0013.html')).rejects.toBe(boom);
+  });
+});
+
+describe('Mes soumissions view', () => {
+  const baseRow = {
+    id: 9,
+    url: 'https://www.allocine.fr/seance/salle_gen_csalle=C0013.html',
+    status: 'pending' as const,
+    created_at: '2026-01-01T00:00:00Z',
+    resolved_at: null,
+    attempts: 1,
+    theater_id: 'C0013',
+    theater_status: 'provisioning' as const,
+    theater_name: 'C0013',
+    theater_city: null,
+    in_selection: false,
+  };
+
+  it('never exposes a provisioning Theater placeholder name', () => {
+    const view = toMemberSubmissionView(baseRow);
+
+    expect(view.theater).toEqual({ id: 'C0013', status: 'provisioning' });
+    expect(view).not.toHaveProperty('in_selection');
+    expect(view).not.toHaveProperty('reason');
+  });
+
+  it('exposes name, city and in_selection for a succeeded active Theater', () => {
+    const view = toMemberSubmissionView({
+      ...baseRow,
+      status: 'succeeded',
+      resolved_at: '2026-01-01T00:05:00Z',
+      theater_status: 'active',
+      theater_name: 'UGC Opéra',
+      theater_city: 'Paris',
+      in_selection: true,
+      attempts: 2,
+    });
+
+    expect(view.theater).toEqual({ id: 'C0013', status: 'active', name: 'UGC Opéra', city: 'Paris' });
+    expect(view.in_selection).toBe(true);
+    expect(view.attempts).toBe(2);
+  });
+
+  it('carries only the sanitized reason for a failed attempt', () => {
+    const view = toMemberSubmissionView({ ...baseRow, status: 'failed', resolved_at: '2026-01-01T00:05:00Z' });
+
+    expect(view.reason).toBe('Source injoignable');
+    expect(view).not.toHaveProperty('in_selection');
+  });
+
+  it("exposes in_selection for a failed attempt whose Theater another Member's retry activated", () => {
+    const view = toMemberSubmissionView({
+      ...baseRow,
+      status: 'failed',
+      resolved_at: '2026-01-01T00:05:00Z',
+      theater_status: 'active',
+      theater_name: 'UGC Opéra',
+      in_selection: false,
+    });
+
+    expect(view.in_selection).toBe(false);
+    expect(view.theater).toMatchObject({ status: 'active', name: 'UGC Opéra' });
+  });
+
+  it('lists one page with its total', async () => {
+    vi.mocked(listMemberSubmissionsByTheater).mockResolvedValue({ rows: [baseRow], total: 5 });
+    const db = {} as DB;
+
+    const page = await new SubmissionService(db).listForMember(7, { limit: 1, offset: 2 });
+
+    expect(page).toEqual({ items: [toMemberSubmissionView(baseRow)], total: 5, limit: 1, offset: 2 });
+    expect(listMemberSubmissionsByTheater).toHaveBeenCalledWith(db, 7, { limit: 1, offset: 2 });
   });
 });

@@ -91,6 +91,42 @@ export async function submitTheater(url: string): Promise<SubmitTheaterResult> {
 }
 
 /**
+ * One "Mes soumissions" item (`GET /api/me/submissions`, issue #120): the
+ * latest attempt for a Theater. `name`/`city`/`in_selection` exist only for
+ * an `active` Theater (a `failed` attempt's Theater may have been activated by
+ * another Member's retry); `reason` only for `failed`.
+ */
+export interface MemberSubmission {
+  id: number;
+  url: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  created_at: string;
+  resolved_at: string | null;
+  attempts: number;
+  theater: { id: string; status: 'provisioning' | 'active'; name?: string; city?: string | null };
+  in_selection?: boolean;
+  reason?: string;
+}
+
+export interface MemberSubmissionPage {
+  items: MemberSubmission[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function getMemberSubmissions(page: { limit: number; offset: number }): Promise<MemberSubmissionPage> {
+  const response = await apiClient.get<ApiResponse<MemberSubmissionPage>>('/me/submissions', {
+    limit: page.limit,
+    offset: page.offset,
+  });
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to fetch submissions');
+  }
+  return response.data;
+}
+
+/**
  * The Member data export document (`GET /api/me/export`, ADR 0004 → RGPD
  * Article 20): the Member's own data, never credentials.
  */

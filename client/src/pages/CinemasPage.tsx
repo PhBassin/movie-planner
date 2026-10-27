@@ -21,7 +21,7 @@ export default function CinemasPage() {
   const { user } = useContext(AuthContext);
   const isMember = user?.role_name === 'member';
   const [search, setSearch] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; trackSubmission?: boolean } | null>(null);
 
   useEffect(() => {
     if (!notice) return;
@@ -62,15 +62,18 @@ export default function CinemasPage() {
     onSuccess: async (result) => {
       setSubmissionUrl('');
       if (result.outcome === 'selection_added') {
-        setNotice(`« ${result.theater.name} » est déjà dans le catalogue — il a été ajouté à votre Selection.`);
+        setNotice({ message: `« ${result.theater.name} » est déjà dans le catalogue — il a été ajouté à votre Selection.` });
         await refreshMemberSelection();
         return;
       }
-      setNotice('Proposition enregistrée. Vous serez notifié dès que ce cinéma sera disponible.');
+      setNotice({
+        message: 'Proposition enregistrée. Vous serez notifié dès que ce cinéma sera disponible.',
+        trackSubmission: true,
+      });
       await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
     onError: (error: Error) => {
-      setNotice(error.message || 'Impossible de proposer ce cinéma.');
+      setNotice({ message: error.message || 'Impossible de proposer ce cinéma.' });
     },
   });
   const filteredTheaters = useMemo(() => {
@@ -88,11 +91,11 @@ export default function CinemasPage() {
     },
     onError: async (error: Error) => {
       if (error instanceof ApiError && error.status === 409) {
-        setNotice(error.message);
+        setNotice({ message: error.message });
         await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
         return;
       }
-      setNotice(error.message || 'Impossible d’ajouter ce cinéma à votre Selection.');
+      setNotice({ message: error.message || 'Impossible d’ajouter ce cinéma à votre Selection.' });
     },
   });
 
@@ -102,7 +105,7 @@ export default function CinemasPage() {
       setNotice(null);
       await refreshMemberSelection();
     },
-    onError: (error: Error) => setNotice(error.message || 'Impossible de retirer ce cinéma de votre Selection.'),
+    onError: (error: Error) => setNotice({ message: error.message || 'Impossible de retirer ce cinéma de votre Selection.' }),
   });
 
   const isLoading = theatersQuery.isLoading || (isMember && (profileQuery.isLoading || selectionQuery.isLoading));
@@ -140,7 +143,18 @@ export default function CinemasPage() {
           role="alert"
           data-testid="selection-toast"
         >
-          <span className="flex-1">{notice}</span>
+          <span className="flex-1">
+            {notice.message}
+            {notice.trackSubmission && (
+              <Link
+                to="/submissions"
+                className="ml-2 font-semibold underline underline-offset-2 hover:text-amber-950"
+                data-testid="submission-track-link"
+              >
+                Suivre l’avancement
+              </Link>
+            )}
+          </span>
           <button
             type="button"
             className="text-sm font-semibold text-amber-800 hover:text-amber-950"
