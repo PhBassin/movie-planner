@@ -40,7 +40,7 @@ The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` 
 
 **What a Member is *not*:**
 - Not **Staff**. A Member cannot trigger a scrape, cannot manage other Users, cannot touch admin Settings. Since a User has exactly one Role, a person who is both a Member and Staff does so across two accounts — never one Member that is also Staff.
-- Not a **Subscriber**. "Subscriber" implies a paid / recurring relationship. movie-planner has no billing model as of this writing; "Member" is deliberately neutral about payment so the term does not lie ahead of the feature.
+- Not a **Subscriber**. "Subscriber" implies a paid / recurring relationship. movie-planner has no billing model as of this writing; "Member" is deliberately neutral about payment so the term does not lie ahead of the feature. The planned freemium offer (ADR 0011) keeps it that way: being premium is an **Entitlement** a Member holds through a **Subscription** (see Billing), not a different kind of User and not a Staff role.
 - Not the **source** of Theaters. A Member selects from — or requests additions to — the shared catalog that Staff curate and scrape. A Member does not own Theater rows; see Selection.
 
 ### Staff
@@ -76,6 +76,13 @@ A Member's personal set of Theaters — the Theaters whose Showtimes that Member
 - **Adding an existing Theater to a Selection does not scrape.** The data is already shared; this is a private, side-effect-free mutation of the Member's homepage.
 - **Removing a Theater from a Selection is private.** It drops the Theater from that Member's homepage only; it never deletes the Theater from the catalog.
 - **Selection size is capped at 50 Theaters.** The cap counts only persisted Selection relationships; provisioning Theaters and pending TheaterSubmissions do not count. A new add at the cap is rejected with a conflict, while adding an already-selected Theater remains idempotent.
+
+**Planned (ADR 0011, #97 — not shipped).** The cap becomes the Member's **Entitlement** quota: 3 for free, 50 for premium. While billing is disabled (production today) every Member keeps 50. Two kinds of choice appear:
+- **Active choice** — counts toward the quota and feeds the personal Homepage.
+- **Remembered choice** — kept but excluded from the Homepage; arises only when premium expires (or at the freemium rollout) and the Member keeps 3. At most 50 choices in total, active and remembered together. A new Subscription reactivates every remembered choice.
+- **Over-quota Selection** — a *derived* state, not a stored flag: more active choices than the current quota. The personal Homepage is replaced by the "Choisissez vos 3 cinémas" chooser until the Member commits a subset; nothing is deactivated automatically, the catalog stays available.
+
+"Active" here is about the Selection relationship, never the Theater lifecycle (`provisioning | active`).
 
 **What a Selection is *not*:**
 - Not a **copy** of Theater data. The shared catalog is the single source of truth; a Selection only points at rows.
@@ -169,7 +176,7 @@ The act of removing a Member's identity and Member-owned data from movie-planner
 
 **Where it lives (issue #66).** `POST /api/me/delete` with `{ password }` (`server/src/routes/me.ts` → `SessionService.eraseMemberAccount` → `MemberAccountService.eraseSelf`, `server/src/services/member-account-service.ts`); the client entry point is the Member's account page (`/account`, `client/src/pages/AccountPage.tsx`). The password is verified before any lock; the suspension check is repeated under the users-row lock so a concurrent Admin suspension always wins, and the role-guarded `deleteMemberRow` performs the delete. A wrong password is a 403 (`Password is incorrect`), never a 401, so the client does not mistake it for an expired Session. On success the whole cookie surface is cleared. The audit log carries the Member id only.
 
-**What erasure removes.** The Member's identity and credentials, all their **Sessions** (via the existing refresh-token cascade), their **Selection**, their **Appearance**, and their **TheaterSubmission** rows. Concretely, the Member-owned tables (`member_selections`, `member_preferences`, `theater_submissions`) cascade on the Member's id.
+**What erasure removes.** The Member's identity and credentials, all their **Sessions** (via the existing refresh-token cascade), their **Selection**, their **Appearance**, and their **TheaterSubmission** rows. Concretely, the Member-owned tables (`member_selections`, `member_preferences`, `theater_submissions`) cascade on the Member's id. *Planned (ADR 0011 D13):* a paid Member's Subscription is cancelled immediately at the provider through the **Billing outbox**, so erasure never waits on the provider.
 
 **What erasure does not remove.** A **Theater** — whether `active` or still `provisioning` — that the Member introduced into the shared catalog. The submitter is not the owner (a Member does not own Theater rows); the catalog is single-source and Staff-curated, and a Member's departure must not change what cinemas exist. A failed submission's stale `provisioning` Theater therefore lingers until Staff clean it up operationally; that cleanup is a separate Staff concern, not coupled to erasure.
 
@@ -194,6 +201,38 @@ The export is **Session-gated and ungated otherwise** — it is non-destructive,
 - Not an **admin/audit report**. It is the Member's own data, served to the Member; it is not a Staff-facing dossier.
 - Not a **re-import / backup format**. It satisfies portability (a structured, machine-readable copy of the data the Member provided); it is not designed to seed another account.
 - Not a **substitute for erasure**. A Member who exports has not been erased; the two are independent operations.
+
+## Billing
+
+**Planned — none of this is shipped.** Decided in [ADR 0011](docs/adr/0011-billing-port-provider-deferred.md) for the freemium epic (#95); no payment provider is selected yet.
+
+### Entitlement
+
+What a Member may use beyond the free offer: today only the active-Selection quota (3 free / 50 premium). It is **derived** on every request from the Member's Subscription — premium while a non-terminal Subscription's paid-through instant is in the future — never read from the JWT or stored as a flag. Expiry therefore happens exactly at the boundary, with no sweep.
+
+**What an Entitlement is *not*:** not a Member lifecycle status (`unverified | active | suspended` is independent), not a Role or permission, not a gate on the catalog, Appearance, filters or submission safeguards.
+
+### Subscription
+
+A Member's recurring monthly payment relationship for premium. It references the **tariff version** the Member accepted and has its own state machine (`active`, `past_due`, cancellation scheduled, ended), separate from the Member's. A Subscription is **continuous** as long as it never ends: renewals and a payment recovered within the recovery window keep its price. Once ended, a later purchase is a **new** Subscription at the current tariff. At most one non-terminal Subscription per Member.
+
+**What a Subscription is *not*:** not the Member (a suspended Member may still have one, scheduled to end — ADR 0011 D12), not the provider's record (the local row is the source of truth the code reads; the provider is re-read to update it).
+
+### Tariff version
+
+An immutable, Admin-published monthly price (amount, currency, publisher, publication time). Publishing creates a new version; it never rewrites the version a continuous Subscription references. Only the current version can be chosen for a new checkout (#98).
+
+### `BillingProvider` port
+
+The server-side seam to the payment provider: publish a tariff, create a hosted checkout, read a subscription, schedule/undo/force cancellation, verify incoming events. Planned home `server/src/billing/billing-provider.ts`. Adapters: `FakeBillingProvider` (dev/tests, refused in production), `DisabledBillingProvider` (production default), and the real provider later. Selected by `BILLING_PROVIDER`. Same role as the **Bus port**: role code depends on the interface, the vendor is the swappable part.
+
+### Billing event
+
+A verified notification from the provider (`eventId`, type, subscription reference). It is **a trigger, not state**: the service re-reads the subscription from the provider and applies that snapshot, idempotently by `eventId`. A **billing reconciliation** periodically re-reads non-terminal subscriptions. Events for an unknown reference (erased Member, ended Subscription) are ignored and never recreate anything.
+
+### Billing outbox
+
+A durable queue of provider commands that must outlive a local transaction — today only "cancel now" at **Member erasure**. It holds the opaque provider subscription reference and no personal data, and is deleted once the provider confirms. It lets erasure commit immediately even when the provider is down.
 
 ## Branding
 
