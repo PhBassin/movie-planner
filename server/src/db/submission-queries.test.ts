@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DB } from './index.js';
 import {
+  countMemberSubmittedTheaters,
   countSubmissionAttempts,
   expireStalePendingSubmissionReports,
   getSubmissionHistoryForExport,
+  listMemberSubmissionsByTheater,
   lockTheaterForSubmission,
 } from './submission-queries.js';
 
@@ -73,5 +75,36 @@ describe('Submission queries', () => {
     expect(JSON.parse(params?.[1] as string)).toEqual([
       { theater_name: 'System', error: 'Submission scrape timed out' },
     ]);
+  });
+
+  it('lists the latest attempt per Theater for one Member, with attempts and derived Selection state', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
+
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 })).resolves.toEqual([]);
+
+    const [sql, params] = vi.mocked(db.query).mock.calls[0];
+    expect(sql).toContain('WHERE s.member_id = $1');
+    expect(sql).toContain('PARTITION BY s.theater_id');
+    expect(sql).toContain('WHERE a.rank = 1');
+    expect(sql).toContain('ms.member_id = $1');
+    expect(sql).toContain('ORDER BY a.created_at DESC, a.id DESC');
+    expect(sql).toContain('LIMIT $2 OFFSET $3');
+    expect(params).toEqual([7, 20, 40]);
+  });
+
+  it('counts the distinct Theaters a Member submitted', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [{ count: 4 }] }) } as unknown as DB;
+
+    await expect(countMemberSubmittedTheaters(db, 7)).resolves.toBe(4);
+
+    const [sql, params] = vi.mocked(db.query).mock.calls[0];
+    expect(sql).toContain('COUNT(DISTINCT theater_id)');
+    expect(params).toEqual([7]);
+  });
+
+  it('defaults the submitted-Theater count to zero', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
+
+    await expect(countMemberSubmittedTheaters(db, 7)).resolves.toBe(0);
   });
 });

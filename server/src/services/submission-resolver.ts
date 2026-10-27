@@ -16,6 +16,7 @@ import {
 } from '../db/selection-queries.js';
 import { getBusProducer } from './bus-producer.js';
 import { MAX_SELECTION_SIZE } from './selection-service.js';
+import { FAILED_NOTICE_REASON } from './submission-service.js';
 import { NotFoundError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
@@ -32,9 +33,6 @@ import { logger } from '../utils/logger.js';
 // then, after commit, (3) the best-effort notice publish on `member:notices`,
 // so the durable facts always commit before the ephemeral push.
 // ---------------------------------------------------------------------------
-
-/** Sanitized Member-facing failure copy — never the scrape error type/status. */
-const FAILED_NOTICE_REASON = 'Source injoignable';
 
 /**
  * Stale-pending expiry (ADR 0010): a submission scrape a worker claimed this

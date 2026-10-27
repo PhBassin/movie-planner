@@ -3,6 +3,7 @@ import type { ApiResponse } from '../types/api.js';
 import { requireAuth, requireMember, type AuthRequest } from '../middleware/auth.js';
 import { protectedLimiter } from '../middleware/rate-limit.js';
 import { SubmissionService } from '../services/submission-service.js';
+import { parsePaginationOrThrow } from './_helpers/admin-route-helpers.js';
 
 /**
  * `POST /api/me/submissions` — a verified Member submits a new cinema by its
@@ -12,8 +13,28 @@ import { SubmissionService } from '../services/submission-service.js';
  *   - genuinely new → 201 `submitted` (provisioning Theater + add_theater job)
  *   - throttle → 429 / unverified → 403, both as AppErrors from the service.
  * The async resolution (succeeded/failed) lives on issue #63.
+ *
+ * `GET /api/me/submissions` — the Member's "Mes soumissions" view (issue
+ * #120): one item per Theater (latest attempt + attempt count), newest first,
+ * paginated with `limit`/`offset` and a `total`.
  */
 const router = express.Router();
+
+router.get(
+  '/',
+  protectedLimiter,
+  requireAuth,
+  requireMember,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const page = parsePaginationOrThrow(req.query);
+      const data = await new SubmissionService(req.app.get('db')).listForMember(req.user!.id, page);
+      res.json({ success: true, data } satisfies ApiResponse);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.post(
   '/',

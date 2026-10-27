@@ -95,6 +95,7 @@ describe('MemberNotifications', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['me'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['me', 'submissions'] });
   });
 
   it('points the cap-blocked toast at the cinemas list', async () => {
@@ -113,6 +114,7 @@ describe('MemberNotifications', () => {
     expect(toast).toHaveTextContent('Selection est pleine');
     expect(toast.getAttribute('data-kind')).toBe('cap-blocked');
     expect(screen.getByRole('link', { name: 'Voir les cinémas' })).toHaveAttribute('href', '/cinemas');
+    expect(screen.getByRole('link', { name: 'Mes soumissions' })).toHaveAttribute('href', '/submissions');
   });
 
   it('shows only the sanitized reason on failure', async () => {
@@ -132,6 +134,7 @@ describe('MemberNotifications', () => {
     expect(toast).toHaveTextContent('Source injoignable');
     expect(toast).not.toHaveTextContent('C0013');
     expect(toast.getAttribute('data-kind')).toBe('error');
+    expect(screen.getByRole('link', { name: 'Mes soumissions' })).toHaveAttribute('href', '/submissions');
   });
 
   it('dismisses the toast on the close button', async () => {

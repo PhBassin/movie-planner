@@ -5,3 +5,6 @@
 
 /** The Member's own profile (`GET /api/me`). */
 export const ME_QUERY_KEY = ['me'] as const;
+
+/** The Member's "Mes soumissions" pages (`GET /api/me/submissions`). */
+export const MEMBER_SUBMISSIONS_QUERY_KEY = ['me', 'submissions'] as const;

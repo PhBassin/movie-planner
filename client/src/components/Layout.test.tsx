@@ -184,6 +184,7 @@ describe('Layout - Header navigation changes', () => {
       renderWithProviders(mockAuthContext);
       await user.click(screen.getByTestId('user-menu-button'));
       expect(screen.queryByTestId('account-link')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('submissions-link')).not.toBeInTheDocument();
     });
 
     it('shows the My account link to a Member', async () => {
@@ -196,6 +197,7 @@ describe('Layout - Header navigation changes', () => {
       });
       await user.click(screen.getByTestId('user-menu-button'));
       expect(screen.getByTestId('account-link')).toHaveAttribute('href', '/account');
+      expect(screen.getByTestId('submissions-link')).toHaveAttribute('href', '/submissions');
       vi.unstubAllGlobals();
     });
 
