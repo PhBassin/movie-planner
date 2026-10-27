@@ -31,6 +31,7 @@ export function noticeToToast(notice: MemberNotice, id: number): MemberNotificat
         id,
         kind: 'success',
         message: `« ${notice.theaterName} » a rejoint votre Selection.`,
+        actions: [SUBMISSIONS_ACTION],
       };
     case 'succeeded_selection_full':
       return {

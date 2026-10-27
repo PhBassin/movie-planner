@@ -102,10 +102,10 @@ Resolution is a **server-side** act (ADR 0005 sub-decision 7): the scraper stays
 
 This makes the link to Selection explicit: a *successful* TheaterSubmission terminates in the submitter's Selection; adding an *existing* Theater to a Selection skips the submission entirely.
 
-**"Mes soumissions" (issue #120).** The Member's durable view of their own TheaterSubmissions, at `/submissions` (`client/src/pages/SubmissionsPage.tsx`), fed by `GET /api/me/submissions` (`server/src/routes/submissions.ts`, `listMemberSubmissionsByTheater` in `server/src/db/submission-queries.ts`). It shows **one row per Theater**: that Member's latest attempt for it, plus their attempt count. Its rows are:
+**"Mes soumissions" (issue #120).** The Member's durable view of their own TheaterSubmissions, at `/submissions` (`client/src/pages/SubmissionsPage.tsx`), fed by `GET /api/me/submissions` (`server/src/routes/submissions.ts`, `listMemberSubmissionsByTheater` in `server/src/db/submission-queries.ts`). It shows **one row per Theater**: that Member's latest attempt for it, plus their attempt count. The page and its `total` are read in one statement; offset pages that overlap after the list shifts are collapsed to one row per Theater client-side. Its rows are:
 - `pending`: how long the attempt has been running.
 - `succeeded`: whether the Theater is **in the Member's Selection**. This is derived at read time from `member_selections`, never persisted, so it reflects later Selection removals. When the Theater is not in the Selection, the row offers to add it.
-- `failed`: the sanitized Member-facing reason (the notice copy, never scrape error details) and a **retry** under the retry rule above.
+- `failed`: the sanitized Member-facing reason (the notice copy, never scrape error details) and a **retry** under the retry rule above. If another Member's retry has since activated the Theater, the row reads like a `succeeded` one instead (in the Selection or not, with the add offer) and offers no retry: the catalog state wins over this Member's last attempt.
 
 A `provisioning` Theater is labelled by its submitted URL, never by its id placeholder name. The view has no delete or hide action: the rows back the throttle and abuse evidence, and only Member erasure removes them. Member notifications only invalidate it; React Query refetch-on-focus covers missed notices, and nothing polls.
 

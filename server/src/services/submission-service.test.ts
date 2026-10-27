@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '../db/index.js';
 import { SubmissionService, toMemberSubmissionView } from './submission-service.js';
 import {
-  countMemberSubmittedTheaters,
   countNewSubmissionsSince,
   countSubmissionAttempts,
   getMemberForSubmission,
@@ -27,7 +26,6 @@ vi.mock('../db/submission-queries.js', () => ({
   lockTheaterForSubmission: vi.fn(),
   countSubmissionAttempts: vi.fn(),
   listMemberSubmissionsByTheater: vi.fn(),
-  countMemberSubmittedTheaters: vi.fn(),
 }));
 
 vi.mock('../db/theater-queries.js', () => ({
@@ -395,15 +393,27 @@ describe('Mes soumissions view', () => {
     expect(view).not.toHaveProperty('in_selection');
   });
 
+  it("exposes in_selection for a failed attempt whose Theater another Member's retry activated", () => {
+    const view = toMemberSubmissionView({
+      ...baseRow,
+      status: 'failed',
+      resolved_at: '2026-01-01T00:05:00Z',
+      theater_status: 'active',
+      theater_name: 'UGC Opéra',
+      in_selection: false,
+    });
+
+    expect(view.in_selection).toBe(false);
+    expect(view.theater).toMatchObject({ status: 'active', name: 'UGC Opéra' });
+  });
+
   it('lists one page with its total', async () => {
-    vi.mocked(listMemberSubmissionsByTheater).mockResolvedValue([baseRow]);
-    vi.mocked(countMemberSubmittedTheaters).mockResolvedValue(5);
+    vi.mocked(listMemberSubmissionsByTheater).mockResolvedValue({ rows: [baseRow], total: 5 });
     const db = {} as DB;
 
     const page = await new SubmissionService(db).listForMember(7, { limit: 1, offset: 2 });
 
     expect(page).toEqual({ items: [toMemberSubmissionView(baseRow)], total: 5, limit: 1, offset: 2 });
     expect(listMemberSubmissionsByTheater).toHaveBeenCalledWith(db, 7, { limit: 1, offset: 2 });
-    expect(countMemberSubmittedTheaters).toHaveBeenCalledWith(db, 7);
   });
 });

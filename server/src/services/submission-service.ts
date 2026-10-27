@@ -1,6 +1,5 @@
 import type { DB } from '../db/index.js';
 import {
-  countMemberSubmittedTheaters,
   countNewSubmissionsSince,
   countSubmissionAttempts,
   getMemberForSubmission,
@@ -102,9 +101,10 @@ export type SubmitResult =
 /**
  * One "Mes soumissions" item (issue #120): the latest attempt for a Theater.
  * A `provisioning` Theater's name is only its id placeholder, so `name`/`city`
- * are exposed for `active` Theaters alone. `in_selection` is set for
- * `succeeded` items only; `reason` (the sanitized notice copy, never scrape
- * error details) for `failed` ones only.
+ * are exposed for `active` Theaters alone, and so is `in_selection`: a
+ * `failed` attempt whose Theater another Member's retry later activated can
+ * still be added. `reason` (the sanitized notice copy, never scrape error
+ * details) is set for `failed` items only.
  */
 export interface MemberSubmissionView {
   id: number;
@@ -139,7 +139,7 @@ export function toMemberSubmissionView(row: MemberSubmissionRow): MemberSubmissi
       status: row.theater_status,
       ...(active ? { name: row.theater_name, city: row.theater_city } : {}),
     },
-    ...(row.status === 'succeeded' ? { in_selection: row.in_selection } : {}),
+    ...(active ? { in_selection: row.in_selection } : {}),
     ...(row.status === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
   };
 }
@@ -149,10 +149,7 @@ export class SubmissionService {
 
   /** The Member's "Mes soumissions" page: one item per Theater, newest attempt first. */
   async listForMember(memberId: number, page: { limit: number; offset: number }): Promise<MemberSubmissionPage> {
-    const [rows, total] = await Promise.all([
-      listMemberSubmissionsByTheater(this.db, memberId, page),
-      countMemberSubmittedTheaters(this.db, memberId),
-    ]);
+    const { rows, total } = await listMemberSubmissionsByTheater(this.db, memberId, page);
     return { items: rows.map(toMemberSubmissionView), total, ...page };
   }
 

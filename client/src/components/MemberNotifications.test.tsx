@@ -92,6 +92,7 @@ describe('MemberNotifications', () => {
     expect(toast).toHaveTextContent('UGC Opéra');
     expect(toast).toHaveTextContent('a rejoint votre Selection');
     expect(toast.getAttribute('data-kind')).toBe('success');
+    expect(screen.getByRole('link', { name: 'Mes soumissions' })).toHaveAttribute('href', '/submissions');
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['me'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });

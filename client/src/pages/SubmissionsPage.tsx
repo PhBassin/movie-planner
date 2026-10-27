@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/core.js';
@@ -24,14 +24,29 @@ export function pendingSinceLabel(createdAt: string, now: number = Date.now()): 
   return `En cours depuis ${minutes} min`;
 }
 
-/** Member-facing copy for a failed "Ajouter" / "Réessayer" call. */
-function actionErrorMessage(error: Error, fallback: string): string {
+/** How often a pending row re-renders its "En cours depuis" label (no fetch). */
+const PENDING_LABEL_TICK_MS = 60_000;
+
+/**
+ * French Member-facing copy for a failed "Réessayer" call. Server messages are
+ * English, so they are never shown as-is.
+ */
+function retryErrorMessage(error: Error): string {
   if (error instanceof ApiError) {
     if (error.status === 429) return 'Vous avez atteint la limite de propositions. Réessayez plus tard.';
-    if (error.status === 409) return error.message || 'Ce cinéma est déjà en cours d’ajout.';
-    if (error.status === 403) return error.message || 'Action impossible pour ce compte.';
+    if (error.status === 409) return 'Ce cinéma est déjà en cours d’ajout.';
+    if (error.status === 403) return 'Action impossible pour ce compte.';
   }
-  return error.message || fallback;
+  return 'Impossible de relancer cette proposition.';
+}
+
+/**
+ * One row per Theater, even when offset pages overlap because a new attempt
+ * shifted the newest-first list between "Voir plus" fetches.
+ */
+function uniqueByTheater(items: MemberSubmission[]): MemberSubmission[] {
+  const seen = new Set<string>();
+  return items.filter((item) => !seen.has(item.theater.id) && seen.add(item.theater.id));
 }
 
 /**
@@ -62,12 +77,12 @@ export default function SubmissionsPage() {
   if (!isMember) return <Navigate to="/" replace />;
   if (profileQuery.isLoading || submissionsQuery.isLoading) return <LoadingSpinner />;
 
-  const error = profileQuery.error || submissionsQuery.error;
-  if (error) {
-    return <ErrorMessage message={error instanceof Error ? error.message : 'Impossible de charger vos soumissions.'} />;
+  // The profile only feeds the unverified empty state: its failure never hides the list.
+  if (submissionsQuery.error) {
+    return <ErrorMessage message={submissionsQuery.error.message || 'Impossible de charger vos soumissions.'} />;
   }
 
-  const items = submissionsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const items = uniqueByTheater(submissionsQuery.data?.pages.flatMap((page) => page.items) ?? []);
   const profile = profileQuery.data;
 
   return (
@@ -90,7 +105,7 @@ export default function SubmissionsPage() {
         <>
           <ul className="space-y-3" data-testid="submissions-list">
             {items.map((submission) => (
-              <SubmissionRow key={submission.id} submission={submission} />
+              <SubmissionRow key={submission.theater.id} submission={submission} />
             ))}
           </ul>
           {submissionsQuery.hasNextPage && (
@@ -170,7 +185,11 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const { theater } = submission;
-  const isActive = theater.status === 'active' && theater.name !== undefined;
+  const isActive = theater.status === 'active';
+  // A failed attempt whose Theater another Member's retry activated is in the
+  // catalog: it offers the Selection add, never a retry.
+  const canAdd = isActive && submission.in_selection === false;
+  const canRetry = submission.status === 'failed' && !isActive;
 
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: MEMBER_SUBMISSIONS_QUERY_KEY }),
@@ -185,11 +204,9 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
       await refresh();
     },
     onError: (error: Error) => {
-      if (error instanceof ApiError && error.status === 409) {
-        setActionError('Votre Sélection est pleine : retirez un cinéma avant d’ajouter celui-ci.');
-        return;
-      }
-      setActionError(actionErrorMessage(error, 'Impossible d’ajouter ce cinéma à votre Sélection.'));
+      setActionError(error instanceof ApiError && error.status === 409
+        ? 'Votre Sélection est pleine : retirez un cinéma avant d’ajouter celui-ci.'
+        : 'Impossible d’ajouter ce cinéma à votre Sélection.');
     },
   });
 
@@ -199,7 +216,7 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
       setActionError(null);
       await refresh();
     },
-    onError: (error: Error) => setActionError(actionErrorMessage(error, 'Impossible de relancer cette proposition.')),
+    onError: (error: Error) => setActionError(retryErrorMessage(error)),
   });
 
   return (
@@ -227,7 +244,7 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
           )}
         </div>
 
-        {submission.status === 'succeeded' && !submission.in_selection && (
+        {canAdd && (
           <button
             type="button"
             onClick={() => addMutation.mutate()}
@@ -238,7 +255,7 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
             {addMutation.isPending ? 'Ajout…' : 'Ajouter à ma Sélection'}
           </button>
         )}
-        {submission.status === 'failed' && (
+        {canRetry && (
           <button
             type="button"
             onClick={() => retryMutation.mutate()}
@@ -258,14 +275,24 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
 }
 
 function SubmissionStateLabel({ submission }: { submission: MemberSubmission }) {
-  switch (submission.status) {
-    case 'pending':
-      return <span className="text-amber-700">{pendingSinceLabel(submission.created_at)}</span>;
-    case 'succeeded':
-      return submission.in_selection
-        ? <span className="text-green-700">Ajouté à votre Sélection</span>
-        : <span className="text-gray-700">Ajouté au catalogue, pas dans votre Sélection</span>;
-    case 'failed':
-      return <span className="text-red-700">Échec : {submission.reason ?? 'la soumission a échoué.'}</span>;
+  if (submission.status === 'pending') return <PendingSince createdAt={submission.created_at} />;
+  // An active Theater is in the catalog whatever this Member's last attempt did.
+  if (submission.theater.status === 'active') {
+    return submission.in_selection
+      ? <span className="text-green-700">Ajouté à votre Sélection</span>
+      : <span className="text-gray-700">Ajouté au catalogue, pas dans votre Sélection</span>;
   }
+  return <span className="text-red-700">Échec : {submission.reason ?? 'la soumission a échoué.'}</span>;
+}
+
+/** Re-renders every minute so the elapsed time stays current without polling the API. */
+function PendingSince({ createdAt }: { createdAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(Date.now()), PENDING_LABEL_TICK_MS);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  return <span className="text-amber-700">{pendingSinceLabel(createdAt, now)}</span>;
 }

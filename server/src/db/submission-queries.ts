@@ -247,40 +247,46 @@ export interface MemberSubmissionRow {
   in_selection: boolean;
 }
 
+/**
+ * One page of "Mes soumissions" plus its `total` (distinct submitted
+ * Theaters), read in a single statement so both come from the same snapshot.
+ * The total row is always present; the LATERAL page is NULL past the end.
+ */
 export async function listMemberSubmissionsByTheater(
   db: QueryableDB,
   memberId: number,
   page: { limit: number; offset: number },
-): Promise<MemberSubmissionRow[]> {
-  const result = await db.query<MemberSubmissionRow>(
+): Promise<{ rows: MemberSubmissionRow[]; total: number }> {
+  // `id` is NULL on the lone total row of an empty page.
+  const result = await db.query<Omit<MemberSubmissionRow, 'id'> & { id: number | null; total: number }>(
     `WITH attempts AS (
        SELECT s.id, s.url, s.status, s.created_at, s.resolved_at, s.theater_id,
               COUNT(*) OVER (PARTITION BY s.theater_id)::int AS attempts,
               ROW_NUMBER() OVER (PARTITION BY s.theater_id ORDER BY s.created_at DESC, s.id DESC) AS rank
        FROM theater_submissions s
        WHERE s.member_id = $1
+     ),
+     latest AS (
+       SELECT * FROM attempts WHERE rank = 1
      )
-     SELECT a.id, a.url, a.status, a.created_at, a.resolved_at, a.attempts, a.theater_id,
-            t.status AS theater_status, t.name AS theater_name, t.city AS theater_city,
-            (ms.theater_id IS NOT NULL) AS in_selection
-     FROM attempts a
-     JOIN theaters t ON t.id = a.theater_id
-     LEFT JOIN member_selections ms ON ms.member_id = $1 AND ms.theater_id = a.theater_id
-     WHERE a.rank = 1
-     ORDER BY a.created_at DESC, a.id DESC
-     LIMIT $2 OFFSET $3`,
+     SELECT tot.total, p.*
+     FROM (SELECT COUNT(*)::int AS total FROM latest) tot
+     LEFT JOIN LATERAL (
+       SELECT a.id, a.url, a.status, a.created_at, a.resolved_at, a.attempts, a.theater_id,
+              t.status AS theater_status, t.name AS theater_name, t.city AS theater_city,
+              (ms.theater_id IS NOT NULL) AS in_selection
+       FROM latest a
+       JOIN theaters t ON t.id = a.theater_id
+       LEFT JOIN member_selections ms ON ms.member_id = $1 AND ms.theater_id = a.theater_id
+       ORDER BY a.created_at DESC, a.id DESC
+       LIMIT $2 OFFSET $3
+     ) p ON true
+     ORDER BY p.created_at DESC, p.id DESC`,
     [memberId, page.limit, page.offset],
   );
-  return result.rows;
-}
-
-/** How many distinct Theaters a Member has submitted — the "Mes soumissions" total. */
-export async function countMemberSubmittedTheaters(db: QueryableDB, memberId: number): Promise<number> {
-  const result = await db.query<{ count: number }>(
-    `SELECT COUNT(DISTINCT theater_id)::int AS count
-     FROM theater_submissions
-     WHERE member_id = $1`,
-    [memberId],
-  );
-  return result.rows[0]?.count ?? 0;
+  const total = result.rows[0]?.total ?? 0;
+  const rows = result.rows
+    .filter((row): row is MemberSubmissionRow & { total: number } => row.id !== null)
+    .map(({ total: _total, ...row }) => row);
+  return { rows, total };
 }

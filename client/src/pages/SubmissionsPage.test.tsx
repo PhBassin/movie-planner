@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -198,8 +198,9 @@ describe('SubmissionsPage', () => {
 
   it.each([
     [new ApiError('Too many submissions', 429), 'limite de propositions'],
-    [new ApiError('This cinema is already being added to the catalog', 409), 'already being added'],
-  ])('surfaces retry errors inline (%s)', async (error, expected) => {
+    [new ApiError('This cinema is already being added to the catalog', 409), 'déjà en cours d’ajout'],
+    [new Error('Network down'), 'Impossible de relancer'],
+  ])('surfaces retry errors inline in French (%s)', async (error, expected) => {
     vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([
       submission({ status: 'failed', reason: 'Source injoignable' }),
     ]));
@@ -208,13 +209,76 @@ describe('SubmissionsPage', () => {
     renderPage();
     fireEvent.click(await screen.findByTestId('submission-retry'));
 
-    expect(await screen.findByTestId('submission-action-error')).toHaveTextContent(expected);
+    const message = await screen.findByTestId('submission-action-error');
+    expect(message).toHaveTextContent(expected);
+    expect(message).not.toHaveTextContent(error.message);
+  });
+
+  it("offers the Selection add, not a retry, when another Member's retry activated the Theater", async () => {
+    vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([
+      submission({
+        status: 'failed', reason: 'Source injoignable', in_selection: false,
+        theater: { id: 'C0001', status: 'active', name: 'UGC', city: null },
+      }),
+    ]));
+
+    renderPage();
+
+    const row = await screen.findByTestId('submission-row');
+    expect(within(row).getByTestId('submission-state')).toHaveTextContent('Ajouté au catalogue, pas dans votre Sélection');
+    expect(within(row).getByTestId('submission-add')).toBeInTheDocument();
+    expect(within(row).queryByTestId('submission-retry')).not.toBeInTheDocument();
+  });
+
+  it('keeps the pending duration current while the page stays open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([
+        submission({ created_at: new Date(Date.now() - 5 * 60_000).toISOString() }),
+      ]));
+
+      renderPage();
+      const state = await screen.findByTestId('submission-state');
+      expect(state).toHaveTextContent('En cours depuis 5 min');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+      });
+      expect(state).toHaveTextContent('En cours depuis 7 min');
+      expect(memberApi.getMemberSubmissions).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still lists submissions when the profile fails to load', async () => {
+    vi.mocked(memberApi.getMemberProfile).mockRejectedValue(new Error('boom'));
+    vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([submission()]));
+
+    renderPage();
+
+    expect(await screen.findByTestId('submission-row')).toBeInTheDocument();
+  });
+
+  it('shows a Theater once when overlapping pages repeat it', async () => {
+    const shifted = submission({ id: 5, theater: { id: 'C0001', status: 'provisioning' } });
+    vi.mocked(memberApi.getMemberSubmissions)
+      .mockResolvedValueOnce(page([submission({ id: 1 })], 2, 0))
+      .mockResolvedValueOnce(page([shifted], 2, 1));
+
+    renderPage();
+    fireEvent.click(await screen.findByTestId('submissions-load-more'));
+
+    await waitFor(() => expect(memberApi.getMemberSubmissions).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByTestId('submission-row')).toHaveLength(1);
   });
 
   it('loads the next page on "Voir plus"', async () => {
     vi.mocked(memberApi.getMemberSubmissions)
       .mockResolvedValueOnce(page([submission({ id: 1 })], 2, 0))
-      .mockResolvedValueOnce(page([submission({ id: 2, url: 'https://example.test/second' })], 2, 1));
+      .mockResolvedValueOnce(page([
+        submission({ id: 2, url: 'https://example.test/second', theater: { id: 'C0002', status: 'provisioning' } }),
+      ], 2, 1));
 
     renderPage();
     fireEvent.click(await screen.findByTestId('submissions-load-more'));

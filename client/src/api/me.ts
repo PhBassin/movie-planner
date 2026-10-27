@@ -92,8 +92,9 @@ export async function submitTheater(url: string): Promise<SubmitTheaterResult> {
 
 /**
  * One "Mes soumissions" item (`GET /api/me/submissions`, issue #120): the
- * latest attempt for a Theater. `name`/`city` exist only for an `active`
- * Theater; `in_selection` only for `succeeded`, `reason` only for `failed`.
+ * latest attempt for a Theater. `name`/`city`/`in_selection` exist only for
+ * an `active` Theater (a `failed` attempt's Theater may have been activated by
+ * another Member's retry); `reason` only for `failed`.
  */
 export interface MemberSubmission {
   id: number;
