@@ -63,7 +63,7 @@ describe('Selection queries', () => {
       paidThrough: true, active: 3, total: 5, projectedTheaterIds: ['C0001'],
     });
     const sql = db.query.mock.calls[0][0] as string;
-    expect(sql).toContain('paid_through > NOW()');
+    expect(sql).toContain('paid_through > statement_timestamp()');
     expect(sql).toContain('COUNT(ms.theater_id) FILTER (WHERE (ms.active OR $2::boolean))');
     expect(sql).toContain("FILTER (WHERE t.status = 'active' AND (ms.active OR $2::boolean))");
     expect(db.query.mock.calls[0][1]).toEqual([7, false]);

@@ -264,7 +264,9 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
             className="shrink-0 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-black transition hover:bg-yellow-500 disabled:opacity-50"
             data-testid="submission-add"
           >
-            {addMutation.isPending ? 'Ajout…' : 'Ajouter à ma Sélection'}
+            {addMutation.isPending
+              ? 'Ajout…'
+              : submission.remembered ? 'Réactiver dans ma Sélection' : 'Ajouter à ma Sélection'}
           </button>
         )}
         {canRetry && (
@@ -290,8 +292,10 @@ function SubmissionStateLabel({ submission }: { submission: MemberSubmission }) 
   if (submission.status === 'pending') return <PendingSince createdAt={submission.created_at} />;
   // An active Theater is in the catalog whatever this Member's last attempt did.
   if (submission.theater.status === 'active') {
-    return submission.in_selection
-      ? <span className="text-green-700">Ajouté à votre Sélection</span>
+    if (submission.in_selection) return <span className="text-green-700">Ajouté à votre Sélection</span>;
+    // A remembered choice is stored but excluded from the Homepage (ADR 0011 D2).
+    return submission.remembered
+      ? <span className="text-gray-700">Mémorisé : gardé dans vos choix, absent de votre page d’accueil</span>
       : <span className="text-gray-700">Ajouté au catalogue, pas dans votre Sélection</span>;
   }
   return <span className="text-red-700">Échec : {submission.reason ?? 'la soumission a échoué.'}</span>;

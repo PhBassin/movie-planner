@@ -90,6 +90,7 @@ describe('Submission queries', () => {
       theater_name: 'UGC',
       theater_city: null,
       in_selection: true,
+      remembered: false,
     };
     const db = { query: vi.fn().mockResolvedValue({ rows: [row] }) } as unknown as DB;
 
@@ -108,6 +109,7 @@ describe('Submission queries', () => {
     expect(sql).toContain('LIMIT $2 OFFSET $3');
     // A remembered choice is not "in the Selection" (ADR 0011 D6).
     expect(sql).toContain('(ms.theater_id IS NOT NULL AND (ms.active OR $4::boolean)) AS in_selection');
+    expect(sql).toContain('(ms.theater_id IS NOT NULL AND NOT (ms.active OR $4::boolean)) AS remembered');
     expect(params).toEqual([7, 20, 40, false]);
   });
 

@@ -172,6 +172,22 @@ describe('SubmissionsPage', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection'] });
   });
 
+  it('offers to reactivate a remembered choice instead of a fresh add', async () => {
+    vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([
+      submission({
+        status: 'succeeded',
+        theater: { id: 'C0001', status: 'active', name: 'UGC', city: null },
+        in_selection: false,
+        remembered: true,
+      }),
+    ]));
+
+    renderPage();
+
+    expect(await screen.findByTestId('submission-add')).toHaveTextContent('Réactiver dans ma Sélection');
+    expect(screen.getByTestId('submission-state')).toHaveTextContent('Mémorisé');
+  });
+
   it('explains a full Selection when the add hits the cap', async () => {
     vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([
       submission({ status: 'succeeded', theater: { id: 'C0001', status: 'active', name: 'UGC', city: null }, in_selection: false }),

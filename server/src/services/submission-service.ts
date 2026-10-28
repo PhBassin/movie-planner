@@ -116,6 +116,8 @@ export interface MemberSubmissionView {
   attempts: number;
   theater: { id: string; status: 'provisioning' | 'active'; name?: string; city?: string | null };
   in_selection?: boolean;
+  /** Set (true) only for an active Theater stored as a remembered choice: re-adding it reactivates it. */
+  remembered?: true;
   reason?: string;
 }
 
@@ -141,6 +143,7 @@ export function toMemberSubmissionView(row: MemberSubmissionRow): MemberSubmissi
       ...(active ? { name: row.theater_name, city: row.theater_city } : {}),
     },
     ...(active ? { in_selection: row.in_selection } : {}),
+    ...(active && row.remembered ? { remembered: true as const } : {}),
     ...(row.status === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
   };
 }

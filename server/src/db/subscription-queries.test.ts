@@ -8,6 +8,6 @@ describe('Subscription queries', () => {
     expect(sql).toContain('EXISTS');
     expect(sql).toContain('member_id = $1');
     expect(sql).toContain("status <> 'ended'");
-    expect(sql).toContain('paid_through > NOW()');
+    expect(sql).toContain('paid_through > statement_timestamp()');
   });
 });

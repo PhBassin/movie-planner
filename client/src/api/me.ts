@@ -123,6 +123,8 @@ export interface MemberSubmission {
   attempts: number;
   theater: { id: string; status: 'provisioning' | 'active'; name?: string; city?: string | null };
   in_selection?: boolean;
+  /** An active Theater kept as a remembered choice: re-adding it reactivates it. */
+  remembered?: true;
   reason?: string;
 }
 

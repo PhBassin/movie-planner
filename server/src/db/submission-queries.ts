@@ -247,6 +247,8 @@ export interface MemberSubmissionRow {
   theater_city: string | null;
   /** An effectively active choice (ADR 0011 D6): a remembered one is not "in the Selection". */
   in_selection: boolean;
+  /** A stored but remembered choice (ADR 0011 D2): kept, not active — never true while billing is disabled. */
+  remembered: boolean;
 }
 
 /**
@@ -277,7 +279,8 @@ export async function listMemberSubmissionsByTheater(
      LEFT JOIN LATERAL (
        SELECT a.id, a.url, a.status, a.created_at, a.resolved_at, a.attempts, a.theater_id,
               t.status AS theater_status, t.name AS theater_name, t.city AS theater_city,
-              (ms.theater_id IS NOT NULL AND ${effectiveActiveSql('$4')}) AS in_selection
+              (ms.theater_id IS NOT NULL AND ${effectiveActiveSql('$4')}) AS in_selection,
+              (ms.theater_id IS NOT NULL AND NOT ${effectiveActiveSql('$4')}) AS remembered
        FROM latest a
        JOIN theaters t ON t.id = a.theater_id
        LEFT JOIN member_selections ms ON ms.member_id = $1 AND ms.theater_id = a.theater_id
