@@ -51,8 +51,9 @@ function renderPage(user: User | null = null) {
   const auth = user
     ? { ...visitorAuth, isAuthenticated: true, user }
     : visitorAuth;
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={auth}>
         <MemoryRouter>
@@ -61,6 +62,7 @@ function renderPage(user: User | null = null) {
       </AuthContext.Provider>
     </QueryClientProvider>,
   );
+  return { ...view, invalidateSpy };
 }
 
 describe('CinemasPage', () => {
@@ -124,13 +126,15 @@ describe('CinemasPage', () => {
       created_at: '2026-01-01T00:00:00Z',
     }));
 
-    renderPage(member);
+    const { invalidateSpy } = renderPage(member);
     await screen.findByText('UGC Opéra');
     fireEvent.click(screen.getByTestId('add-selection-C0001'));
 
     await waitFor(() => expect(memberApi.addToSelection).toHaveBeenCalledWith('C0001', expect.anything()));
     expect(await screen.findByTestId('selected-C0001')).toBeInTheDocument();
     expect(screen.getByTestId('selection-usage')).toHaveTextContent('1 / 50 actifs');
+    // The Homepage projection (and its cached `overQuota`) is reloaded too.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
   });
 
   it('disables adds proactively when the Selection is full', async () => {
@@ -162,7 +166,9 @@ describe('CinemasPage', () => {
 
   it('shows a 409 notice and refreshes the profile after a stale count', async () => {
     vi.mocked(memberApi.addToSelection).mockRejectedValue(
-      new ApiError('Selection contains 50 theaters; maximum is 50', 409),
+      new ApiError('Selection contains 50 active theaters; maximum is 50', 409, {
+        details: [{ reason: 'quota_reached', usage: { offer: null, selectionQuota: 50, choiceLimit: 50 } }],
+      }),
     );
 
     renderPage(member);
@@ -348,6 +354,28 @@ describe('CinemasPage', () => {
     fireEvent.click(screen.getByTestId('submission-submit'));
 
     expect(await screen.findByTestId('selection-toast')).toHaveTextContent('déjà dans le catalogue');
+  });
+
+  it('explains a quota 409 on the dedup add in French and reloads the usage and Homepage projection', async () => {
+    vi.mocked(memberApi.submitTheater).mockRejectedValue(
+      new ApiError('Free offer allows 3 active theaters; premium allows up to 50', 409, {
+        details: [{ reason: 'quota_reached', usage: { offer: 'free', selectionQuota: 3, choiceLimit: 50 } }],
+      }),
+    );
+
+    const { invalidateSpy } = renderPage(member);
+    await screen.findByText('UGC Opéra');
+
+    fireEvent.change(screen.getByTestId('submission-url'), {
+      target: { value: 'https://www.allocine.fr/seance/salle_gen_csalle=C0001.html' },
+    });
+    fireEvent.click(screen.getByTestId('submission-submit'));
+
+    const toast = await screen.findByTestId('selection-toast');
+    expect(toast).toHaveTextContent('L’offre gratuite permet 3 cinémas actifs. Premium permet d’en suivre jusqu’à 50.');
+    expect(toast).not.toHaveTextContent('Free offer');
+    await waitFor(() => expect(memberApi.getMemberProfile).toHaveBeenCalledTimes(2));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
   });
 
   it('surfaces submission rejections (throttle, unverified) in the toast', async () => {

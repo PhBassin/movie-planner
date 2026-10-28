@@ -546,6 +546,16 @@ describe('HomePage — polymorphic root', () => {
     expect(screen.queryByTestId('sticky-search-date-container')).not.toBeInTheDocument();
   });
 
+  it('points a Member with only remembered choices to their reactivation, not an empty Selection', async () => {
+    setupMember({ movies: [], profile: { offer: 'free', selectionCount: 0, rememberedCount: 3 }, selection: [] });
+
+    renderPage();
+
+    expect(await screen.findByTestId('remembered-only-selection')).toHaveTextContent('Vous avez 3 cinémas mémorisés.');
+    expect(screen.getByTestId('empty-selection-cta')).toHaveTextContent('Réactiver mes cinémas');
+    expect(screen.queryByText('Votre sélection est vide')).not.toBeInTheDocument();
+  });
+
   it('replaces the Homepage with the over-quota notice, projecting no movies (ADR 0011 D3)', async () => {
     setupMember({
       movies: [makeSelectionMovie(1, 'Film Sélection', false)],

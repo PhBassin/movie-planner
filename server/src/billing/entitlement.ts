@@ -1,5 +1,3 @@
-import type { DBQueryExecutor } from '../db/index.js';
-import { hasPaidThroughSubscription } from '../db/subscription-queries.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -29,9 +27,19 @@ export interface Entitlement {
   selectionQuota: number;
 }
 
+/**
+ * The one parse of `BILLING_PROVIDER`: unset or blank is `disabled`; any other
+ * value outside the known modes is a misconfiguration and throws — never a
+ * silent fallback, whether or not startup validation ran (tests, scripts).
+ * The raw value is not echoed: it comes from the process environment.
+ */
 export function resolveBillingMode(): BillingMode {
   const raw = process.env.BILLING_PROVIDER?.trim();
-  return raw && (BILLING_MODES as readonly string[]).includes(raw) ? (raw as BillingMode) : 'disabled';
+  if (!raw) return 'disabled';
+  if (!(BILLING_MODES as readonly string[]).includes(raw)) {
+    throw new Error(`FATAL: BILLING_PROVIDER must be one of ${BILLING_MODES.join(', ')}.`);
+  }
+  return raw as BillingMode;
 }
 
 /**
@@ -40,14 +48,14 @@ export function resolveBillingMode(): BillingMode {
  * (ADR 0011 §1.4) — same shape as `validateMailerConfiguration`.
  */
 export function validateBillingConfiguration(): void {
-  const raw = process.env.BILLING_PROVIDER?.trim();
-  if (raw && !(BILLING_MODES as readonly string[]).includes(raw)) {
-    logger.error(`❌ Unknown BILLING_PROVIDER: ${raw}`);
-    throw new Error(
-      `FATAL: BILLING_PROVIDER must be one of ${BILLING_MODES.join(', ')} (got "${raw}").`,
-    );
+  let mode: BillingMode;
+  try {
+    mode = resolveBillingMode();
+  } catch (error) {
+    logger.error('❌ Unknown BILLING_PROVIDER value');
+    throw error;
   }
-  if (raw === 'fake' && process.env.NODE_ENV === 'production') {
+  if (mode === 'fake' && process.env.NODE_ENV === 'production') {
     logger.error('❌ BILLING_PROVIDER=fake in production');
     throw new Error(
       'FATAL: BILLING_PROVIDER=fake is refused in production (ADR 0011). ' +
@@ -57,19 +65,24 @@ export function validateBillingConfiguration(): void {
 }
 
 /**
- * Derive a Member's Entitlement (ADR 0011 D1) — on every Selection write and
- * personal projection, never from the JWT. Pass the transaction client when
- * the caller holds the Member lock so the read joins the decision.
+ * Whether a remembered choice counts as active — the single definition of the
+ * effective active state (ADR 0011 D6): while billing is disabled every stored
+ * choice is active (quota, Homepage, Catalog, "Mes soumissions", export).
  */
-export async function getEntitlement(
-  db: DBQueryExecutor,
-  memberId: number,
-  mode: BillingMode = resolveBillingMode(),
-): Promise<Entitlement> {
+export function rememberedChoicesCountAsActive(mode: BillingMode = resolveBillingMode()): boolean {
+  return mode === 'disabled';
+}
+
+/**
+ * A Member's Entitlement (ADR 0011 D1), derived on every Selection write and
+ * personal projection from the Subscription paid-through state read in the
+ * same statement as the counts — never from the JWT.
+ */
+export function entitlementFor(mode: BillingMode, paidThrough: boolean): Entitlement {
   if (mode === 'disabled') {
     return { offer: null, selectionQuota: PREMIUM_SELECTION_QUOTA };
   }
-  return (await hasPaidThroughSubscription(db, memberId))
+  return paidThrough
     ? { offer: 'premium', selectionQuota: PREMIUM_SELECTION_QUOTA }
     : { offer: 'free', selectionQuota: FREE_SELECTION_QUOTA };
 }

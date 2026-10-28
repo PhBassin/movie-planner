@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthContext } from '../contexts/AuthContext.js';
 import { subscribeToMemberNotifications } from '../api/me.js';
-import { MEMBER_SUBMISSIONS_QUERY_KEY, ME_QUERY_KEY } from '../api/query-keys.js';
+import { MEMBER_SUBMISSIONS_QUERY_KEY } from '../api/query-keys.js';
+import { invalidateMemberSelection } from '../utils/selection.js';
 import type { MemberNotice } from '../types/index.js';
 
 /**
@@ -69,9 +70,7 @@ export function useMemberNotifications() {
 
     const unsubscribe = subscribeToMemberNotifications((notice) => {
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['selection'] }),
-        queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ['selection-movies'] }),
+        invalidateMemberSelection(queryClient),
         queryClient.invalidateQueries({ queryKey: MEMBER_SUBMISSIONS_QUERY_KEY }),
       ]);
       counter.current += 1;

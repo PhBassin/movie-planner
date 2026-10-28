@@ -3,32 +3,25 @@ import type { DB } from '../db/index.js';
 import {
   activateSelection,
   getActiveTheater,
-  getProjectedSelectionTheaterIds,
   lockMemberForSelection,
   getSelection,
   getSelectionChoice,
-  getSelectionCounts,
+  getSelectionSnapshot,
   insertSelection,
   removeSelection,
 } from '../db/selection-queries.js';
-import { hasPaidThroughSubscription } from '../db/subscription-queries.js';
 import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { applySelectionAdd, MAX_SELECTION_CHOICES, SelectionService } from './selection-service.js';
 
 vi.mock('../db/selection-queries.js', () => ({
   activateSelection: vi.fn(),
   getActiveTheater: vi.fn(),
-  getProjectedSelectionTheaterIds: vi.fn(),
   lockMemberForSelection: vi.fn(),
   getSelection: vi.fn(),
   getSelectionChoice: vi.fn(),
-  getSelectionCounts: vi.fn(),
+  getSelectionSnapshot: vi.fn(),
   insertSelection: vi.fn(),
   removeSelection: vi.fn(),
-}));
-
-vi.mock('../db/subscription-queries.js', () => ({
-  hasPaidThroughSubscription: vi.fn(),
 }));
 
 describe('SelectionService', () => {
@@ -38,8 +31,13 @@ describe('SelectionService', () => {
   } as unknown as DB;
   let service: SelectionService;
 
+  // The snapshot query (one statement): Subscription state, counts, projected Theaters.
+  let paidThrough = false;
+  let projectedTheaterIds: string[] = [];
   const counts = (active: number, total = active) =>
-    vi.mocked(getSelectionCounts).mockResolvedValue({ active, total });
+    vi.mocked(getSelectionSnapshot).mockImplementation(async () => ({
+      paidThrough, active, total, projectedTheaterIds,
+    }));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,7 +46,8 @@ describe('SelectionService', () => {
     vi.mocked(lockMemberForSelection).mockResolvedValue({ id: 7, role_name: 'member', status: 'active', email_verified_at: null });
     vi.mocked(getActiveTheater).mockResolvedValue({ id: 'C0001', name: 'UGC Opéra', status: 'active' });
     vi.mocked(getSelectionChoice).mockResolvedValue(undefined);
-    vi.mocked(hasPaidThroughSubscription).mockResolvedValue(false);
+    paidThrough = false;
+    projectedTheaterIds = [];
     counts(0);
   });
 
@@ -64,7 +63,7 @@ describe('SelectionService', () => {
       expect(db.transaction).toHaveBeenCalledOnce();
       expect(lockMemberForSelection).toHaveBeenCalledWith(transactionDb, 7);
       // The Entitlement is read inside the locked transaction, never from the token.
-      expect(hasPaidThroughSubscription).toHaveBeenCalledWith(transactionDb, 7);
+      expect(getSelectionSnapshot).toHaveBeenCalledWith(transactionDb, 7, { rememberedCountsAsActive: false });
       expect(insertSelection).toHaveBeenCalledWith(transactionDb, 7, 'C0001');
     });
 
@@ -72,7 +71,7 @@ describe('SelectionService', () => {
       vi.mocked(getActiveTheater).mockResolvedValue(undefined);
 
       await expect(service.add(7, 'C0001')).rejects.toBeInstanceOf(NotFoundError);
-      expect(getSelectionCounts).not.toHaveBeenCalled();
+      expect(getSelectionSnapshot).not.toHaveBeenCalled();
     });
 
     it('rejects a deleted member', async () => {
@@ -105,7 +104,7 @@ describe('SelectionService', () => {
     });
 
     it('rejects a 51st active theater for a premium Member', async () => {
-      vi.mocked(hasPaidThroughSubscription).mockResolvedValue(true);
+      paidThrough = true;
       counts(MAX_SELECTION_CHOICES);
 
       await expect(service.add(7, 'C0001')).rejects.toEqual(
@@ -136,7 +135,7 @@ describe('SelectionService', () => {
       counts(3);
 
       await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('already_active');
-      expect(getSelectionCounts).not.toHaveBeenCalled();
+      expect(getSelectionSnapshot).not.toHaveBeenCalled();
       expect(insertSelection).not.toHaveBeenCalled();
     });
 
@@ -172,7 +171,7 @@ describe('SelectionService', () => {
     });
 
     it('lets a premium Member add a 4th theater', async () => {
-      vi.mocked(hasPaidThroughSubscription).mockResolvedValue(true);
+      paidThrough = true;
       counts(3);
 
       await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('added');
@@ -182,21 +181,24 @@ describe('SelectionService', () => {
     describe('while billing is disabled (production today)', () => {
       beforeEach(() => vi.stubEnv('BILLING_PROVIDER', 'disabled'));
 
-      it('keeps 50 for every Member without reading Subscriptions', async () => {
+      it('keeps 50 for every Member, whatever the Subscription', async () => {
         counts(3, 3);
 
         await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('added');
-        expect(hasPaidThroughSubscription).not.toHaveBeenCalled();
+        expect(getSelectionChoice).toHaveBeenCalledWith(transactionDb, 7, 'C0001', { rememberedCountsAsActive: true });
+        expect(getSelectionSnapshot).toHaveBeenCalledWith(transactionDb, 7, { rememberedCountsAsActive: true });
       });
 
       it('counts remembered choices as active: at 50 stored choices the add is rejected', async () => {
-        counts(10, MAX_SELECTION_CHOICES);
+        // The query folds remembered choices into `active` under this view.
+        counts(MAX_SELECTION_CHOICES, MAX_SELECTION_CHOICES);
 
         await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('quota_reached');
       });
 
       it('treats a remembered choice as already active', async () => {
-        vi.mocked(getSelectionChoice).mockResolvedValue({ active: false });
+        // The query reports a remembered choice as active under this view.
+        vi.mocked(getSelectionChoice).mockResolvedValue({ active: true });
 
         await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('already_active');
         expect(activateSelection).not.toHaveBeenCalled();
@@ -219,31 +221,32 @@ describe('SelectionService', () => {
     });
 
     it('derives the over-quota state when a free Member holds more than 3 active choices', async () => {
+      projectedTheaterIds = ['C0001', 'C0002', 'C0003', 'C0004', 'C0005'];
       counts(5);
 
       await expect(service.usage(7)).resolves.toEqual(expect.objectContaining({ overQuota: true }));
       await expect(service.projection(7)).resolves.toEqual({ overQuota: true });
-      expect(getProjectedSelectionTheaterIds).not.toHaveBeenCalled();
     });
 
-    it('projects active choices only while billing is enabled', async () => {
+    it('projects the snapshot Theaters from the same single read as the quota check', async () => {
+      projectedTheaterIds = ['C0001', 'C0002'];
       counts(2, 4);
-      vi.mocked(getProjectedSelectionTheaterIds).mockResolvedValue(['C0001', 'C0002']);
 
       await expect(service.projection(7)).resolves.toEqual({ overQuota: false, theaterIds: ['C0001', 'C0002'] });
-      expect(getProjectedSelectionTheaterIds).toHaveBeenCalledWith(db, 7, { includeRemembered: false });
+      expect(getSelectionSnapshot).toHaveBeenCalledOnce();
+      expect(getSelectionSnapshot).toHaveBeenCalledWith(db, 7, { rememberedCountsAsActive: false });
     });
 
-    it('projects remembered choices too while billing is disabled', async () => {
+    it('reads remembered choices as active while billing is disabled', async () => {
       vi.stubEnv('BILLING_PROVIDER', 'disabled');
-      counts(2, 6);
-      vi.mocked(getProjectedSelectionTheaterIds).mockResolvedValue([]);
+      paidThrough = true;
+      counts(6, 6);
 
       await expect(service.usage(7)).resolves.toEqual(expect.objectContaining({
         offer: null, activeCount: 6, rememberedCount: 0, selectionQuota: 50, overQuota: false,
       }));
       await service.projection(7);
-      expect(getProjectedSelectionTheaterIds).toHaveBeenCalledWith(db, 7, { includeRemembered: true });
+      expect(getSelectionSnapshot).toHaveBeenLastCalledWith(db, 7, { rememberedCountsAsActive: true });
     });
   });
 
@@ -259,16 +262,16 @@ describe('SelectionService', () => {
 
       await expect(service.list(7)).resolves.toEqual(choices);
       await expect(service.remove(7, 'C0002')).resolves.toBe(true);
-      expect(getSelection).toHaveBeenCalledWith(db, 7);
+      expect(getSelection).toHaveBeenCalledWith(db, 7, { rememberedCountsAsActive: false });
       expect(removeSelection).toHaveBeenCalledWith(db, 7, 'C0002');
     });
 
-    it('shows remembered choices as active while billing is disabled', async () => {
+    it('asks for remembered choices as active while billing is disabled', async () => {
       vi.stubEnv('BILLING_PROVIDER', 'disabled');
       vi.mocked(getSelection).mockResolvedValue(choices);
 
-      const listed = await service.list(7);
-      expect(listed.every((choice) => choice.active)).toBe(true);
+      await service.list(7);
+      expect(getSelection).toHaveBeenCalledWith(db, 7, { rememberedCountsAsActive: true });
     });
   });
 });

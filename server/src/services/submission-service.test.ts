@@ -414,6 +414,6 @@ describe('Mes soumissions view', () => {
     const page = await new SubmissionService(db).listForMember(7, { limit: 1, offset: 2 });
 
     expect(page).toEqual({ items: [toMemberSubmissionView(baseRow)], total: 5, limit: 1, offset: 2 });
-    expect(listMemberSubmissionsByTheater).toHaveBeenCalledWith(db, 7, { limit: 1, offset: 2 });
+    expect(listMemberSubmissionsByTheater).toHaveBeenCalledWith(db, 7, { limit: 1, offset: 2 }, { rememberedCountsAsActive: true });
   });
 });

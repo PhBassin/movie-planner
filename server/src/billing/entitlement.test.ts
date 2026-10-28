@@ -1,25 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DBQueryExecutor } from '../db/index.js';
-import { hasPaidThroughSubscription } from '../db/subscription-queries.js';
+import { logger } from '../utils/logger.js';
 import {
+  entitlementFor,
   FREE_SELECTION_QUOTA,
-  getEntitlement,
   PREMIUM_SELECTION_QUOTA,
+  rememberedChoicesCountAsActive,
   resolveBillingMode,
   validateBillingConfiguration,
 } from './entitlement.js';
-
-vi.mock('../db/subscription-queries.js', () => ({
-  hasPaidThroughSubscription: vi.fn(),
-}));
 
 vi.mock('../utils/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
 describe('Entitlement (ADR 0011 D1)', () => {
-  const db = {} as DBQueryExecutor;
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -39,9 +33,9 @@ describe('Entitlement (ADR 0011 D1)', () => {
       expect(resolveBillingMode()).toBe('fake');
     });
 
-    it('falls back to disabled for an unknown value', () => {
-      vi.stubEnv('BILLING_PROVIDER', 'stripe');
-      expect(resolveBillingMode()).toBe('disabled');
+    it('throws for an unknown value instead of silently disabling billing', () => {
+      vi.stubEnv('BILLING_PROVIDER', 'fakee');
+      expect(() => resolveBillingMode()).toThrow('BILLING_PROVIDER must be one of');
     });
   });
 
@@ -51,9 +45,10 @@ describe('Entitlement (ADR 0011 D1)', () => {
       expect(() => validateBillingConfiguration()).not.toThrow();
     });
 
-    it('refuses an unknown provider', () => {
+    it('refuses an unknown provider without logging the raw environment value', () => {
       vi.stubEnv('BILLING_PROVIDER', 'stripe');
       expect(() => validateBillingConfiguration()).toThrow('BILLING_PROVIDER must be one of');
+      expect(logger.error).toHaveBeenCalledWith(expect.not.stringContaining('stripe'));
     });
 
     it('refuses the fake adapter in production', () => {
@@ -69,39 +64,30 @@ describe('Entitlement (ADR 0011 D1)', () => {
     });
   });
 
-  describe('getEntitlement', () => {
-    it('gives every Member 50 with no offer while billing is disabled, without reading Subscriptions', async () => {
-      await expect(getEntitlement(db, 7, 'disabled')).resolves.toEqual({
-        offer: null,
-        selectionQuota: PREMIUM_SELECTION_QUOTA,
-      });
-      expect(hasPaidThroughSubscription).not.toHaveBeenCalled();
+  describe('entitlementFor', () => {
+    it('gives every Member 50 with no offer while billing is disabled, whatever the Subscription', () => {
+      expect(entitlementFor('disabled', false)).toEqual({ offer: null, selectionQuota: PREMIUM_SELECTION_QUOTA });
+      expect(entitlementFor('disabled', true)).toEqual({ offer: null, selectionQuota: PREMIUM_SELECTION_QUOTA });
     });
 
-    it('is free (3) without a paid-through Subscription', async () => {
-      vi.mocked(hasPaidThroughSubscription).mockResolvedValue(false);
-
-      await expect(getEntitlement(db, 7, 'fake')).resolves.toEqual({
-        offer: 'free',
-        selectionQuota: FREE_SELECTION_QUOTA,
-      });
-      expect(hasPaidThroughSubscription).toHaveBeenCalledWith(db, 7);
+    it('is free (3) without a paid-through Subscription', () => {
+      expect(entitlementFor('fake', false)).toEqual({ offer: 'free', selectionQuota: FREE_SELECTION_QUOTA });
     });
 
-    it('is premium (50) with a paid-through Subscription', async () => {
-      vi.mocked(hasPaidThroughSubscription).mockResolvedValue(true);
+    it('is premium (50) with a paid-through Subscription', () => {
+      expect(entitlementFor('fake', true)).toEqual({ offer: 'premium', selectionQuota: PREMIUM_SELECTION_QUOTA });
+    });
+  });
 
-      await expect(getEntitlement(db, 7, 'fake')).resolves.toEqual({
-        offer: 'premium',
-        selectionQuota: PREMIUM_SELECTION_QUOTA,
-      });
+  describe('rememberedChoicesCountAsActive', () => {
+    it('is true only while billing is disabled (D6)', () => {
+      expect(rememberedChoicesCountAsActive('disabled')).toBe(true);
+      expect(rememberedChoicesCountAsActive('fake')).toBe(false);
     });
 
-    it('resolves the mode from the environment by default', async () => {
+    it('resolves the mode from the environment by default', () => {
       vi.stubEnv('BILLING_PROVIDER', 'fake');
-      vi.mocked(hasPaidThroughSubscription).mockResolvedValue(false);
-
-      await expect(getEntitlement(db, 7)).resolves.toEqual(expect.objectContaining({ offer: 'free' }));
+      expect(rememberedChoicesCountAsActive()).toBe(false);
     });
   });
 });

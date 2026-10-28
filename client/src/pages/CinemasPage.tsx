@@ -1,43 +1,19 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ApiError } from '../api/core.js';
-import { addToSelection, getMemberProfile, getSelection, removeFromSelection, submitTheater, type MemberProfile, type Offer } from '../api/me.js';
+import { addToSelection, getMemberProfile, getSelection, removeFromSelection, submitTheater } from '../api/me.js';
 import { ME_QUERY_KEY } from '../api/query-keys.js';
 import { getTheaters } from '../api/theaters.js';
 import { AuthContext } from '../contexts/AuthContext.js';
 import type { Theater } from '../types/index.js';
 import { LoadingSpinner, ErrorMessage } from '../components/ui/PageStates.js';
+import { invalidateMemberSelection, isSelectionConflict, selectionConflictMessage } from '../utils/selection.js';
 
 function theaterSearchText(theater: Theater): string {
   return [theater.name, theater.id, theater.city, theater.address, theater.postal_code]
     .filter(Boolean)
     .join(' ')
     .toLocaleLowerCase();
-}
-
-/**
- * French copy for a rejected Selection add (409). The server's `details`
- * carry the reason and fresh usage, so a stale browser count still explains
- * the actual limit (ADR 0011 D2).
- */
-interface SelectionConflictDetail {
-  reason?: 'quota_reached' | 'choices_full';
-  usage?: { offer: Offer; selectionQuota: number; choiceLimit: number };
-}
-
-function selectionConflictMessage(error: ApiError, profile: MemberProfile | undefined): string {
-  const detail = (error.data as { details?: SelectionConflictDetail[] } | undefined)?.details?.[0];
-  const choiceLimit = detail?.usage?.choiceLimit ?? profile?.choiceLimit ?? 50;
-  if (detail?.reason === 'choices_full') {
-    return `Vous avez déjà ${choiceLimit} cinémas enregistrés. Retirez un cinéma mémorisé pour en ajouter un autre.`;
-  }
-  const offer = detail?.usage ? detail.usage.offer : profile?.offer;
-  const quota = detail?.usage?.selectionQuota ?? profile?.selectionLimit;
-  if (offer === 'free') {
-    return `L’offre gratuite permet ${quota ?? 3} cinémas actifs. Premium permet d’en suivre jusqu’à ${choiceLimit}.`;
-  }
-  return quota !== undefined ? `Votre Selection est pleine (${quota} cinémas actifs).` : error.message;
 }
 
 export default function CinemasPage() {
@@ -73,10 +49,15 @@ export default function CinemasPage() {
     () => new Map((selectionQuery.data ?? []).map((choice) => [choice.id, choice.active])),
     [selectionQuery.data],
   );
-  const refreshMemberSelection = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['selection'] }),
-    queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
-  ]);
+  const refreshMemberSelection = () => invalidateMemberSelection(queryClient);
+  // A stale count (other tab, concurrent add, changed offer): the server
+  // stays authoritative — explain the limit and reload the usage.
+  const handleSelectionConflict = async (error: Error): Promise<boolean> => {
+    if (!isSelectionConflict(error)) return false;
+    setNotice({ message: selectionConflictMessage(error, profileQuery.data) });
+    await refreshMemberSelection();
+    return true;
+  };
 
   // Propose a new cinema (TheaterSubmission): the synchronous outcomes resolve
   // in this response — dedup degrades to a Selection add, a genuinely new
@@ -97,7 +78,9 @@ export default function CinemasPage() {
       });
       await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
-    onError: (error: Error) => {
+    onError: async (error: Error) => {
+      // The dedup path is a Selection add: it can hit the quota too.
+      if (await handleSelectionConflict(error)) return;
       setNotice({ message: error.message || 'Impossible de proposer ce cinéma.' });
     },
   });
@@ -115,13 +98,7 @@ export default function CinemasPage() {
       await refreshMemberSelection();
     },
     onError: async (error: Error) => {
-      // A stale count (other tab, concurrent add, changed offer): the server
-      // stays authoritative — explain the limit and reload the usage.
-      if (error instanceof ApiError && error.status === 409) {
-        setNotice({ message: selectionConflictMessage(error, profileQuery.data) });
-        await refreshMemberSelection();
-        return;
-      }
+      if (await handleSelectionConflict(error)) return;
       setNotice({ message: error.message || 'Impossible d’ajouter ce cinéma à votre Selection.' });
     },
   });

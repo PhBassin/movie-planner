@@ -4,12 +4,14 @@ import {
   getActiveTheater,
   lockMemberForSelection,
   activateSelection,
-  getProjectedSelectionTheaterIds,
   getSelection,
   getSelectionChoice,
-  getSelectionCounts,
   getSelectionForExport,
+  getSelectionSnapshot,
 } from './selection-queries.js';
+
+const BILLING_ENABLED = { rememberedCountsAsActive: false };
+const BILLING_DISABLED = { rememberedCountsAsActive: true };
 
 describe('Selection queries', () => {
   it('locks the Member users row for cap-enforced writes', async () => {
@@ -41,28 +43,39 @@ describe('Selection queries', () => {
       query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0001', name: 'UGC Opéra', status: 'active', active: false }] }),
     } as unknown as DB;
 
-    const result = await getSelection(db, 7);
+    const result = await getSelection(db, 7, BILLING_ENABLED);
 
     expect(result).toEqual([{ id: 'C0001', name: 'UGC Opéra', status: 'active', active: false }]);
-    expect(db.query.mock.calls[0][0]).toContain('ms.active');
+    expect(db.query.mock.calls[0][0]).toContain('(ms.active OR $2::boolean) AS active');
+    expect(db.query.mock.calls[0][1]).toEqual([7, false]);
     expect(db.query.mock.calls[0][0]).toContain("t.status = 'active'");
     expect(db.query.mock.calls[0][0]).toContain('ORDER BY t.name, t.id');
   });
 
-  it('counts active and total stored choices in one statement', async () => {
+  it('reads the paid-through state, counts and projected Theaters in one statement', async () => {
     const db = {
-      query: vi.fn().mockResolvedValue({ rows: [{ active: 3, total: 5 }] }),
+      query: vi.fn().mockResolvedValue({
+        rows: [{ paid_through: true, active: 3, total: 5, projected_theater_ids: ['C0001'] }],
+      }),
     } as unknown as DB;
 
-    await expect(getSelectionCounts(db, 7)).resolves.toEqual({ active: 3, total: 5 });
-    expect(db.query.mock.calls[0][0]).toContain('FILTER (WHERE active)');
-    expect(db.query.mock.calls[0][1]).toEqual([7]);
+    await expect(getSelectionSnapshot(db, 7, BILLING_ENABLED)).resolves.toEqual({
+      paidThrough: true, active: 3, total: 5, projectedTheaterIds: ['C0001'],
+    });
+    const sql = db.query.mock.calls[0][0] as string;
+    expect(sql).toContain('paid_through > NOW()');
+    expect(sql).toContain('COUNT(ms.theater_id) FILTER (WHERE (ms.active OR $2::boolean))');
+    expect(sql).toContain("FILTER (WHERE t.status = 'active' AND (ms.active OR $2::boolean))");
+    expect(db.query.mock.calls[0][1]).toEqual([7, false]);
   });
 
-  it('defaults the counts to zero when the aggregate yields no row', async () => {
+  it('passes the billing-disabled view so remembered choices count and project as active', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
 
-    await expect(getSelectionCounts(db, 7)).resolves.toEqual({ active: 0, total: 0 });
+    await expect(getSelectionSnapshot(db, 7, BILLING_DISABLED)).resolves.toEqual({
+      paidThrough: false, active: 0, total: 0, projectedTheaterIds: [],
+    });
+    expect(db.query.mock.calls[0][1]).toEqual([7, true]);
   });
 
   it('reads one stored choice, or nothing', async () => {
@@ -72,9 +85,11 @@ describe('Selection queries', () => {
         .mockResolvedValueOnce({ rows: [] }),
     } as unknown as DB;
 
-    await expect(getSelectionChoice(db, 7, 'C0001')).resolves.toEqual({ active: false });
-    await expect(getSelectionChoice(db, 7, 'C0002')).resolves.toBeUndefined();
-    expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001']);
+    await expect(getSelectionChoice(db, 7, 'C0001', BILLING_ENABLED)).resolves.toEqual({ active: false });
+    await expect(getSelectionChoice(db, 7, 'C0002', BILLING_DISABLED)).resolves.toBeUndefined();
+    expect(db.query.mock.calls[0][0]).toContain('(ms.active OR $3::boolean) AS active');
+    expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001', false]);
+    expect(db.query.mock.calls[1][1]).toEqual([7, 'C0002', true]);
   });
 
   it('activates a remembered choice', async () => {
@@ -86,26 +101,16 @@ describe('Selection queries', () => {
     expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001']);
   });
 
-  it('projects only active choices of active Theaters unless remembered ones are included', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0001' }] }) } as unknown as DB;
-
-    await expect(getProjectedSelectionTheaterIds(db, 7, { includeRemembered: false })).resolves.toEqual(['C0001']);
-    await getProjectedSelectionTheaterIds(db, 7, { includeRemembered: true });
-
-    expect(db.query.mock.calls[0][0]).toContain('AND ms.active');
-    expect(db.query.mock.calls[0][0]).toContain("t.status = 'active'");
-    expect(db.query.mock.calls[1][0]).not.toContain('ms.active');
-  });
-
   it('exports the whole Selection, whatever the Theater status', async () => {
     const rows = [{ theater_id: 'C0001', name: 'UGC', city: 'Paris', url: null, status: 'provisioning', active: false }];
     const db = { query: vi.fn().mockResolvedValue({ rows }) } as unknown as DB;
 
-    await expect(getSelectionForExport(db, 7)).resolves.toEqual(rows);
+    await expect(getSelectionForExport(db, 7, BILLING_DISABLED)).resolves.toEqual(rows);
 
     const sql = db.query.mock.calls[0][0] as string;
     expect(sql).toContain('WHERE ms.member_id = $1');
+    expect(sql).toContain('(ms.active OR $2::boolean) AS active');
     expect(sql).not.toContain("status = 'active'");
-    expect(db.query.mock.calls[0][1]).toEqual([7]);
+    expect(db.query.mock.calls[0][1]).toEqual([7, true]);
   });
 });

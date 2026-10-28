@@ -176,12 +176,17 @@ describe('SubmissionsPage', () => {
     vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([
       submission({ status: 'succeeded', theater: { id: 'C0001', status: 'active', name: 'UGC', city: null }, in_selection: false }),
     ]));
-    vi.mocked(memberApi.addToSelection).mockRejectedValue(new ApiError('Selection limit reached', 409));
+    vi.mocked(memberApi.addToSelection).mockRejectedValue(new ApiError('Free offer allows 3 active theaters', 409, {
+      details: [{ reason: 'quota_reached', usage: { offer: 'free', selectionQuota: 3, choiceLimit: 50 } }],
+    }));
 
-    renderPage();
+    const { invalidateSpy } = renderPage();
     fireEvent.click(await screen.findByTestId('submission-add'));
 
-    expect(await screen.findByTestId('submission-action-error')).toHaveTextContent('Votre Sélection est pleine');
+    const message = await screen.findByTestId('submission-action-error');
+    expect(message).toHaveTextContent('L’offre gratuite permet 3 cinémas actifs. Premium permet d’en suivre jusqu’à 50.');
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['me'] }));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
   });
 
   it('retries a failed submission with the same URL', async () => {
@@ -203,6 +208,13 @@ describe('SubmissionsPage', () => {
   it.each([
     [new ApiError('Too many submissions', 429), 'limite de propositions'],
     [new ApiError('This cinema is already being added to the catalog', 409), 'déjà en cours d’ajout'],
+    // A retry whose Theater became active degrades to a Selection add, which can hit the quota.
+    [
+      new ApiError('Free offer allows 3 active theaters; premium allows up to 50', 409, {
+        details: [{ reason: 'quota_reached', usage: { offer: 'free', selectionQuota: 3, choiceLimit: 50 } }],
+      }),
+      'L’offre gratuite permet 3 cinémas actifs',
+    ],
     [new Error('Network down'), 'Impossible de relancer'],
   ])('surfaces retry errors inline in French (%s)', async (error, expected) => {
     vi.mocked(memberApi.getMemberSubmissions).mockResolvedValue(page([

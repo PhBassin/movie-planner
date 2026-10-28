@@ -28,14 +28,17 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
         }
 
         const db = req.app.get('db');
-        const profile = await getMemberProfile(db, req.user!.id);
+        // The usage is derived on every request from the Subscription (ADR
+        // 0011 D1), never from the token: `selectionCount` counts active
+        // choices against `selectionLimit`, the Entitlement quota. Independent
+        // of the profile read, so both run concurrently.
+        const [profile, usage] = await Promise.all([
+            getMemberProfile(db, req.user!.id),
+            new SelectionService(db).usage(req.user!.id),
+        ]);
         if (!profile) {
             throw new NotFoundError('User not found');
         }
-        // Derived on every request from the Subscription (ADR 0011 D1), never
-        // from the token: `selectionCount` counts active choices against
-        // `selectionLimit`, the Entitlement quota.
-        const usage = await new SelectionService(db).usage(req.user!.id);
 
         const response: ApiResponse = {
             success: true,

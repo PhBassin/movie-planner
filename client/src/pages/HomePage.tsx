@@ -92,7 +92,10 @@ export default function HomePage() {
   // "Maintenant" views and hides when the view is narrowed to a single date.
   const newThisWeekMovies = isSpecificDateView ? [] : movies.filter(movie => movie.isNewThisWeek);
   const continuingMovies = isSpecificDateView ? movies : movies.filter(movie => !movie.isNewThisWeek);
+  // No active choice: the Homepage has nothing to project. Remembered choices
+  // still exist, so that case points to their reactivation, not a fresh start.
   const selectionEmpty = isMember && profile !== undefined && profile.selectionCount === 0;
+  const rememberedOnly = selectionEmpty && profile.rememberedCount > 0;
   // Over quota (ADR 0011 D3): the server projects no personal data; the
   // Member frees slots from the catalog. The chooser itself is #100.
   const selectionOverQuota = isMember && (
@@ -198,16 +201,28 @@ export default function HomePage() {
           </div>
         )}
         <div className="bg-gray-50 rounded-2xl p-12 text-center border-2 border-dashed border-gray-200">
-          <h1 className="text-2xl font-bold mb-3">Votre sélection est vide</h1>
-          <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            Ajoutez des cinémas à votre sélection pour voir leurs programmes sur votre page d'accueil.
-          </p>
+          {rememberedOnly ? (
+            <>
+              <h1 className="text-2xl font-bold mb-3">Aucun cinéma actif dans votre sélection</h1>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto" data-testid="remembered-only-selection">
+                Vous avez {profile.rememberedCount} cinéma{profile.rememberedCount > 1 ? 's' : ''} mémorisé{profile.rememberedCount > 1 ? 's' : ''}.
+                Réactivez-les depuis le catalogue pour retrouver leurs programmes ici.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold mb-3">Votre sélection est vide</h1>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                Ajoutez des cinémas à votre sélection pour voir leurs programmes sur votre page d'accueil.
+              </p>
+            </>
+          )}
           <Link
             to="/cinemas"
             data-testid="empty-selection-cta"
             className="inline-block px-6 py-3 bg-primary text-black font-bold rounded-lg hover:opacity-90 transition"
           >
-            Choisir mes cinémas
+            {rememberedOnly ? 'Réactiver mes cinémas' : 'Choisir mes cinémas'}
           </Link>
         </div>
         <ScrollToTop />

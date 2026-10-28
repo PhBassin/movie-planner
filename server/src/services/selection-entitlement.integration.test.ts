@@ -6,6 +6,9 @@ import { dirname, join } from 'path';
 import { runMigrations } from '../db/migrations.js';
 import type { DB } from '../db/index.js';
 import { SelectionService } from './selection-service.js';
+import { getSelectionForExport } from '../db/selection-queries.js';
+import { listMemberSubmissionsByTheater } from '../db/submission-queries.js';
+import { rememberedChoicesCountAsActive } from '../billing/entitlement.js';
 
 // Real-PostgreSQL integration test for the freemium Selection policy (issue
 // #97, ADR 0011): the existing-member upgrade (D6), the Member lock under
@@ -192,6 +195,50 @@ describe.runIf(Boolean(TEST_URL))('Freemium Selection policy (PostgreSQL)', () =
       [memberId],
     );
     expect(rows.rows.map((r) => r.active)).toEqual([true, true, true, false]);
+  });
+
+  it('reads one effective active state everywhere: list, projection, "Mes soumissions" and export (D6)', async () => {
+    const memberId = await createMember();
+    const [active, remembered] = await createTheaters('E', 2);
+    await select(memberId, [active]);
+    await select(memberId, [remembered], false);
+    const report = await pool.query<{ id: number }>(
+      `INSERT INTO scrape_reports (started_at, status, trigger_type) VALUES (NOW(), 'success', 'manual') RETURNING id`,
+    );
+    for (const id of [active, remembered]) {
+      await pool.query(
+        `INSERT INTO theater_submissions (member_id, url, theater_id, status, report_id)
+         VALUES ($1, $2, $3, 'succeeded', $4)`,
+        [memberId, `https://www.allocine.fr/seance/salle_gen_csalle=${id}.html`, id, report.rows[0].id],
+      );
+    }
+    const service = new SelectionService(db);
+    const read = async () => {
+      const view = { rememberedCountsAsActive: rememberedChoicesCountAsActive() };
+      const submissions = await listMemberSubmissionsByTheater(pool, memberId, { limit: 10, offset: 0 }, view);
+      return {
+        list: (await service.list(memberId)).map((c) => [c.id, c.active]),
+        projection: await service.projection(memberId),
+        inSelection: submissions.rows.map((r) => [r.theater_id, r.in_selection]).sort(),
+        exported: (await getSelectionForExport(pool, memberId, view)).map((r) => [r.theater_id, r.active]),
+      };
+    };
+
+    vi.stubEnv('BILLING_PROVIDER', 'fake');
+    await expect(read()).resolves.toEqual({
+      list: [[active, true], [remembered, false]],
+      projection: { overQuota: false, theaterIds: [active] },
+      inSelection: [[active, true], [remembered, false]],
+      exported: [[active, true], [remembered, false]],
+    });
+
+    vi.stubEnv('BILLING_PROVIDER', 'disabled');
+    await expect(read()).resolves.toEqual({
+      list: [[active, true], [remembered, true]],
+      projection: { overQuota: false, theaterIds: [active, remembered] },
+      inSelection: [[active, true], [remembered, true]],
+      exported: [[active, true], [remembered, true]],
+    });
   });
 
   it('allows at most one non-terminal Subscription per Member and cascades on erasure', async () => {
