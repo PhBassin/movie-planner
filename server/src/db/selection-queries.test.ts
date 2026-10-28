@@ -3,8 +3,11 @@ import type { DB } from './index.js';
 import {
   getActiveTheater,
   lockMemberForSelection,
+  activateSelection,
+  getProjectedSelectionTheaterIds,
   getSelection,
-  getSelectionCount,
+  getSelectionChoice,
+  getSelectionCounts,
   getSelectionForExport,
 } from './selection-queries.js';
 
@@ -33,32 +36,69 @@ describe('Selection queries', () => {
     expect(db.query.mock.calls[0][0]).toContain("status = 'active'");
   });
 
-  it('lists the Selection in theater order and excludes provisioning rows', async () => {
+  it('lists the Selection in theater order with each choice active flag, excluding provisioning rows', async () => {
     const db = {
-      query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0001', name: 'UGC Opéra', status: 'active' }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0001', name: 'UGC Opéra', status: 'active', active: false }] }),
     } as unknown as DB;
 
     const result = await getSelection(db, 7);
 
-    expect(result).toEqual([{ id: 'C0001', name: 'UGC Opéra', status: 'active' }]);
+    expect(result).toEqual([{ id: 'C0001', name: 'UGC Opéra', status: 'active', active: false }]);
+    expect(db.query.mock.calls[0][0]).toContain('ms.active');
     expect(db.query.mock.calls[0][0]).toContain("t.status = 'active'");
     expect(db.query.mock.calls[0][0]).toContain('ORDER BY t.name, t.id');
   });
 
-  it('returns the member Selection count', async () => {
+  it('counts active and total stored choices in one statement', async () => {
     const db = {
-      query: vi.fn().mockResolvedValue({ rows: [{ count: 3 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ active: 3, total: 5 }] }),
     } as unknown as DB;
 
-    await expect(getSelectionCount(db, 7)).resolves.toBe(3);
-    expect(db.query).toHaveBeenCalledWith(
-      expect.stringContaining('COUNT(*)::int'),
-      [7],
-    );
+    await expect(getSelectionCounts(db, 7)).resolves.toEqual({ active: 3, total: 5 });
+    expect(db.query.mock.calls[0][0]).toContain('FILTER (WHERE active)');
+    expect(db.query.mock.calls[0][1]).toEqual([7]);
+  });
+
+  it('defaults the counts to zero when the aggregate yields no row', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
+
+    await expect(getSelectionCounts(db, 7)).resolves.toEqual({ active: 0, total: 0 });
+  });
+
+  it('reads one stored choice, or nothing', async () => {
+    const db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ active: false }] })
+        .mockResolvedValueOnce({ rows: [] }),
+    } as unknown as DB;
+
+    await expect(getSelectionChoice(db, 7, 'C0001')).resolves.toEqual({ active: false });
+    await expect(getSelectionChoice(db, 7, 'C0002')).resolves.toBeUndefined();
+    expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001']);
+  });
+
+  it('activates a remembered choice', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
+
+    await activateSelection(db, 7, 'C0001');
+
+    expect(db.query.mock.calls[0][0]).toContain('SET active = TRUE');
+    expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001']);
+  });
+
+  it('projects only active choices of active Theaters unless remembered ones are included', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'C0001' }] }) } as unknown as DB;
+
+    await expect(getProjectedSelectionTheaterIds(db, 7, { includeRemembered: false })).resolves.toEqual(['C0001']);
+    await getProjectedSelectionTheaterIds(db, 7, { includeRemembered: true });
+
+    expect(db.query.mock.calls[0][0]).toContain('AND ms.active');
+    expect(db.query.mock.calls[0][0]).toContain("t.status = 'active'");
+    expect(db.query.mock.calls[1][0]).not.toContain('ms.active');
   });
 
   it('exports the whole Selection, whatever the Theater status', async () => {
-    const rows = [{ theater_id: 'C0001', name: 'UGC', city: 'Paris', url: null, status: 'provisioning' }];
+    const rows = [{ theater_id: 'C0001', name: 'UGC', city: 'Paris', url: null, status: 'provisioning', active: false }];
     const db = { query: vi.fn().mockResolvedValue({ rows }) } as unknown as DB;
 
     await expect(getSelectionForExport(db, 7)).resolves.toEqual(rows);

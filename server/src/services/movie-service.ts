@@ -1,7 +1,6 @@
 import type { DB } from '../db/index.js';
 import { getShowtimesByDate, getShowtimesByMovieAndWeek, getWeeklyShowtimes, getShowtimesForTheaters, type SelectionScope } from '../db/showtime-queries.js';
 import { getWeeklyMovies, getMoviesByDate, getMovie, searchMovies, searchMoviesForTheaters, getSelectionMoviesForTheaters, type SelectionMovie } from '../db/movie-queries.js';
-import { getSelection } from '../db/selection-queries.js';
 import { groupShowtimesByTheater } from '../utils/showtimes.js';
 import type { MovieWithShowtimes, Showtime, Theater } from '../types/scraper.js';
 
@@ -50,42 +49,36 @@ export class MovieService {
     return searchMovies(this.db, query, limit);
   }
 
-  async searchSelection(memberId: number, query: string, limit: number = 10) {
-    const theaterIds = await this.getSelectionTheaterIds(memberId);
+  /**
+   * Selection-scoped projections take the Theaters the Selection policy
+   * already resolved (`SelectionService.projection`): active choices only,
+   * and nothing at all while over quota (ADR 0011 D3).
+   */
+  async searchSelection(theaterIds: string[], query: string, limit: number = 10) {
     if (theaterIds.length === 0) {
       return [];
     }
     return searchMoviesForTheaters(this.db, query, theaterIds, limit);
   }
 
-  async getSelectionMoviesForWeek(memberId: number, weekStart: string): Promise<MovieWithShowtimes[]> {
-    return this.getSelectionMovies(memberId, { weekStart });
+  async getSelectionMoviesForWeek(theaterIds: string[], weekStart: string): Promise<MovieWithShowtimes[]> {
+    return this.getSelectionMovies({ weekStart, theaterIds });
   }
 
-  async getSelectionMoviesForDate(memberId: number, date: string, weekStart: string): Promise<MovieWithShowtimes[]> {
-    return this.getSelectionMovies(memberId, { weekStart, date });
+  async getSelectionMoviesForDate(theaterIds: string[], date: string, weekStart: string): Promise<MovieWithShowtimes[]> {
+    return this.getSelectionMovies({ weekStart, theaterIds, date });
   }
 
-  private async getSelectionMovies(
-    memberId: number,
-    scope: Omit<SelectionScope, 'theaterIds'>,
-  ): Promise<MovieWithShowtimes[]> {
-    const theaterIds = await this.getSelectionTheaterIds(memberId);
-    if (theaterIds.length === 0) {
+  private async getSelectionMovies(selectionScope: SelectionScope): Promise<MovieWithShowtimes[]> {
+    if (selectionScope.theaterIds.length === 0) {
       return [];
     }
 
-    const selectionScope = { ...scope, theaterIds };
     const [movies, allShowtimes] = await Promise.all([
       getSelectionMoviesForTheaters(this.db, selectionScope),
       getShowtimesForTheaters(this.db, selectionScope),
     ]);
     return this.mergeSelectionMoviesAndShowtimes(movies, allShowtimes);
-  }
-
-  private async getSelectionTheaterIds(memberId: number): Promise<string[]> {
-    const selection = await getSelection(this.db, memberId);
-    return selection.map(theater => theater.id);
   }
 
   /**

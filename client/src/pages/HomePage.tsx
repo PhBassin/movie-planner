@@ -38,10 +38,15 @@ export default function HomePage() {
   });
   const profile = profileQuery.data;
 
-  const { data: theaters = [], isLoading: isLoadingTheaters } = useQuery({
+  const { data: theaterSource = [], isLoading: isLoadingTheaters } = useQuery({
     queryKey: isMember ? ['selection'] : ['theaters'],
     queryFn: () => (isMember ? getSelection() : getTheaters()),
   });
+  // Only active choices are Homepage content; remembered ones never leak in.
+  const theaters = useMemo(
+    () => (isMember ? theaterSource.filter((theater) => !('active' in theater) || theater.active) : theaterSource),
+    [isMember, theaterSource],
+  );
 
   const { data: moviesData, isLoading: isLoadingMovies, error: moviesError } = useQuery({
     queryKey: isMember ? ['selection-movies', selectedDate] : ['movies', selectedDate],
@@ -88,6 +93,12 @@ export default function HomePage() {
   const newThisWeekMovies = isSpecificDateView ? [] : movies.filter(movie => movie.isNewThisWeek);
   const continuingMovies = isSpecificDateView ? movies : movies.filter(movie => !movie.isNewThisWeek);
   const selectionEmpty = isMember && profile !== undefined && profile.selectionCount === 0;
+  // Over quota (ADR 0011 D3): the server projects no personal data; the
+  // Member frees slots from the catalog. The chooser itself is #100.
+  const selectionOverQuota = isMember && (
+    profile?.selectionOverQuota === true
+    || (moviesData !== undefined && 'overQuota' in moviesData && moviesData.overQuota === true)
+  );
 
   const handleDateSelect = useCallback((date: string | null) => {
     selectDate(date || '');
@@ -143,6 +154,38 @@ export default function HomePage() {
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;
+
+  if (selectionOverQuota) {
+    return (
+      <div className="max-w-5xl mx-auto">
+        {profile && (
+          <div className="flex justify-end mb-4">
+            <AppearanceToggle appearance={profile.appearance} />
+          </div>
+        )}
+        <div
+          className="bg-amber-50 rounded-2xl p-12 text-center border-2 border-amber-200"
+          data-testid="selection-over-quota-home"
+        >
+          <h1 className="text-2xl font-bold mb-3">Votre sélection dépasse votre offre</h1>
+          <p className="text-gray-700 mb-6 max-w-md mx-auto">
+            {profile
+              ? `Vous suivez ${profile.selectionCount} cinémas actifs, votre offre en permet ${profile.selectionLimit}. `
+              : ''}
+            Retirez des cinémas pour retrouver votre page d'accueil. Aucun cinéma n'a été supprimé et le catalogue reste accessible.
+          </p>
+          <Link
+            to="/cinemas"
+            data-testid="over-quota-cta"
+            className="inline-block px-6 py-3 bg-primary text-black font-bold rounded-lg hover:opacity-90 transition"
+          >
+            Gérer mes cinémas
+          </Link>
+        </div>
+        <ScrollToTop />
+      </div>
+    );
+  }
 
   // Empty Selection: the whole homepage is the add-cinema call to action.
   // The Appearance toggle stays reachable here too (it is a homepage control).

@@ -69,6 +69,13 @@ vi.mock('../middleware/rate-limit.js', () => ({
     authLimiter: vi.fn((_req, _res, next) => next()),
 }));
 
+const mockUsage = vi.fn();
+vi.mock('../services/selection-service.js', () => ({
+    SelectionService: class {
+        usage = mockUsage;
+    },
+}));
+
 const mockExportData = vi.fn();
 const mockEraseSelf = vi.fn();
 vi.mock('../services/member-account-service.js', () => ({
@@ -92,6 +99,9 @@ function memberToken(id = 7, username = 'jane@example.com', role_name = 'member'
 describe('GET /api/me', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockUsage.mockResolvedValue({
+            offer: 'free', activeCount: 2, rememberedCount: 1, selectionQuota: 3, choiceLimit: 50, overQuota: false,
+        });
     });
 
     it('should return the authenticated Member profile', async () => {
@@ -103,7 +113,6 @@ describe('GET /api/me', () => {
             status: 'unverified',
             email_verified_at: null,
             appearance: 'light',
-            selection_count: 0,
             created_at: '2024-01-01T00:00:00Z',
         });
 
@@ -121,11 +130,16 @@ describe('GET /api/me', () => {
             status: 'unverified',
             email_verified: false,
             appearance: 'light',
-            selectionCount: 0,
-            selectionLimit: 50,
+            offer: 'free',
+            selectionCount: 2,
+            selectionLimit: 3,
+            rememberedCount: 1,
+            choiceLimit: 50,
+            selectionOverQuota: false,
             created_at: '2024-01-01T00:00:00Z',
         });
         expect(memberQueries.getMemberProfile).toHaveBeenCalledWith(db, 7);
+        expect(mockUsage).toHaveBeenCalledWith(7);
     });
 
     it('should report email_verified=true when email_verified_at is set', async () => {
@@ -137,7 +151,6 @@ describe('GET /api/me', () => {
             status: 'active',
             email_verified_at: '2024-01-02T00:00:00Z',
             appearance: 'dark',
-            selection_count: 3,
             created_at: '2024-01-01T00:00:00Z',
         });
 
@@ -160,7 +173,6 @@ describe('GET /api/me', () => {
             status: 'unverified',
             email_verified_at: null,
             appearance: 'light',
-            selection_count: 0,
             created_at: '2024-01-01T00:00:00Z',
         });
 
@@ -169,6 +181,35 @@ describe('GET /api/me', () => {
             .set('Authorization', `Bearer ${memberToken()}`);
 
         expect(response.body.data.user.password_hash).toBeUndefined();
+    });
+
+    it('should derive the offer and quota per request, independent of status and role', async () => {
+        vi.mocked(memberQueries.getMemberProfile).mockResolvedValue({
+            id: 7,
+            email: 'jane@example.com',
+            username: 'jane@example.com',
+            role_name: 'member',
+            status: 'active',
+            email_verified_at: null,
+            appearance: 'light',
+            created_at: '2024-01-01T00:00:00Z',
+        });
+        mockUsage.mockResolvedValue({
+            offer: 'premium', activeCount: 12, rememberedCount: 0, selectionQuota: 50, choiceLimit: 50, overQuota: false,
+        });
+
+        const response = await request(app)
+            .get('/api/me')
+            .set('Authorization', `Bearer ${memberToken()}`);
+
+        expect(response.body.data.user).toEqual(expect.objectContaining({
+            role_name: 'member',
+            status: 'active',
+            offer: 'premium',
+            selectionCount: 12,
+            selectionLimit: 50,
+            selectionOverQuota: false,
+        }));
     });
 
     it('should return 401 without a token', async () => {

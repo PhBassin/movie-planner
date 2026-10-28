@@ -316,13 +316,30 @@ CREATE TABLE theaters (
 );
 
 -- Member Selection: references shared active Theaters, never a data copy.
+-- `active` = the choice feeds the Homepage; false = a remembered choice
+-- (ADR 0011 D2/D3).
 CREATE TABLE member_selections (
   theater_id TEXT NOT NULL REFERENCES theaters(id) ON DELETE CASCADE,
   member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
   PRIMARY KEY (member_id, theater_id)
 );
 
 CREATE INDEX idx_member_selections_theater_id ON member_selections(theater_id);
+
+-- Subscription (ADR 0011 D1): only what the Entitlement derivation reads — a
+-- Member is premium while a non-terminal row's `paid_through` is in the
+-- future. At most one non-terminal Subscription per Member (D10).
+CREATE TABLE subscriptions (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('active', 'past_due', 'ended')),
+  paid_through TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_subscriptions_open_per_member
+  ON subscriptions(member_id) WHERE status <> 'ended';
 
 CREATE TABLE movies (
   id INTEGER PRIMARY KEY,

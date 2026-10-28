@@ -48,6 +48,10 @@ const profile: MemberProfile = {
   appearance: 'light',
   selectionCount: 1,
   selectionLimit: 50,
+  offer: null,
+  rememberedCount: 0,
+  choiceLimit: 50,
+  selectionOverQuota: false,
   created_at: '2026-01-01T00:00:00Z',
 };
 

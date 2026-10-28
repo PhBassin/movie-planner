@@ -6,6 +6,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 /** A Member's Appearance (see CONTEXT.md → Appearance). */
 export type Appearance = 'light' | 'dark';
 
+/**
+ * The offer a Member's Entitlement stems from (CONTEXT.md → Entitlement):
+ * `null` while billing is disabled — no offer exists and every Member may
+ * hold 50 active theaters.
+ */
+export type Offer = 'free' | 'premium' | null;
+
 export interface MemberProfile {
   id: number;
   email: string;
@@ -14,10 +21,21 @@ export interface MemberProfile {
   status: 'unverified' | 'active' | 'suspended';
   email_verified: boolean;
   appearance: Appearance;
+  offer: Offer;
+  /** Active Selection choices, counted against `selectionLimit` (the Entitlement quota). */
   selectionCount: number;
   selectionLimit: number;
+  /** Remembered choices: kept, excluded from the Homepage. */
+  rememberedCount: number;
+  /** Bound on stored choices, active and remembered together. */
+  choiceLimit: number;
+  /** More active choices than the quota: the Homepage projects nothing (ADR 0011 D3). */
+  selectionOverQuota: boolean;
   created_at: string;
 }
+
+/** A stored Selection choice: the Theater and whether it is active or remembered. */
+export type SelectionChoice = Theater & { active: boolean };
 
 export async function getMemberProfile(): Promise<MemberProfile> {
   const response = await apiClient.get<ApiResponse<{ user: MemberProfile }>>('/me');
@@ -38,8 +56,8 @@ export async function updateAppearance(appearance: Appearance): Promise<Appearan
   return response.data.appearance;
 }
 
-export async function getSelection(): Promise<Theater[]> {
-  const response = await apiClient.get<ApiResponse<Theater[]>>('/me/selection');
+export async function getSelection(): Promise<SelectionChoice[]> {
+  const response = await apiClient.get<ApiResponse<SelectionChoice[]>>('/me/selection');
   if (!response.success || !response.data) {
     throw new Error(response.error || 'Failed to fetch Selection');
   }

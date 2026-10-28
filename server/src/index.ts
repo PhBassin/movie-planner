@@ -4,6 +4,7 @@ import { initializeDatabase } from './db/schema.js';
 import { logger } from './utils/logger.js';
 import { validateJWTSecret } from './utils/jwt-secret-validator.js';
 import { validateMailerConfiguration } from './services/mailer.js';
+import { validateBillingConfiguration } from './billing/entitlement.js';
 
 const PORT = process.env.PORT || 3000;
 const AUTH_EMAIL_TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -22,6 +23,10 @@ async function startServer() {
     // Email verification is load-bearing (ADR 0003): production refuses to
     // start without an SMTP relay instead of silently never sending mail.
     validateMailerConfiguration();
+
+    // Billing mode (ADR 0011): unknown values and the fake adapter in
+    // production refuse to start.
+    validateBillingConfiguration();
 
     // Log JWT configuration
     const jwtExpiration = process.env.JWT_EXPIRES_IN || '1h';

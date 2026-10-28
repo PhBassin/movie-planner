@@ -75,12 +75,16 @@ A Member's personal set of Theaters — the Theaters whose Showtimes that Member
 
 - **Adding an existing Theater to a Selection does not scrape.** The data is already shared; this is a private, side-effect-free mutation of the Member's homepage.
 - **Removing a Theater from a Selection is private.** It drops the Theater from that Member's homepage only; it never deletes the Theater from the catalog.
-- **Selection size is capped at 50 Theaters.** The cap counts only persisted Selection relationships; provisioning Theaters and pending TheaterSubmissions do not count. A new add at the cap is rejected with a conflict, while adding an already-selected Theater remains idempotent.
+- **Selection size is bounded by the Member's Entitlement** (ADR 0011, #97). Each stored choice is either:
+  - an **active choice** — counts toward the quota and feeds the personal Homepage;
+  - a **remembered choice** — kept but excluded from the Homepage (`member_selections.active = false`). It arises only when premium expires or at the freemium rollout, when the Member keeps 3 (the chooser, #100); a later premium reactivates it (#101).
 
-**Planned (ADR 0011, #97 — not shipped).** The cap becomes the Member's **Entitlement** quota: 3 for free, 50 for premium. While billing is disabled (production today) every Member keeps 50. Two kinds of choice appear:
-- **Active choice** — counts toward the quota and feeds the personal Homepage.
-- **Remembered choice** — kept but excluded from the Homepage; arises only when premium expires (or at the freemium rollout) and the Member keeps 3. At most 50 choices in total, active and remembered together: an add is rejected when the active count is at the quota **or** the total is at 50, and a successful TheaterSubmission is not auto-added in either case (`succeeded_selection_full`). New adds are always active. Regaining premium — a new Subscription or a recovered `past_due` one — reactivates every remembered choice; while billing is disabled, remembered choices count as active.
-- **Over-quota Selection** — a *derived* state, not a stored flag: more active choices than the current quota. The personal Homepage is replaced by the "Choisissez vos 3 cinémas" chooser until the Member commits a subset; nothing is deactivated automatically, the catalog stays available.
+  The quota is the Member's **Entitlement**: 3 active choices free, 50 premium; while billing is disabled (`BILLING_PROVIDER=disabled`, production today) every Member keeps 50 and remembered choices count as active. Stored choices are bounded at **50 in total**, active and remembered together. The cap counts persisted Selection rows only; provisioning Theaters and pending TheaterSubmissions do not count.
+
+  **One add policy** (`applySelectionAdd`, `server/src/services/selection-service.ts`) serves the manual add, the activation of a remembered choice, the dedup Selection add and the successful-submission auto-add, always under the Member lock (`lockMemberForSelection`) so concurrent adds cannot exceed the quota read in the same transaction. An already-active choice is idempotent and consumes no slot; a remembered one is activated while the active count is below quota; a new one needs the active count below quota **and** the total below 50, and is always stored active — never as remembered. A rejected add is a 409 whose `details` carry the reason (`quota_reached` | `choices_full`) and fresh usage, so a stale browser count recovers. A successful TheaterSubmission rejected by the policy is not auto-added (`succeeded_selection_full`).
+- **Over-quota Selection** — a *derived* state, not a stored flag: more active choices than the current quota (after expiry, or at the rollout). Nothing is deactivated automatically and the catalog stays available; every personal projection returns no data (`overQuota: true`) until the Member is back within quota. The "Choisissez vos 3 cinémas" chooser that commits a subset is #100; until then the Member removes choices from the catalog page.
+
+The Member-facing usage (`offer`, active `selectionCount` against `selectionLimit`, `rememberedCount`, `choiceLimit`, `selectionOverQuota`) is derived on every `GET /api/me` (`SelectionService.usage`), never from the JWT.
 
 "Active" here is about the Selection relationship, never the Theater lifecycle (`provisioning | active`).
 
@@ -150,7 +154,7 @@ The request scope shared by the Selection movie and showtime queries is the
 `SelectionScope` (`server/src/db/showtime-queries.ts`): selected theaters,
 one cinema week, an optional single date.
 
-*Planned (ADR 0011 D3, not shipped):* while the Member's Selection is **over-quota** (more active choices than their Entitlement allows), the Homepage is replaced by the "Choisissez vos 3 cinémas" chooser until they commit a subset; only **active** choices ever feed the Homepage, never remembered ones.
+Only **active** choices feed the Homepage, never remembered ones: the route resolves the Theaters through `SelectionService.projection` before any movie query. While the Selection is **over-quota** (ADR 0011 D3) the movie and search projections return `overQuota: true` and no movies, and the Homepage shows an over-quota notice pointing to the catalog; the "Choisissez vos 3 cinémas" chooser that replaces it is planned in #100.
 
 **What a Homepage is not:**
 - Not the **catalog**. The catalog is shared and complete; the Homepage is personal and Selection-scoped. A non-selected Theater never appears on a Member's Homepage.
@@ -195,9 +199,9 @@ The act of removing a Member's identity and Member-owned data from movie-planner
 
 A read-only JSON document of a Member's personal data — the **RGPD right to data portability** (Article 20) made operational. The export contains the Member's account (`email`, `created_at`, status — never the password hash), their **Selection**, their **Appearance**, and their full **TheaterSubmission** history (each submission's url, status, timestamps, and resolved `theater_id`). It is the natural pair to Member erasure: "here is your data" before "here is the door."
 
-It is served at `GET /api/me/export` (`MemberAccountService.exportData`; `Cache-Control: no-store`) and downloaded from the account page as `movie-planner-data-<date>.json`. The Selection part lists every `member_selections` row whatever the Theater's status (`getSelectionForExport`), and submissions omit internal plumbing (`member_id`, `report_id` — `getSubmissionHistoryForExport`).
+It is served at `GET /api/me/export` (`MemberAccountService.exportData`; `Cache-Control: no-store`) and downloaded from the account page as `movie-planner-data-<date>.json`. The Selection part lists every `member_selections` row whatever the Theater's status, each marked `active` or remembered (`getSelectionForExport`), and submissions omit internal plumbing (`member_id`, `report_id` — `getSubmissionHistoryForExport`).
 
-*Planned (ADR 0011 D15, not shipped):* the Selection part marks each choice **active** or **remembered**, and the export adds the Member's **Subscription** state, paid-through date and accepted **tariff version** (amount, currency) — never provider secrets or payment method details.
+*Planned (ADR 0011 D15, not shipped):* the export adds the Member's **Subscription** state, paid-through date and accepted **tariff version** (amount, currency) — never provider secrets or payment method details.
 
 The export is **Session-gated and ungated otherwise** — it is non-destructive, so it requires no password re-entry (unlike erasure). The submission history is included because submissions are the Member's own acts and are erased on deletion, making the export the only moment those records remain visible to them.
 
@@ -208,17 +212,21 @@ The export is **Session-gated and ungated otherwise** — it is non-destructive,
 
 ## Billing
 
-**Planned — none of this is shipped.** Decided in [ADR 0011](docs/adr/0011-billing-port-provider-deferred.md) for the freemium epic (#95); no payment provider is selected yet.
+Decided in [ADR 0011](docs/adr/0011-billing-port-provider-deferred.md) for the freemium epic (#95); no payment provider is selected yet. **Shipped (#97):** the billing mode, the Entitlement derivation and the Subscription row it reads. Everything else in this section is still planned.
 
 ### Entitlement
 
-What a Member may use beyond the free offer: today only the active-Selection quota (3 free / 50 premium). It is **derived** on every request from the Member's Subscription — premium while a non-terminal Subscription's paid-through instant is in the future — never read from the JWT or stored as a flag. Expiry therefore happens exactly at the boundary, with no sweep. While billing is disabled (`BILLING_PROVIDER=disabled`, the production default and the post-launch emergency fallback) every Member is entitled to 50 and remembered choices count as active, without any write.
+What a Member may use beyond the free offer: today only the active-Selection quota (3 free / 50 premium). It is **derived** on every request from the Member's Subscription — premium while a non-terminal Subscription's paid-through instant is in the future — never read from the JWT or stored as a flag. Expiry therefore happens exactly at the boundary (compared with the database clock), with no sweep. While billing is disabled (`BILLING_PROVIDER=disabled`, the production default and the post-launch emergency fallback) every Member is entitled to 50 with no **offer** (`null`) and remembered choices count as active, without any write. `BILLING_PROVIDER=fake` applies the free/premium quotas for dev and tests; it is refused in production, and an unknown value refuses to start (`validateBillingConfiguration`). Home: `server/src/billing/entitlement.ts` (`getEntitlement`, `resolveBillingMode`).
+
+**Offer** — the Member-facing name of the Entitlement's source: `free` or `premium`, or none while billing is disabled.
 
 **What an Entitlement is *not*:** not a Member lifecycle status (`unverified | active | suspended` is independent), not a Role or permission, not a gate on the catalog, Appearance, filters or submission safeguards.
 
 ### Subscription
 
 A Member's recurring monthly payment relationship for premium. It references the **tariff version** the Member accepted and has its own state machine (`active`, `past_due`, cancellation scheduled, ended), separate from the Member's. A Subscription is **continuous** as long as it never ends: renewals and a payment recovered within the recovery window keep its price. While `past_due` the Member fixes their payment through a hosted **payment recovery** link, never a new checkout. Once ended, a later purchase is a **new** Subscription at the current tariff. At most one non-terminal Subscription and one open checkout per Member.
+
+*Shipped so far (#97):* the `subscriptions` table holds only what the Entitlement reads — `status` (`active | past_due | ended`), `paid_through`, at most one non-terminal row per Member, cascading on erasure (`hasPaidThroughSubscription`, `server/src/db/subscription-queries.ts`). Nothing writes it yet outside test fixtures; checkout, tariff version and provider reference arrive with #99.
 
 **What a Subscription is *not*:** not the Member (a suspended Member may still have one, scheduled to end — ADR 0011 D12), not the provider's record (the local row is the source of truth the code reads; the provider is re-read to update it).
 

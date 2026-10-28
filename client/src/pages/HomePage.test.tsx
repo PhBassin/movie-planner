@@ -374,6 +374,21 @@ describe('HomePage — polymorphic root', () => {
     expect(await screen.findByText('UGC Opéra')).toBeInTheDocument();
   });
 
+  it('keeps remembered choices out of the quick theater links', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Sélection', false)],
+      selection: [
+        { id: 'C0001', name: 'UGC Opéra', status: 'active', active: true },
+        { id: 'C0009', name: 'Cinéma Mémorisé', status: 'active', active: false },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('UGC Opéra')).toBeInTheDocument();
+    expect(screen.queryByText('Cinéma Mémorisé')).not.toBeInTheDocument();
+  });
+
   it('partitions the New section: a new movie appears exactly once, only in the section', async () => {
     setupMember({
       movies: [makeSelectionMovie(1, 'Film Nouveau', true), makeSelectionMovie(2, 'Film Ancien', false)],
@@ -529,6 +544,32 @@ describe('HomePage — polymorphic root', () => {
     expect(screen.queryByTestId('filter-bar')).not.toBeInTheDocument();
     expect(screen.queryByTestId('new-this-week-section')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sticky-search-date-container')).not.toBeInTheDocument();
+  });
+
+  it('replaces the Homepage with the over-quota notice, projecting no movies (ADR 0011 D3)', async () => {
+    setupMember({
+      movies: [makeSelectionMovie(1, 'Film Sélection', false)],
+      profile: { offer: 'free', selectionCount: 5, selectionLimit: 3, selectionOverQuota: true },
+    });
+
+    renderPage();
+
+    expect(await screen.findByTestId('selection-over-quota-home')).toHaveTextContent(
+      'Vous suivez 5 cinémas actifs, votre offre en permet 3.',
+    );
+    expect(screen.getByTestId('over-quota-cta')).toHaveAttribute('href', '/cinemas');
+    expect(screen.getByTestId('appearance-toggle')).toBeInTheDocument();
+    expect(screen.queryByText('Film Sélection')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('filter-bar')).not.toBeInTheDocument();
+  });
+
+  it('honors the server over-quota flag even when the cached profile is stale', async () => {
+    setupMember({ profile: { selectionCount: 2, selectionLimit: 3 } });
+    (clientApi.getSelectionMovies as any).mockResolvedValue({ movies: [], weekStart: WEEK_START, overQuota: true });
+
+    renderPage();
+
+    expect(await screen.findByTestId('selection-over-quota-home')).toBeInTheDocument();
   });
 
   it('keeps the Appearance toggle reachable when the Selection is empty', async () => {

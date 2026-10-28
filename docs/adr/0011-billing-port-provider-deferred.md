@@ -92,9 +92,13 @@ Provider choice and fees; launch currency and tax presentation; invoicing and th
 - `disabled` → real provider is the launch step that triggers D6 for existing Members. Going back to `disabled` is an emergency fallback, not a product state: it is write-free and converges through reconciliation when billing is re-enabled (D6).
 - `CONTEXT.md`'s **Homepage** and **Member data export** entries note the planned chooser (D3) and the export additions (D15).
 
+## Implementation notes
+
+- **#97 (Selection quotas).** `MAX_SELECTION_SIZE` is gone: the quota comes from `getEntitlement` (`server/src/billing/entitlement.ts`, `BILLING_PROVIDER` = `disabled | fake`), the 50-choice bound is `MAX_SELECTION_CHOICES`, and the one add policy `applySelectionAdd` (`server/src/services/selection-service.ts`) serves the manual add, remembered-choice activation, the dedup add and the submission auto-add under the Member lock. Remembered choices are `member_selections.active = false`; the `subscriptions` table carries only what D1 reads (`status`, `paid_through`, one non-terminal row per Member) — #99 extends it. Migration `010_selection_entitlement.sql` keeps every existing choice active (D6). Until the chooser lands (#100), the over-quota Homepage (D3) is a notice that points to the catalog, where the Member removes choices; the personal projections already return no data while over quota.
+
 ## Cross-references
 
 - Issues #95 (epic), #96 (this decision), #97–#102 (delivery slices)
 - ADR 0001 (hard-deleted Theaters), ADR 0003 (submission throttle), ADR 0004 (erasure and export), ADR 0005 (notification outcomes, `succeeded_selection_full`), ADR 0007 (no owner entity), ADR 0009 (PostgreSQL as the only stateful component)
 - Bus port precedent: `CONTEXT.md` § Bus port, issue #21
-- `server/src/services/selection-service.ts` (`MAX_SELECTION_SIZE`, the seam #97 replaces), `server/src/services/submission-resolver.ts`
+- `server/src/services/selection-service.ts` (`applySelectionAdd`, which replaced `MAX_SELECTION_SIZE` in #97), `server/src/billing/entitlement.ts`, `server/src/services/submission-resolver.ts`
