@@ -65,23 +65,72 @@ export async function getSelection(
 }
 
 /**
- * Everything the Entitlement decision and a personal projection need, read in
- * one statement so they share one snapshot (ADR 0011 D3): an expiring
- * Subscription or a concurrent add cannot slip between the over-quota check
- * and the projected Theaters.
+ * What the Entitlement decision needs, read in one statement under one clock
+ * (ADR 0011 D1/D2):
  *
  * - `paidThrough`: a non-terminal Subscription is paid through now (D1);
  * - `active` / `total`: stored choice counts — every row, whatever the Theater
  *   status, like the former 50 cap: `active` feeds the quota, `total` the
  *   50-choice bound (D2);
- * - `projectedTheaterIds`: active choices of active catalog Theaters, the
- *   input of the Homepage movies, showtimes, search and New section.
+ * - `choice`: the stored choice for the Theater an add targets, when one is
+ *   asked about and exists — so the add policy reads it in the same statement.
+ *
+ * Counts only: no Theater join, so the hot `GET /api/me` usage read and the
+ * locked add stay cheap. A projection needs `getSelectionSnapshot` instead.
  */
-export interface SelectionSnapshot {
+export interface SelectionCounts {
   paidThrough: boolean;
   active: number;
   total: number;
+  choice?: { active: boolean };
+}
+
+/**
+ * The counts plus the Theaters a personal projection reads, in one statement
+ * so they share one snapshot (ADR 0011 D3): an expiring Subscription or a
+ * concurrent add cannot slip between the over-quota check and the projected
+ * Theaters. `projectedTheaterIds` are the active choices of active catalog
+ * Theaters, the input of the Homepage movies, showtimes, search and New
+ * section.
+ */
+export interface SelectionSnapshot extends Omit<SelectionCounts, 'choice'> {
   projectedTheaterIds: string[];
+}
+
+/** The count columns shared by both reads; `$1` = Member id, `$2` = the view. */
+const SELECTION_COUNT_COLUMNS = `${paidThroughSubscriptionExistsSql('$1')} AS paid_through,
+            COUNT(ms.theater_id) FILTER (WHERE ${effectiveActiveSql('$2')})::int AS active,
+            COUNT(ms.theater_id)::int AS total`;
+
+export async function getSelectionCounts(
+  db: QueryableDB,
+  memberId: number,
+  view: SelectionChoiceView,
+  theaterId?: string,
+): Promise<SelectionCounts> {
+  // `bool_or` over the Member's rows is NULL when no row matches `$3` (or
+  // `$3` is NULL), i.e. no stored choice for that Theater.
+  const result = await db.query<{
+    paid_through: boolean;
+    active: number;
+    total: number;
+    choice_exists: boolean | null;
+    choice_active: boolean | null;
+  }>(
+    `SELECT ${SELECTION_COUNT_COLUMNS},
+            bool_or(ms.theater_id = $3::text) AS choice_exists,
+            bool_or(ms.theater_id = $3::text AND ${effectiveActiveSql('$2')}) AS choice_active
+     FROM (SELECT 1) AS one
+     LEFT JOIN member_selections ms ON ms.member_id = $1`,
+    [memberId, view.rememberedCountsAsActive, theaterId ?? null],
+  );
+  const row = result.rows[0];
+  return {
+    paidThrough: row?.paid_through ?? false,
+    active: row?.active ?? 0,
+    total: row?.total ?? 0,
+    ...(row?.choice_exists ? { choice: { active: row.choice_active === true } } : {}),
+  };
 }
 
 export async function getSelectionSnapshot(
@@ -95,9 +144,7 @@ export async function getSelectionSnapshot(
     total: number;
     projected_theater_ids: string[];
   }>(
-    `SELECT ${paidThroughSubscriptionExistsSql('$1')} AS paid_through,
-            COUNT(ms.theater_id) FILTER (WHERE ${effectiveActiveSql('$2')})::int AS active,
-            COUNT(ms.theater_id)::int AS total,
+    `SELECT ${SELECTION_COUNT_COLUMNS},
             COALESCE(
               array_agg(t.id ORDER BY t.name, t.id)
                 FILTER (WHERE t.status = 'active' AND ${effectiveActiveSql('$2')}),
@@ -117,31 +164,21 @@ export async function getSelectionSnapshot(
   };
 }
 
-/** The stored choice for one Theater, or undefined when the Member has none. */
-export async function getSelectionChoice(
-  db: QueryableDB,
-  memberId: number,
-  theaterId: string,
-  view: SelectionChoiceView,
-): Promise<{ active: boolean } | undefined> {
-  const result = await db.query<{ active: boolean }>(
-    `SELECT ${effectiveActiveSql('$3')} AS active
-     FROM member_selections ms WHERE ms.member_id = $1 AND ms.theater_id = $2`,
-    [memberId, theaterId, view.rememberedCountsAsActive],
-  );
-  return result.rows[0];
-}
-
-/** Turn a remembered choice back into an active one. */
+/**
+ * Turn a remembered choice back into an active one. False when the row is
+ * gone: Selection removal does not take the Member lock, so it can delete the
+ * choice between the add policy's read and this write.
+ */
 export async function activateSelection(
   db: QueryableDB,
   memberId: number,
   theaterId: string,
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  const result = await db.query(
     'UPDATE member_selections SET active = TRUE WHERE member_id = $1 AND theater_id = $2',
     [memberId, theaterId],
   );
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function insertSelection(

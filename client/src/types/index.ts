@@ -170,4 +170,6 @@ export interface MemberNotice {
   theaterName: string;
   outcome: MemberNoticeOutcome;
   reason?: string;
+  /** On `succeeded_selection_full` only: which Selection limit refused the auto-add (ADR 0011 D2). */
+  selectionRefusal?: 'quota_reached' | 'choices_full';
 }

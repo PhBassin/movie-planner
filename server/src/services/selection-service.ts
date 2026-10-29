@@ -3,13 +3,13 @@ import {
   activateSelection,
   getActiveTheater,
   getSelection,
-  getSelectionChoice,
+  getSelectionCounts,
   getSelectionSnapshot,
   insertSelection,
   lockMemberForSelection,
   removeSelection,
   type SelectionChoice,
-  type SelectionSnapshot,
+  type SelectionCounts,
 } from '../db/selection-queries.js';
 import {
   entitlementFor,
@@ -54,26 +54,21 @@ export interface SelectionUsage {
   overQuota: boolean;
 }
 
-/** Read the Selection snapshot and derive the usage from it, both under one billing mode. */
-async function readSelectionState(
-  db: DBQueryExecutor,
-  memberId: number,
-  mode: BillingMode = resolveBillingMode(),
-): Promise<{ snapshot: SelectionSnapshot; usage: SelectionUsage }> {
-  const snapshot = await getSelectionSnapshot(db, memberId, {
-    rememberedCountsAsActive: rememberedChoicesCountAsActive(mode),
-  });
-  const entitlement = entitlementFor(mode, snapshot.paidThrough);
+/** The current billing mode's view of a choice's active flag (D6). */
+function choiceView(mode: BillingMode): { rememberedCountsAsActive: boolean } {
+  return { rememberedCountsAsActive: rememberedChoicesCountAsActive(mode) };
+}
+
+/** Derive the usage from counts read under `mode`. */
+function usageFrom(mode: BillingMode, counts: Omit<SelectionCounts, 'choice'>): SelectionUsage {
+  const entitlement = entitlementFor(mode, counts.paidThrough);
   return {
-    snapshot,
-    usage: {
-      offer: entitlement.offer,
-      activeCount: snapshot.active,
-      rememberedCount: snapshot.total - snapshot.active,
-      selectionQuota: entitlement.selectionQuota,
-      choiceLimit: MAX_SELECTION_CHOICES,
-      overQuota: snapshot.active > entitlement.selectionQuota,
-    },
+    offer: entitlement.offer,
+    activeCount: counts.active,
+    rememberedCount: counts.total - counts.active,
+    selectionQuota: entitlement.selectionQuota,
+    choiceLimit: MAX_SELECTION_CHOICES,
+    overQuota: counts.active > entitlement.selectionQuota,
   };
 }
 
@@ -100,24 +95,24 @@ async function decideSelectionAdd(
   theaterId: string,
 ): Promise<SelectionAddDecision> {
   const mode = resolveBillingMode();
-  const existing = await getSelectionChoice(tx, memberId, theaterId, {
-    rememberedCountsAsActive: rememberedChoicesCountAsActive(mode),
-  });
-  if (existing?.active) {
+  const counts = await getSelectionCounts(tx, memberId, choiceView(mode), theaterId);
+  if (counts.choice?.active) {
     return { outcome: 'already_active' };
   }
 
-  const { snapshot, usage } = await readSelectionState(tx, memberId, mode);
+  const usage = usageFrom(mode, counts);
   if (usage.activeCount >= usage.selectionQuota) {
     return { outcome: 'quota_reached', usage };
   }
 
-  if (existing) {
-    await activateSelection(tx, memberId, theaterId);
+  // A remembered choice removed concurrently (removal does not take the
+  // Member lock) updates nothing: it is then a new choice, held to the total
+  // bound below — never reported as activated when it is gone.
+  if (counts.choice && await activateSelection(tx, memberId, theaterId)) {
     return { outcome: 'activated' };
   }
 
-  if (snapshot.total >= MAX_SELECTION_CHOICES) {
+  if (counts.total >= MAX_SELECTION_CHOICES) {
     return { outcome: 'choices_full', usage };
   }
 
@@ -139,11 +134,13 @@ export class SelectionService {
 
   /** Stored choices with their effective active flag (remembered ones count as active while billing is disabled, D6). */
   async list(memberId: number): Promise<SelectionChoice[]> {
-    return getSelection(this.db, memberId, { rememberedCountsAsActive: rememberedChoicesCountAsActive() });
+    return getSelection(this.db, memberId, choiceView(resolveBillingMode()));
   }
 
+  /** Counts only — the `GET /api/me` read, so no Theater join or projection. */
   async usage(memberId: number): Promise<SelectionUsage> {
-    return (await readSelectionState(this.db, memberId)).usage;
+    const mode = resolveBillingMode();
+    return usageFrom(mode, await getSelectionCounts(this.db, memberId, choiceView(mode)));
   }
 
   /**
@@ -154,8 +151,9 @@ export class SelectionService {
    * statement, so they cannot disagree.
    */
   async projection(memberId: number): Promise<{ overQuota: true } | { overQuota: false; theaterIds: string[] }> {
-    const { snapshot, usage } = await readSelectionState(this.db, memberId);
-    if (usage.overQuota) {
+    const mode = resolveBillingMode();
+    const snapshot = await getSelectionSnapshot(this.db, memberId, choiceView(mode));
+    if (usageFrom(mode, snapshot).overQuota) {
       return { overQuota: true };
     }
     return { overQuota: false, theaterIds: snapshot.projectedTheaterIds };

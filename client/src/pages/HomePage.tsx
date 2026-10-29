@@ -13,6 +13,7 @@ import { LoadingSpinner, ErrorMessage } from '../components/ui/PageStates.js';
 import { useDateTimeFilter } from '../hooks/useDateTimeFilter.js';
 import type { Movie } from '../types';
 import { getTodayDate } from '../utils/date.js';
+import { invalidateMemberSelection } from '../utils/selection.js';
 
 export default function HomePage() {
   const queryClient = useQueryClient();
@@ -102,6 +103,14 @@ export default function HomePage() {
     profile?.selectionOverQuota === true
     || (moviesData !== undefined && 'overQuota' in moviesData && moviesData.overQuota === true)
   );
+
+  // A search refused for over-quota means the cached usage is stale (e.g.
+  // premium just expired): reload it so the over-quota notice takes over.
+  const searchSelection = useCallback(async (query: string) => {
+    const { movies: found, overQuota } = await searchSelectionMovies(query);
+    if (overQuota) void invalidateMemberSelection(queryClient);
+    return found;
+  }, [queryClient]);
 
   const handleDateSelect = useCallback((date: string | null) => {
     selectDate(date || '');
@@ -302,7 +311,7 @@ export default function HomePage() {
             onNow={selectNow}
             isNowActive={afterTime !== null}
             onFilter={handleFilter}
-            searchFn={isMember ? searchSelectionMovies : undefined}
+            searchFn={isMember ? searchSelection : undefined}
             onReset={handleReset}
             resetKey={resetKey}
           />

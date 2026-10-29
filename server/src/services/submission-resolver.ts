@@ -1,4 +1,4 @@
-import type { MemberNotice, MemberNoticeOutcome, ProgressEvent } from '@movie-planner/scraper-protocol';import type { DB } from '../db/index.js';
+import type { MemberNotice, MemberNoticeOutcome, ProgressEvent, SelectionRefusal } from '@movie-planner/scraper-protocol';import type { DB } from '../db/index.js';
 import {
   expireStalePendingSubmissionReports,
   getPendingSubmissionByReport,
@@ -171,7 +171,9 @@ export class SubmissionResolutionService {
         // row stays `succeeded`.
         const outcome = await applySelectionAdd(tx, resolved.member_id, resolved.theater_id);
         if (outcome === 'quota_reached' || outcome === 'choices_full') {
-          return this.buildNotice(resolved, 'succeeded_selection_full', theater);
+          // The refusal rides the notice so the toast explains which limit
+          // applies (the offer's active quota vs the 50-choice bound).
+          return this.buildNotice(resolved, 'succeeded_selection_full', theater, outcome);
         }
       }
 
@@ -193,6 +195,7 @@ export class SubmissionResolutionService {
     submission: TheaterSubmissionRow,
     outcome: MemberNoticeOutcome,
     theater: { name: string } | undefined,
+    selectionRefusal?: SelectionRefusal,
   ): MemberNotice {
     return {
       type: 'submission_resolved',
@@ -202,6 +205,7 @@ export class SubmissionResolutionService {
       theaterName: theater?.name ?? submission.theater_id,
       outcome,
       ...(outcome === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
+      ...(selectionRefusal ? { selectionRefusal } : {}),
     };
   }
 }

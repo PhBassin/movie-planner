@@ -3,9 +3,9 @@
  * Member is premium while a non-terminal Subscription's paid-through instant
  * is in the future — evaluated against the database clock, so expiry takes
  * effect at the exact boundary with no sweep. Checkout and provider sync (#99)
- * write these rows; this slice only reads them, inside the Selection snapshot
- * (`getSelectionSnapshot`) so the Entitlement and the counts share one
- * statement.
+ * write these rows; this slice only reads them, inside the Selection reads
+ * (`getSelectionCounts`, `getSelectionSnapshot`) so the Entitlement and the
+ * counts share one statement.
  *
  * The clock is `statement_timestamp()`, not `NOW()`: `NOW()` is frozen at
  * transaction start, and a Selection add reads this after waiting on the

@@ -28,6 +28,7 @@ const memberRow = (overrides: Partial<memberQueries.MemberAdminRow> = {}): membe
   email_verified_at: '2026-01-02T00:00:00Z',
   appearance: 'dark',
   selection_count: 5,
+  remembered_selection_count: 0,
   submission_count: 2,
   created_at: '2026-01-01T00:00:00Z',
   ...overrides,

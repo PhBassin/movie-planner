@@ -5,7 +5,7 @@ import {
   getActiveTheater,
   lockMemberForSelection,
   getSelection,
-  getSelectionChoice,
+  getSelectionCounts,
   getSelectionSnapshot,
   insertSelection,
   removeSelection,
@@ -18,7 +18,7 @@ vi.mock('../db/selection-queries.js', () => ({
   getActiveTheater: vi.fn(),
   lockMemberForSelection: vi.fn(),
   getSelection: vi.fn(),
-  getSelectionChoice: vi.fn(),
+  getSelectionCounts: vi.fn(),
   getSelectionSnapshot: vi.fn(),
   insertSelection: vi.fn(),
   removeSelection: vi.fn(),
@@ -31,13 +31,19 @@ describe('SelectionService', () => {
   } as unknown as DB;
   let service: SelectionService;
 
-  // The snapshot query (one statement): Subscription state, counts, projected Theaters.
+  // The counts query (one statement: Subscription state, counts, the targeted
+  // choice) and the projection snapshot (the counts plus projected Theaters).
   let paidThrough = false;
   let projectedTheaterIds: string[] = [];
-  const counts = (active: number, total = active) =>
+  let choice: { active: boolean } | undefined;
+  const counts = (active: number, total = active) => {
+    vi.mocked(getSelectionCounts).mockImplementation(async () => ({
+      paidThrough, active, total, ...(choice ? { choice } : {}),
+    }));
     vi.mocked(getSelectionSnapshot).mockImplementation(async () => ({
       paidThrough, active, total, projectedTheaterIds,
     }));
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,7 +51,8 @@ describe('SelectionService', () => {
     service = new SelectionService(db);
     vi.mocked(lockMemberForSelection).mockResolvedValue({ id: 7, role_name: 'member', status: 'active', email_verified_at: null });
     vi.mocked(getActiveTheater).mockResolvedValue({ id: 'C0001', name: 'UGC Opéra', status: 'active' });
-    vi.mocked(getSelectionChoice).mockResolvedValue(undefined);
+    vi.mocked(activateSelection).mockResolvedValue(true);
+    choice = undefined;
     paidThrough = false;
     projectedTheaterIds = [];
     counts(0);
@@ -63,7 +70,8 @@ describe('SelectionService', () => {
       expect(db.transaction).toHaveBeenCalledOnce();
       expect(lockMemberForSelection).toHaveBeenCalledWith(transactionDb, 7);
       // The Entitlement is read inside the locked transaction, never from the token.
-      expect(getSelectionSnapshot).toHaveBeenCalledWith(transactionDb, 7, { rememberedCountsAsActive: false });
+      expect(getSelectionCounts).toHaveBeenCalledWith(transactionDb, 7, { rememberedCountsAsActive: false }, 'C0001');
+      expect(getSelectionSnapshot).not.toHaveBeenCalled();
       expect(insertSelection).toHaveBeenCalledWith(transactionDb, 7, 'C0001');
     });
 
@@ -71,7 +79,7 @@ describe('SelectionService', () => {
       vi.mocked(getActiveTheater).mockResolvedValue(undefined);
 
       await expect(service.add(7, 'C0001')).rejects.toBeInstanceOf(NotFoundError);
-      expect(getSelectionSnapshot).not.toHaveBeenCalled();
+      expect(getSelectionCounts).not.toHaveBeenCalled();
     });
 
     it('rejects a deleted member', async () => {
@@ -131,16 +139,16 @@ describe('SelectionService', () => {
 
   describe('applySelectionAdd (the one policy)', () => {
     it('keeps an active choice idempotent without consuming a slot, even at quota', async () => {
-      vi.mocked(getSelectionChoice).mockResolvedValue({ active: true });
+      choice = { active: true };
       counts(3);
 
       await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('already_active');
-      expect(getSelectionSnapshot).not.toHaveBeenCalled();
+      expect(activateSelection).not.toHaveBeenCalled();
       expect(insertSelection).not.toHaveBeenCalled();
     });
 
     it('activates a remembered choice below quota without inserting', async () => {
-      vi.mocked(getSelectionChoice).mockResolvedValue({ active: false });
+      choice = { active: false };
       counts(2, 10);
 
       await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('activated');
@@ -149,18 +157,37 @@ describe('SelectionService', () => {
     });
 
     it('activates a remembered choice even when the total is at 50 (it already counts)', async () => {
-      vi.mocked(getSelectionChoice).mockResolvedValue({ active: false });
+      choice = { active: false };
       counts(2, MAX_SELECTION_CHOICES);
 
       await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('activated');
     });
 
     it('refuses to activate a remembered choice at quota', async () => {
-      vi.mocked(getSelectionChoice).mockResolvedValue({ active: false });
+      choice = { active: false };
       counts(3, 5);
 
       await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('quota_reached');
       expect(activateSelection).not.toHaveBeenCalled();
+    });
+
+    it('treats a remembered choice removed concurrently as a new choice, never as activated', async () => {
+      // The unlocked removal deleted the row between the read and the update.
+      choice = { active: false };
+      vi.mocked(activateSelection).mockResolvedValue(false);
+      counts(2, 10);
+
+      await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('added');
+      expect(insertSelection).toHaveBeenCalledWith(transactionDb, 7, 'C0001');
+    });
+
+    it('holds a concurrently removed remembered choice to the total bound', async () => {
+      choice = { active: false };
+      vi.mocked(activateSelection).mockResolvedValue(false);
+      counts(2, MAX_SELECTION_CHOICES);
+
+      await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('choices_full');
+      expect(insertSelection).not.toHaveBeenCalled();
     });
 
     it('never stores a new choice as remembered: quota wins before the total bound', async () => {
@@ -185,8 +212,7 @@ describe('SelectionService', () => {
         counts(3, 3);
 
         await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('added');
-        expect(getSelectionChoice).toHaveBeenCalledWith(transactionDb, 7, 'C0001', { rememberedCountsAsActive: true });
-        expect(getSelectionSnapshot).toHaveBeenCalledWith(transactionDb, 7, { rememberedCountsAsActive: true });
+        expect(getSelectionCounts).toHaveBeenCalledWith(transactionDb, 7, { rememberedCountsAsActive: true }, 'C0001');
       });
 
       it('counts remembered choices as active: at 50 stored choices the add is rejected', async () => {
@@ -198,7 +224,8 @@ describe('SelectionService', () => {
 
       it('treats a remembered choice as already active', async () => {
         // The query reports a remembered choice as active under this view.
-        vi.mocked(getSelectionChoice).mockResolvedValue({ active: true });
+        choice = { active: true };
+        counts(1);
 
         await expect(applySelectionAdd(transactionDb, 7, 'C0001')).resolves.toBe('already_active');
         expect(activateSelection).not.toHaveBeenCalled();
@@ -234,6 +261,7 @@ describe('SelectionService', () => {
 
       await expect(service.projection(7)).resolves.toEqual({ overQuota: false, theaterIds: ['C0001', 'C0002'] });
       expect(getSelectionSnapshot).toHaveBeenCalledOnce();
+      expect(getSelectionCounts).not.toHaveBeenCalled();
       expect(getSelectionSnapshot).toHaveBeenCalledWith(db, 7, { rememberedCountsAsActive: false });
     });
 

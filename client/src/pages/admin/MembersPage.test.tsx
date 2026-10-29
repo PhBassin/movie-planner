@@ -19,6 +19,7 @@ const makeMember = (overrides: Partial<MemberAdminView> = {}): MemberAdminView =
   email_verified_at: '2026-01-02T00:00:00Z',
   appearance: 'light',
   selection_count: 3,
+  remembered_selection_count: 0,
   submission_count: 1,
   created_at: '2026-01-01T00:00:00Z',
   ...overrides,

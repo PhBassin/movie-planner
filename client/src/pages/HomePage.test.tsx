@@ -475,10 +475,12 @@ describe('HomePage — polymorphic root', () => {
     setupMember({
       movies: [makeSelectionMovie(1, 'Film Nouveau', true), makeSelectionMovie(2, 'Film Ancien', false)],
     });
-    (clientApi.searchSelectionMovies as any).mockResolvedValue([
-      { id: 1, title: 'Film Nouveau', genres: [], actors: [], source_url: '' },
-      { id: 2, title: 'Film Ancien', genres: [], actors: [], source_url: '' },
-    ]);
+    (clientApi.searchSelectionMovies as any).mockResolvedValue({
+      movies: [
+        { id: 1, title: 'Film Nouveau', genres: [], actors: [], source_url: '' },
+        { id: 2, title: 'Film Ancien', genres: [], actors: [], source_url: '' },
+      ],
+    });
 
     renderPage();
 
@@ -580,6 +582,24 @@ describe('HomePage — polymorphic root', () => {
     renderPage();
 
     expect(await screen.findByTestId('selection-over-quota-home')).toBeInTheDocument();
+  });
+
+  it('reloads the usage when a search is refused for over-quota, so the notice takes over', async () => {
+    setupMember({ movies: [makeSelectionMovie(1, 'Film Nouveau', true)] });
+    (clientApi.searchSelectionMovies as any).mockResolvedValue({ movies: [], overQuota: true });
+
+    renderPage();
+
+    await screen.findByTestId('new-this-week-section');
+    // Premium expired since the profile was cached: the server now says so.
+    (clientApi.getMemberProfile as any).mockResolvedValue(
+      makeMemberProfile({ offer: 'free', selectionCount: 5, selectionLimit: 3, selectionOverQuota: true }),
+    );
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'Film' } });
+
+    expect(await screen.findByTestId('selection-over-quota-home')).toHaveTextContent(
+      'Vous suivez 5 cinémas actifs, votre offre en permet 3.',
+    );
   });
 
   it('keeps the Appearance toggle reachable when the Selection is empty', async () => {

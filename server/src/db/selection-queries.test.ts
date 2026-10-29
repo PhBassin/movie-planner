@@ -5,7 +5,7 @@ import {
   lockMemberForSelection,
   activateSelection,
   getSelection,
-  getSelectionChoice,
+  getSelectionCounts,
   getSelectionForExport,
   getSelectionSnapshot,
 } from './selection-queries.js';
@@ -52,7 +52,43 @@ describe('Selection queries', () => {
     expect(db.query.mock.calls[0][0]).toContain('ORDER BY t.name, t.id');
   });
 
-  it('reads the paid-through state, counts and projected Theaters in one statement', async () => {
+  it('reads the paid-through state and counts in one statement, without the Theater join', async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue({
+        rows: [{ paid_through: true, active: 3, total: 5, choice_exists: null, choice_active: null }],
+      }),
+    } as unknown as DB;
+
+    await expect(getSelectionCounts(db, 7, BILLING_ENABLED)).resolves.toEqual({
+      paidThrough: true, active: 3, total: 5,
+    });
+    const sql = db.query.mock.calls[0][0] as string;
+    expect(sql).toContain('paid_through > statement_timestamp()');
+    expect(sql).toContain('COUNT(ms.theater_id) FILTER (WHERE (ms.active OR $2::boolean))');
+    expect(sql).not.toContain('JOIN theaters');
+    expect(sql).not.toContain('array_agg');
+    expect(db.query.mock.calls[0][1]).toEqual([7, false, null]);
+  });
+
+  it('reads the targeted choice in the same statement as the counts', async () => {
+    const db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ paid_through: false, active: 2, total: 4, choice_exists: true, choice_active: false }] })
+        .mockResolvedValueOnce({ rows: [{ paid_through: false, active: 2, total: 4, choice_exists: false, choice_active: false }] }),
+    } as unknown as DB;
+
+    await expect(getSelectionCounts(db, 7, BILLING_ENABLED, 'C0001')).resolves.toEqual({
+      paidThrough: false, active: 2, total: 4, choice: { active: false },
+    });
+    await expect(getSelectionCounts(db, 7, BILLING_DISABLED, 'C0002')).resolves.toEqual({
+      paidThrough: false, active: 2, total: 4,
+    });
+    expect(db.query.mock.calls[0][0]).toContain('bool_or(ms.theater_id = $3::text AND (ms.active OR $2::boolean)) AS choice_active');
+    expect(db.query.mock.calls[0][1]).toEqual([7, false, 'C0001']);
+    expect(db.query.mock.calls[1][1]).toEqual([7, true, 'C0002']);
+  });
+
+  it('reads the counts and projected Theaters in one statement', async () => {
     const db = {
       query: vi.fn().mockResolvedValue({
         rows: [{ paid_through: true, active: 3, total: 5, projected_theater_ids: ['C0001'] }],
@@ -78,24 +114,15 @@ describe('Selection queries', () => {
     expect(db.query.mock.calls[0][1]).toEqual([7, true]);
   });
 
-  it('reads one stored choice, or nothing', async () => {
+  it('activates a remembered choice, reporting whether the row was still there', async () => {
     const db = {
       query: vi.fn()
-        .mockResolvedValueOnce({ rows: [{ active: false }] })
-        .mockResolvedValueOnce({ rows: [] }),
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
     } as unknown as DB;
 
-    await expect(getSelectionChoice(db, 7, 'C0001', BILLING_ENABLED)).resolves.toEqual({ active: false });
-    await expect(getSelectionChoice(db, 7, 'C0002', BILLING_DISABLED)).resolves.toBeUndefined();
-    expect(db.query.mock.calls[0][0]).toContain('(ms.active OR $3::boolean) AS active');
-    expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001', false]);
-    expect(db.query.mock.calls[1][1]).toEqual([7, 'C0002', true]);
-  });
-
-  it('activates a remembered choice', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
-
-    await activateSelection(db, 7, 'C0001');
+    await expect(activateSelection(db, 7, 'C0001')).resolves.toBe(true);
+    await expect(activateSelection(db, 7, 'C0001')).resolves.toBe(false);
 
     expect(db.query.mock.calls[0][0]).toContain('SET active = TRUE');
     expect(db.query.mock.calls[0][1]).toEqual([7, 'C0001']);

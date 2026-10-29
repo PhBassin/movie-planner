@@ -32,15 +32,18 @@ export async function getSelectionMovies(date?: string): Promise<{ movies: Movie
   return response.data;
 }
 
-export async function searchSelectionMovies(query: string): Promise<Movie[]> {
-  const response = await apiClient.get<ApiResponse<{ movies: Movie[]; query: string }>>(
+// Search within the Member's active theaters. `overQuota` marks a Selection
+// above the Member's quota: the server searched nothing (ADR 0011 D3), so an
+// empty list is not "no results".
+export async function searchSelectionMovies(query: string): Promise<{ movies: Movie[]; overQuota?: boolean }> {
+  const response = await apiClient.get<ApiResponse<{ movies: Movie[]; query: string; overQuota?: boolean }>>(
     '/me/selection/movies/search',
     { q: query.trim() },
   );
   if (!response.success || !response.data) {
     throw new Error(response.error || 'Failed to search Selection movies');
   }
-  return response.data.movies;
+  return { movies: response.data.movies, ...(response.data.overQuota && { overQuota: true }) };
 }
 
 export async function getMovieById(id: number): Promise<MovieWithShowtimes> {

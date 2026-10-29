@@ -9,6 +9,7 @@ import type { MemberAdminView } from '../../api/members';
 import { AuthContext } from '../../contexts/AuthContext';
 import MemberStatusBadge from '../../components/admin/MemberStatusBadge';
 import MemberDetailModal from '../../components/admin/MemberDetailModal';
+import MemberSelectionCount from '../../components/admin/MemberSelectionCount';
 import SuspendMemberDialog from '../../components/admin/SuspendMemberDialog';
 import DeleteMemberDialog from '../../components/admin/DeleteMemberDialog';
 import LinkButton from '../../components/ui/LinkButton';
@@ -208,7 +209,9 @@ const MembersPage: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{member.selection_count}</div>
+                    <div className="text-sm text-gray-500">
+                      <MemberSelectionCount member={member} />
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{member.submission_count}</div>

@@ -199,7 +199,7 @@ describe('SubmissionResolutionService', () => {
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'succeeded');
       expect(applySelectionAdd).toHaveBeenCalledWith(tx, 7, 'C0013');
       expect(publishMemberNotice).toHaveBeenCalledWith(
-        expect.objectContaining({ outcome: 'succeeded_selection_full', theaterName: 'UGC Opéra' }),
+        expect.objectContaining({ outcome: 'succeeded_selection_full', theaterName: 'UGC Opéra', selectionRefusal: blocked }),
       );
       },
     );

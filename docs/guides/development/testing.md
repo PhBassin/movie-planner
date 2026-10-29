@@ -247,6 +247,10 @@ npx playwright test --headed --debug
   (the overlay sets `ENABLE_TEST_MAILBOX=true`; the route additionally mounts
   only while the in-memory transport is active, so it can never expose a
   real SMTP deployment).
+- The E2E overlay also sets `BILLING_PROVIDER=fake` (ADR 0011): every fresh
+  E2E Member is on the free offer, so a Member holds at most **3 active
+  theaters**. Specs that select theaters must stay within that quota (or
+  expect the 409 `quota_reached` refusal).
 
 ### Test Locations
 
