@@ -63,6 +63,13 @@ INSERT INTO permissions (name, description, category) VALUES
   ('users:update',               'Update users',                            'users'),
   ('users:delete',               'Delete users',                            'users'),
   ('users:read',                 'View user details',                       'users'),
+  -- Member management (issue #65): Admin-only Staff surface over the Member
+  -- base. NOT granted to the operator role below — Members are manageable by
+  -- Admins only (see CONTEXT.md → Member / Admin).
+  ('members:list',               'List members',                            'members'),
+  ('members:read',               'View member details',                     'members'),
+  ('members:update',             'Suspend and reinstate members',           'members'),
+  ('members:delete',             'Delete members',                          'members'),
   ('scraper:trigger',            'Trigger a global scrape',                 'scraper'),
   ('scraper:trigger_single',     'Trigger a scrape for one theater',        'scraper'),
   ('scraper:schedules:list',     'View scrape schedules',                   'scraper'),
@@ -281,6 +288,7 @@ CREATE INDEX idx_permission_category_labels_key ON permission_category_labels(ca
 
 INSERT INTO permission_category_labels (category_key, label_en, label_fr) VALUES
   ('users',    'Users',     'Utilisateurs'),
+  ('members',  'Members',   'Membres'),
   ('roles',    'Roles',     'Rôles'),
   ('scraper',  'Scraping',  'Scraping'),
   ('schedules','Schedules', 'Planification'),
@@ -308,13 +316,30 @@ CREATE TABLE theaters (
 );
 
 -- Member Selection: references shared active Theaters, never a data copy.
+-- `active` = the choice feeds the Homepage; false = a remembered choice
+-- (ADR 0011 D2/D3).
 CREATE TABLE member_selections (
   theater_id TEXT NOT NULL REFERENCES theaters(id) ON DELETE CASCADE,
   member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
   PRIMARY KEY (member_id, theater_id)
 );
 
 CREATE INDEX idx_member_selections_theater_id ON member_selections(theater_id);
+
+-- Subscription (ADR 0011 D1): only what the Entitlement derivation reads — a
+-- Member is premium while a non-terminal row's `paid_through` is in the
+-- future. At most one non-terminal Subscription per Member (D10).
+CREATE TABLE subscriptions (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('active', 'past_due', 'ended')),
+  paid_through TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_subscriptions_open_per_member
+  ON subscriptions(member_id) WHERE status <> 'ended';
 
 CREATE TABLE movies (
   id INTEGER PRIMARY KEY,
@@ -431,7 +456,10 @@ CREATE TABLE scrape_reports (
   errors JSONB,
   progress_log JSONB,
   schedule_id INTEGER REFERENCES scrape_schedules(id),
-  parent_report_id INTEGER REFERENCES scrape_reports(id)
+  parent_report_id INTEGER REFERENCES scrape_reports(id),
+  -- When a worker claimed the job (NULL while queued); stale-pending expiry
+  -- (ADR 0010) measures a submission scrape's age from it.
+  claimed_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_scrape_reports_started_at ON scrape_reports(started_at DESC);

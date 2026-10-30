@@ -1,5 +1,8 @@
-import apiClient from './core.js';
+import apiClient, { type RequestOptions } from './core.js';
 import type { ApiResponse } from '../types/index.js';
+
+/** These routes are called without a session: a 401 is the answer, not a stale session. */
+export const NO_SESSION: RequestOptions = { skipAuthRefresh: true };
 
 /** The public shape returned by `POST /auth/signup` for a new Member. */
 export interface MemberSignupResponse {
@@ -20,6 +23,7 @@ export async function signup(email: string, password: string): Promise<MemberSig
   const response = await apiClient.post<ApiResponse<{ user: MemberSignupResponse }>>(
     '/auth/signup',
     { email, password },
+    NO_SESSION,
   );
 
   if (!response.data) {
@@ -35,7 +39,7 @@ export async function signup(email: string, password: string): Promise<MemberSig
  * server's sanitized message when the token is unknown or expired.
  */
 export async function verifyEmail(token: string): Promise<void> {
-  await apiClient.post<ApiResponse<{ message: string }>>('/auth/verify-email', { token });
+  await apiClient.post<ApiResponse<{ message: string }>>('/auth/verify-email', { token }, NO_SESSION);
 }
 
 /**
@@ -44,7 +48,7 @@ export async function verifyEmail(token: string): Promise<void> {
  * Member, so this never rejects for an unknown address.
  */
 export async function resendVerification(email: string): Promise<void> {
-  await apiClient.post<ApiResponse<{ message: string }>>('/auth/resend-verification', { email });
+  await apiClient.post<ApiResponse<{ message: string }>>('/auth/resend-verification', { email }, NO_SESSION);
 }
 
 /**
@@ -52,7 +56,7 @@ export async function resendVerification(email: string): Promise<void> {
  * same successful response for known and unknown addresses.
  */
 export async function requestPasswordReset(email: string): Promise<void> {
-  await apiClient.post<ApiResponse<{ message: string }>>('/auth/password-reset/request', { email });
+  await apiClient.post<ApiResponse<{ message: string }>>('/auth/password-reset/request', { email }, NO_SESSION);
 }
 
 /** Confirm a password reset with the single-use token from the email link. */
@@ -60,5 +64,5 @@ export async function confirmPasswordReset(token: string, newPassword: string): 
   await apiClient.post<ApiResponse<{ message: string }>>('/auth/password-reset/confirm', {
     token,
     newPassword,
-  });
+  }, NO_SESSION);
 }

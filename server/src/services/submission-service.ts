@@ -1,15 +1,21 @@
 import type { DB } from '../db/index.js';
 import {
   countNewSubmissionsSince,
+  countSubmissionAttempts,
   getMemberForSubmission,
   insertSubmission,
+  listMemberSubmissionsByTheater,
   lockMemberForSubmission,
+  lockTheaterForSubmission,
+  type MemberSubmissionRow,
   type SubmissionMemberRow,
+  type SubmissionStatus,
   type TheaterSubmissionRow,
 } from '../db/submission-queries.js';
 import { getTheaterById } from '../db/theater-queries.js';
-import { addTheaterWithScrapeJob } from './theater-service.js';
+import { addTheaterWithScrapeJob, enqueueAddTheaterScrape } from './theater-service.js';
 import { SelectionService } from './selection-service.js';
+import { rememberedChoicesCountAsActive } from '../billing/entitlement.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError, isUniqueViolation } from '../utils/errors.js';
 import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 import { cleanTheaterUrl, extractTheaterIdFromUrl, isValidAllocineUrl } from '../utils/url.js';
@@ -25,6 +31,12 @@ import { logger } from '../utils/logger.js';
 // ---------------------------------------------------------------------------
 
 const THEATER_URL_MAX_LENGTH = 2048;
+
+/**
+ * Sanitized Member-facing failure copy, shared by the resolver's notice and
+ * the "Mes soumissions" view — never the scrape error type/status.
+ */
+export const FAILED_NOTICE_REASON = 'Source injoignable';
 
 /** Per-Member new-cinema submission throttle (ADR 0003), env-tunable. */
 const DEFAULT_SUBMISSION_THROTTLE_MAX = 3;
@@ -68,13 +80,84 @@ function assertMemberEligible(member: SubmissionMemberRow): void {
   }
 }
 
+/** A Theater row is already being introduced and cannot take a new attempt. */
+function inProgressConflict(): AppError {
+  return new AppError('This cinema is already being added to the catalog', 409);
+}
+
+/**
+ * Retry rule (ADR 0010): a `provisioning` Theater takes a new attempt only if
+ * it has at least one attempt (a Staff-introduced row has none) and none is
+ * still pending.
+ */
+function isRetryable(attempts: { total: number; pending: number }): boolean {
+  return attempts.total > 0 && attempts.pending === 0;
+}
+
 /** The synchronous outcome of `submit`: a dedup Selection add or a queued submission. */
 export type SubmitResult =
   | { outcome: 'selection_added'; theater: Theater }
   | { outcome: 'submitted'; submission: TheaterSubmissionRow };
 
+/**
+ * One "Mes soumissions" item (issue #120): the latest attempt for a Theater.
+ * A `provisioning` Theater's name is only its id placeholder, so `name`/`city`
+ * are exposed for `active` Theaters alone, and so is `in_selection`: a
+ * `failed` attempt whose Theater another Member's retry later activated can
+ * still be added. `reason` (the sanitized notice copy, never scrape error
+ * details) is set for `failed` items only.
+ */
+export interface MemberSubmissionView {
+  id: number;
+  url: string;
+  status: SubmissionStatus;
+  created_at: string;
+  resolved_at: string | null;
+  attempts: number;
+  theater: { id: string; status: 'provisioning' | 'active'; name?: string; city?: string | null };
+  in_selection?: boolean;
+  /** Set (true) only for an active Theater stored as a remembered choice: re-adding it reactivates it. */
+  remembered?: true;
+  reason?: string;
+}
+
+export interface MemberSubmissionPage {
+  items: MemberSubmissionView[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export function toMemberSubmissionView(row: MemberSubmissionRow): MemberSubmissionView {
+  const active = row.theater_status === 'active';
+  return {
+    id: row.id,
+    url: row.url,
+    status: row.status,
+    created_at: row.created_at,
+    resolved_at: row.resolved_at,
+    attempts: row.attempts,
+    theater: {
+      id: row.theater_id,
+      status: row.theater_status,
+      ...(active ? { name: row.theater_name, city: row.theater_city } : {}),
+    },
+    ...(active ? { in_selection: row.in_selection } : {}),
+    ...(active && row.remembered ? { remembered: true as const } : {}),
+    ...(row.status === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
+  };
+}
+
 export class SubmissionService {
   constructor(private readonly db: DB) {}
+
+  /** The Member's "Mes soumissions" page: one item per Theater, newest attempt first. */
+  async listForMember(memberId: number, page: { limit: number; offset: number }): Promise<MemberSubmissionPage> {
+    const { rows, total } = await listMemberSubmissionsByTheater(this.db, memberId, page, {
+      rememberedCountsAsActive: rememberedChoicesCountAsActive(),
+    });
+    return { items: rows.map(toMemberSubmissionView), total, ...page };
+  }
 
   async submit(memberId: number, url: string): Promise<SubmitResult> {
     validateSubmissionUrl(url);
@@ -99,16 +182,13 @@ export class SubmissionService {
     assertMemberEligible(gate);
 
     // Dedup fast path (read-only): a URL matching an active Theater degrades to
-    // a Selection add — no new row, no scrape. Delegating to SelectionService
-    // keeps the cap check (409 when full) and idempotency in one place, and
-    // avoids holding the Member lock while the Selection transaction runs.
+    // a Selection add — no new row, no scrape.
     const existing = await getTheaterById(this.db, theaterId);
     if (existing?.status === 'active') {
-      const theater = await new SelectionService(this.db).add(memberId, theaterId);
-      return { outcome: 'selection_added', theater };
+      return this.addToSelection(memberId, theaterId);
     }
 
-    return this.db.transaction(async (transaction) => {
+    const result = await this.db.transaction(async (transaction): Promise<SubmitResult | 'theater_active'> => {
       const tx = transaction;
 
       // Authoritative re-check under the Member lock: closes the race between
@@ -123,36 +203,48 @@ export class SubmissionService {
         throw new ForbiddenError('You must verify your email before submitting a cinema');
       }
 
-      // A provisioning Theater already exists for this id (someone is already
-      // introducing it, or a prior attempt is still pending): never duplicate
-      // the row or the scrape.
-      const provisioning = await getTheaterById(tx, theaterId);
-      if (provisioning) {
-        throw new AppError('This cinema is already being added to the catalog', 409);
+      // A Theater row already exists for this id. A Theater that just went
+      // active (raced the fast path) degrades to the dedup Selection add once
+      // this transaction ends. A `provisioning` Theater gets a new attempt
+      // against the same row only under the retry rule (ADR 0010); a pending
+      // attempt or a Staff-introduced row is a conflict — never a duplicate
+      // row or scrape. The row lock serializes concurrent retries of the same
+      // URL across Members.
+      const existingRow = await lockTheaterForSubmission(tx, theaterId);
+      if (existingRow?.status === 'active') {
+        return 'theater_active';
+      }
+      if (existingRow && !isRetryable(await countSubmissionAttempts(tx, theaterId))) {
+        throw inProgressConflict();
       }
 
-      // Throttle: only genuinely-new cinemas count — dedup never creates a row.
+      // Throttle: only genuinely-new cinemas and retries count — dedup never
+      // creates a row.
       const max = submissionThrottleMax();
       const windowMs = submissionThrottleWindowMs();
       const recent = await countNewSubmissionsSince(tx, memberId, new Date(Date.now() - windowMs));
       if (recent >= max) {
         throw new AppError(
-          `You have reached the limit of ${max} new cinema submissions. Please wait before submitting another cinema.`,
+          `You have reached the limit of ${max} cinema submissions (retries included). Please wait before submitting another cinema.`,
           429,
         );
       }
 
-      // Immediate scrape: provisioning Theater + add_theater job + pending row,
-      // all atomic so the catalog write, report, queue insert, and submission
-      // can never be observed half-done.
+      // Immediate scrape: provisioning Theater (reused on retry) + add_theater
+      // job + pending row, all atomic so the catalog write, report, queue
+      // insert, and submission can never be observed half-done.
       let reportId: number;
       try {
-        ({ reportId } = await addTheaterWithScrapeJob(tx, { id: theaterId, name: theaterId, url: cleanedUrl }));
+        // A retry scrapes the row's stored URL, so a Staff correction of a
+        // failed Theater's URL is honoured.
+        reportId = existingRow
+          ? await enqueueAddTheaterScrape(tx, existingRow.url)
+          : (await addTheaterWithScrapeJob(tx, { id: theaterId, name: theaterId, url: cleanedUrl })).reportId;
       } catch (error) {
         // A concurrent submitter raced the fast-path dedup read above: the
         // Theater now exists, so degrade to a conflict rather than duplicating.
         if (isUniqueViolation(error)) {
-          throw new AppError('This cinema is already being added to the catalog', 409);
+          throw inProgressConflict();
         }
         throw error;
       }
@@ -165,9 +257,21 @@ export class SubmissionService {
       });
 
       logger.info(
-        `🎬 member submission queued for ${cleanedUrl} (theater=${theaterId}, reportId=${reportId})`,
+        `🎬 member submission ${existingRow ? 'retry ' : ''}queued for ${cleanedUrl} (theater=${theaterId}, reportId=${reportId})`,
       );
       return { outcome: 'submitted', submission };
     });
+
+    return result === 'theater_active' ? this.addToSelection(memberId, theaterId) : result;
+  }
+
+  /**
+   * Dedup outcome: delegating to SelectionService keeps the cap check (409
+   * when full) and idempotency in one place, and avoids holding the Member
+   * lock while the Selection transaction runs.
+   */
+  private async addToSelection(memberId: number, theaterId: string): Promise<SubmitResult> {
+    const theater = await new SelectionService(this.db).add(memberId, theaterId);
+    return { outcome: 'selection_added', theater };
   }
 }

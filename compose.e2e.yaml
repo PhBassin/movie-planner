@@ -12,6 +12,10 @@ services:
   web:
     environment:
       ENABLE_TEST_MAILBOX: "true"
+      # Freemium Selection quotas (ADR 0011): the fake billing adapter so the
+      # suite exercises the free offer (3 active theaters) end to end. Fresh
+      # e2e Members have no Subscription, so every one of them is free.
+      BILLING_PROVIDER: fake
       # The suite deliberately exercises failed auth paths (invalid logins,
       # incorrect current passwords, invalid/reused reset tokens) which all
       # share the auth failed-attempt bucket; keep it generous so those

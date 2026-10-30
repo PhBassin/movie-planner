@@ -198,6 +198,7 @@ describe('AuthContext', () => {
           <span data-testid="auth">{String(ctx.isAuthenticated)}</span>
           <button onClick={() => ctx.login(adminUser)}>Login</button>
           <button onClick={() => ctx.logout()}>Logout</button>
+          <button onClick={() => ctx.logout({ skipServerLogout: true })}>Local logout</button>
         </div>
       );
     }
@@ -236,6 +237,29 @@ describe('AuthContext', () => {
       });
 
       expect(screen.getByTestId('auth').textContent).toBe('false');
+    });
+
+    it('clears auth synchronously without a server logout when skipServerLogout is set', async () => {
+      localStorage.setItem('user', JSON.stringify(adminUser));
+
+      render(
+        <AuthProvider>
+          <LoginLogout />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth').textContent).toBe('true');
+      });
+      const fetchMock = vi.mocked(globalThis.fetch);
+      fetchMock.mockClear();
+
+      act(() => {
+        screen.getByRole('button', { name: 'Local logout' }).click();
+      });
+
+      expect(screen.getByTestId('auth').textContent).toBe('false');
+      expect(fetchMock).not.toHaveBeenCalledWith('/api/auth/logout', expect.anything());
     });
   });
 });

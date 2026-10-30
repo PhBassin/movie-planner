@@ -1,23 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '../db/index.js';
-import { SubmissionResolutionService } from './submission-resolver.js';
+import { STALE_PENDING_SUBMISSION_TIMEOUT_MS, SubmissionResolutionService } from './submission-resolver.js';
 import {
+  expireStalePendingSubmissionReports,
   getPendingSubmissionByReport,
   getResolvablePendingSubmissions,
   resolveSubmission,
 } from '../db/submission-queries.js';
 import { getScrapeReport } from '../db/report-queries.js';
 import { getTheaterById } from '../db/theater-queries.js';
-import {
-  getSelectionCount,
-  insertSelection,
-  isTheaterSelected,
-  lockMemberForSelection,
-} from '../db/selection-queries.js';
+import { lockMemberForSelection } from '../db/selection-queries.js';
+import { applySelectionAdd } from './selection-service.js';
 import { getBusProducer } from './bus-producer.js';
 import { logger } from '../utils/logger.js';
 
 vi.mock('../db/submission-queries.js', () => ({
+  expireStalePendingSubmissionReports: vi.fn(),
   getPendingSubmissionByReport: vi.fn(),
   getResolvablePendingSubmissions: vi.fn(),
   resolveSubmission: vi.fn(),
@@ -33,9 +31,6 @@ vi.mock('../db/theater-queries.js', () => ({
 
 vi.mock('../db/selection-queries.js', () => ({
   lockMemberForSelection: vi.fn(),
-  isTheaterSelected: vi.fn(),
-  getSelectionCount: vi.fn(),
-  insertSelection: vi.fn(),
 }));
 
 vi.mock('./bus-producer.js', () => ({
@@ -43,7 +38,7 @@ vi.mock('./bus-producer.js', () => ({
 }));
 
 vi.mock('./selection-service.js', () => ({
-  MAX_SELECTION_SIZE: 2,
+  applySelectionAdd: vi.fn(),
 }));
 
 vi.mock('../utils/logger.js', () => ({
@@ -78,9 +73,8 @@ describe('SubmissionResolutionService', () => {
     vi.mocked(getBusProducer).mockReturnValue({ publishMemberNotice } as never);
     vi.mocked(getTheaterById).mockResolvedValue(activeTheater);
     vi.mocked(lockMemberForSelection).mockResolvedValue(member);
-    vi.mocked(isTheaterSelected).mockResolvedValue(false);
-    vi.mocked(getSelectionCount).mockResolvedValue(0);
-    vi.mocked(insertSelection).mockResolvedValue(undefined);
+    vi.mocked(expireStalePendingSubmissionReports).mockResolvedValue([]);
+    vi.mocked(applySelectionAdd).mockResolvedValue('added');
     vi.mocked(resolveSubmission).mockImplementation(async (_db, id, status) => ({
       ...pendingSubmission,
       id,
@@ -118,13 +112,11 @@ describe('SubmissionResolutionService', () => {
       expect(db.transaction).toHaveBeenCalledOnce();
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'succeeded');
       expect(lockMemberForSelection).toHaveBeenCalledWith(tx, 7);
-      expect(isTheaterSelected).toHaveBeenCalledWith(tx, 7, 'C0013');
-      expect(getSelectionCount).toHaveBeenCalledWith(tx, 7);
-      expect(insertSelection).toHaveBeenCalledWith(tx, 7, 'C0013');
+      expect(applySelectionAdd).toHaveBeenCalledWith(tx, 7, 'C0013');
 
       // The durable facts (status, selection) must commit before the ephemeral push.
       const statusOrder = resolveSubmission.mock.invocationCallOrder[0];
-      const insertOrder = insertSelection.mock.invocationCallOrder[0];
+      const insertOrder = applySelectionAdd.mock.invocationCallOrder[0];
       const publishOrder = publishMemberNotice.mock.invocationCallOrder[0];
       expect(statusOrder).toBeLessThan(insertOrder);
       expect(insertOrder).toBeLessThan(publishOrder);
@@ -142,17 +134,18 @@ describe('SubmissionResolutionService', () => {
       expect(notice.reason).toBeUndefined();
     });
 
-    it('skips the idempotent re-add when the theater is already selected', async () => {
-      vi.mocked(getPendingSubmissionByReport).mockResolvedValue(pendingSubmission);
-      vi.mocked(getScrapeReport).mockResolvedValue({ id: 42, status: 'success', trigger_type: 'manual', started_at: '' });
-      vi.mocked(isTheaterSelected).mockResolvedValue(true);
+    it.each(['already_active', 'activated'] as const)(
+      'resolves as succeeded when the shared policy reports %s',
+      async (outcome) => {
+        vi.mocked(getPendingSubmissionByReport).mockResolvedValue(pendingSubmission);
+        vi.mocked(getScrapeReport).mockResolvedValue({ id: 42, status: 'success', trigger_type: 'manual', started_at: '' });
+        vi.mocked(applySelectionAdd).mockResolvedValue(outcome);
 
-      const result = await service.resolveReport(42);
+        const result = await service.resolveReport(42);
 
-      expect(result?.outcome).toBe('succeeded');
-      expect(getSelectionCount).not.toHaveBeenCalled();
-      expect(insertSelection).not.toHaveBeenCalled();
-    });
+        expect(result?.outcome).toBe('succeeded');
+      },
+    );
 
     it('on failure: writes failed, never touches the Selection, notice carries the sanitized reason only', async () => {
       vi.mocked(getPendingSubmissionByReport).mockResolvedValue(pendingSubmission);
@@ -169,7 +162,7 @@ describe('SubmissionResolutionService', () => {
       expect(result?.outcome).toBe('failed');
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'failed');
       expect(lockMemberForSelection).not.toHaveBeenCalled();
-      expect(insertSelection).not.toHaveBeenCalled();
+      expect(applySelectionAdd).not.toHaveBeenCalled();
 
       const notice = publishMemberNotice.mock.calls[0][0] as Record<string, unknown>;
       expect(notice.outcome).toBe('failed');
@@ -189,24 +182,27 @@ describe('SubmissionResolutionService', () => {
 
       expect(result?.outcome).toBe('failed');
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'failed');
-      expect(insertSelection).not.toHaveBeenCalled();
+      expect(applySelectionAdd).not.toHaveBeenCalled();
       expect(logger.error).toHaveBeenCalled();
     });
 
-    it('a full Selection yields succeeded_selection_full: no auto-add, row still succeeded', async () => {
+    it.each(['quota_reached', 'choices_full'] as const)(
+      'a quota-blocked auto-add (%s) yields succeeded_selection_full, row still succeeded',
+      async (blocked) => {
       vi.mocked(getPendingSubmissionByReport).mockResolvedValue(pendingSubmission);
       vi.mocked(getScrapeReport).mockResolvedValue({ id: 42, status: 'success', trigger_type: 'manual', started_at: '' });
-      vi.mocked(getSelectionCount).mockResolvedValue(2);
+      vi.mocked(applySelectionAdd).mockResolvedValue(blocked);
 
       const result = await service.resolveReport(42);
 
       expect(result?.outcome).toBe('succeeded_selection_full');
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'succeeded');
-      expect(insertSelection).not.toHaveBeenCalled();
+      expect(applySelectionAdd).toHaveBeenCalledWith(tx, 7, 'C0013');
       expect(publishMemberNotice).toHaveBeenCalledWith(
-        expect.objectContaining({ outcome: 'succeeded_selection_full', theaterName: 'UGC Opéra' }),
+        expect.objectContaining({ outcome: 'succeeded_selection_full', theaterName: 'UGC Opéra', selectionRefusal: blocked }),
       );
-    });
+      },
+    );
   });
 
   describe('idempotence', () => {
@@ -218,12 +214,61 @@ describe('SubmissionResolutionService', () => {
       await expect(service.resolveReport(42)).resolves.toBeNull();
 
       expect(lockMemberForSelection).not.toHaveBeenCalled();
-      expect(insertSelection).not.toHaveBeenCalled();
+      expect(applySelectionAdd).not.toHaveBeenCalled();
       expect(publishMemberNotice).not.toHaveBeenCalled();
     });
   });
 
   describe('reconcilePendingSubmissions', () => {
+    it('expires stale pending submissions before resolving, so they fail in the same run (ADR 0010)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T12:00:00Z'));
+      try {
+        vi.mocked(expireStalePendingSubmissionReports).mockResolvedValue([42]);
+        vi.mocked(getResolvablePendingSubmissions).mockResolvedValue([
+          { ...pendingSubmission, report_status: 'failed' as const },
+        ]);
+        vi.mocked(resolveSubmission).mockResolvedValue({ ...pendingSubmission, status: 'failed' });
+
+        await expect(service.reconcilePendingSubmissions()).resolves.toBe(1);
+
+        expect(expireStalePendingSubmissionReports).toHaveBeenCalledWith(
+          db,
+          new Date(Date.parse('2026-01-01T12:00:00Z') - STALE_PENDING_SUBMISSION_TIMEOUT_MS),
+        );
+        expect(vi.mocked(expireStalePendingSubmissionReports).mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(getResolvablePendingSubmissions).mock.invocationCallOrder[0],
+        );
+        expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'failed');
+        expect(applySelectionAdd).not.toHaveBeenCalled();
+        expect(publishMemberNotice).toHaveBeenCalledWith(
+          expect.objectContaining({ submissionId: 9, outcome: 'failed', reason: 'Source injoignable' }),
+        );
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Expired 1 stale'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('still resolves terminal submissions when the stale-pending expiry fails', async () => {
+      vi.mocked(expireStalePendingSubmissionReports).mockRejectedValue(new Error('deadlock detected'));
+      vi.mocked(getResolvablePendingSubmissions).mockResolvedValue([
+        { ...pendingSubmission, report_status: 'failed' as const },
+      ]);
+      vi.mocked(resolveSubmission).mockResolvedValue({ ...pendingSubmission, status: 'failed' });
+
+      await expect(service.reconcilePendingSubmissions()).resolves.toBe(1);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        '[submission-resolver] Stale-pending expiry failed',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
+    it('uses a 30-minute stale-pending timeout', () => {
+      expect(STALE_PENDING_SUBMISSION_TIMEOUT_MS).toBe(30 * 60 * 1000);
+    });
+
     it('runs the same routine for pending submissions with a terminal report', async () => {
       vi.mocked(getResolvablePendingSubmissions).mockResolvedValue([
         { ...pendingSubmission, id: 9, report_status: 'success' as const },
@@ -241,7 +286,7 @@ describe('SubmissionResolutionService', () => {
 
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 9, 'succeeded');
       expect(resolveSubmission).toHaveBeenCalledWith(tx, 10, 'failed');
-      expect(insertSelection).toHaveBeenCalledTimes(1);
+      expect(applySelectionAdd).toHaveBeenCalledTimes(1);
       expect(publishMemberNotice).toHaveBeenCalledTimes(2);
       expect(publishMemberNotice).toHaveBeenNthCalledWith(
         1,

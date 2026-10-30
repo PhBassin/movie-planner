@@ -1,5 +1,7 @@
 import { type DB, type DBQueryExecutor } from './index.js';
 import { type Appearance, type MemberStatus } from '../types/user.js';
+import { rememberedChoicesCountAsActive } from '../billing/entitlement.js';
+import { effectiveActiveSql, type SelectionChoiceView } from './selection-queries.js';
 
 /**
  * Member queries — the Member specialization of the shared User identity
@@ -32,7 +34,6 @@ export interface MemberProfileRow {
   status: MemberStatus;
   email_verified_at: string | null;
   appearance: Appearance;
-  selection_count: number;
   created_at: string;
 }
 
@@ -141,14 +142,13 @@ export async function updateMemberAppearance(
  * `member_preferences` and defaults to 'light' when no row exists yet.
  */
 export async function getMemberProfile(
-  db: DB,
+  db: DBQueryExecutor,
   userId: number
 ): Promise<MemberProfileRow | undefined> {
   const result = await db.query<MemberProfileRow>(
     `SELECT u.id, u.email, u.username, r.name AS role_name,
             u.status, u.email_verified_at,
             COALESCE(mp.appearance, 'light') AS appearance,
-            (SELECT COUNT(*)::int FROM member_selections ms WHERE ms.member_id = u.id) AS selection_count,
             u.created_at
      FROM users u
      JOIN roles r ON r.id = u.role_id
@@ -157,4 +157,130 @@ export async function getMemberProfile(
     [userId]
   );
   return result.rows[0];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Member management (issue #65) — the Staff surface over the Member base.
+// See CONTEXT.md → Member (lifecycle) and Admin (peer Staff action).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The admin-facing Member view: identity + lifecycle + the Member-owned data
+ * counts an Admin needs to oversee the base. Excludes credentials.
+ */
+export interface MemberAdminRow {
+  id: number;
+  username: string;
+  email: string;
+  role_name: string;
+  status: MemberStatus;
+  email_verified_at: string | null;
+  appearance: Appearance;
+  /** Every stored Selection choice, active and remembered together. */
+  selection_count: number;
+  /**
+   * The remembered part of `selection_count` (ADR 0011 D2), by the effective
+   * active state — always 0 while billing is disabled (D6).
+   */
+  remembered_selection_count: number;
+  submission_count: number;
+  created_at: string;
+}
+
+/** `viewParam` is the placeholder bound to `SelectionChoiceView.rememberedCountsAsActive`. */
+function memberAdminSelect(viewParam: string): string {
+  return `
+  SELECT u.id, u.username, u.email, r.name AS role_name,
+         u.status, u.email_verified_at,
+         COALESCE(mp.appearance, 'light') AS appearance,
+         (SELECT COUNT(*)::int FROM member_selections ms WHERE ms.member_id = u.id) AS selection_count,
+         (SELECT COUNT(*)::int FROM member_selections ms
+          WHERE ms.member_id = u.id AND NOT ${effectiveActiveSql(viewParam)}) AS remembered_selection_count,
+         (SELECT COUNT(*)::int FROM theater_submissions ts WHERE ts.member_id = u.id) AS submission_count,
+         u.created_at
+  FROM users u
+  JOIN roles r ON r.id = u.role_id
+  LEFT JOIN member_preferences mp ON mp.member_id = u.id
+`;
+}
+
+function currentChoiceView(): SelectionChoiceView {
+  return { rememberedCountsAsActive: rememberedChoicesCountAsActive() };
+}
+
+/**
+ * List Members (newest first) with their lifecycle state and Member-owned
+ * data counts. Staff rows are excluded: this is the Member-base view only.
+ */
+export async function listMembers(
+  db: DB,
+  options?: { limit?: number; offset?: number },
+  view: SelectionChoiceView = currentChoiceView(),
+): Promise<MemberAdminRow[]> {
+  const limit = options?.limit ?? 100;
+  const offset = options?.offset ?? 0;
+  const result = await db.query<MemberAdminRow>(
+    `${memberAdminSelect('$3')}
+     WHERE r.name = 'member'
+     ORDER BY u.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset, view.rememberedCountsAsActive],
+  );
+  return result.rows;
+}
+
+/**
+ * Load one Member for the admin detail view. Returns undefined for missing
+ * ids and for Staff ids alike, so the Member surface cannot be used to probe
+ * Staff accounts.
+ */
+export async function getMemberAdminDetail(
+  db: DBQueryExecutor,
+  memberId: number,
+  view: SelectionChoiceView = currentChoiceView(),
+): Promise<MemberAdminRow | undefined> {
+  const result = await db.query<MemberAdminRow>(
+    `${memberAdminSelect('$2')}
+     WHERE u.id = $1 AND r.name = 'member'`,
+    [memberId, view.rememberedCountsAsActive],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Write a Member lifecycle transition (`users.status`). Accepts a
+ * transaction client so suspend can flip the status and revoke Sessions
+ * atomically. Role-guarded: only `member` rows can be touched, and the
+ * returned flag tells whether a row matched.
+ */
+export async function setMemberStatus(
+  db: DBQueryExecutor,
+  memberId: number,
+  status: MemberStatus,
+): Promise<boolean> {
+  const result = await db.query(
+    `UPDATE users SET status = $2
+     WHERE id = $1 AND role_id = (SELECT id FROM roles WHERE name = 'member')
+     RETURNING id`,
+    [memberId, status],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
+/**
+ * Delete a Member row (the Admin-mediated erasure path). Role-guarded in the
+ * statement itself, so a concurrent promotion to Staff can never turn a
+ * Member deletion into a Staff deletion. Member-owned data cascades at the
+ * database level. Returns whether a Member row was removed.
+ */
+export async function deleteMemberRow(
+  db: DBQueryExecutor,
+  memberId: number,
+): Promise<boolean> {
+  const result = await db.query(
+    `DELETE FROM users
+     WHERE id = $1 AND role_id = (SELECT id FROM roles WHERE name = 'member')`,
+    [memberId],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
 }

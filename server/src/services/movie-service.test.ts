@@ -2,12 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MovieService } from './movie-service.js';
 import * as movieQueries from '../db/movie-queries.js';
 import * as showtimeQueries from '../db/showtime-queries.js';
-import * as selectionQueries from '../db/selection-queries.js';
 import { type DB } from '../db/index.js';
 
 vi.mock('../db/movie-queries.js');
 vi.mock('../db/showtime-queries.js');
-vi.mock('../db/selection-queries.js');
 vi.mock('../utils/showtimes.js', () => ({
   groupShowtimesByTheater: vi.fn().mockImplementation((s) => s),
 }));
@@ -76,11 +74,23 @@ describe('MovieService', () => {
       expect(movieQueries.searchMovies).toHaveBeenCalledWith(mockDb, 'test', 5);
     });
   });
+  describe('searchSelection', () => {
+    it('returns nothing without querying when no Theater is projected', async () => {
+      await expect(movieService.searchSelection([], 'film')).resolves.toEqual([]);
+      expect(movieQueries.searchMoviesForTheaters).not.toHaveBeenCalled();
+    });
+
+    it('scopes the search to the projected Theaters', async () => {
+      vi.mocked(movieQueries.searchMoviesForTheaters).mockResolvedValue([{ id: 1 }] as any);
+
+      await expect(movieService.searchSelection(['C0001'], 'film', 5)).resolves.toEqual([{ id: 1 }]);
+      expect(movieQueries.searchMoviesForTheaters).toHaveBeenCalledWith(mockDb, 'film', ['C0001'], 5);
+    });
+  });
+
   describe('getSelectionMoviesForWeek', () => {
     it('returns an empty list without querying movies when the Selection is empty', async () => {
-      vi.mocked(selectionQueries.getSelection).mockResolvedValue([]);
-
-      const result = await movieService.getSelectionMoviesForWeek(7, '2026-03-11');
+      const result = await movieService.getSelectionMoviesForWeek([], '2026-03-11');
 
       expect(result).toEqual([]);
       expect(movieQueries.getSelectionMoviesForTheaters).not.toHaveBeenCalled();
@@ -88,10 +98,6 @@ describe('MovieService', () => {
     });
 
     it('merges Selection-scoped movies and showtimes, overlaying newness per theater and per movie', async () => {
-      vi.mocked(selectionQueries.getSelection).mockResolvedValue([
-        { id: 'C0001' } as any,
-        { id: 'C0002' } as any,
-      ]);
       vi.mocked(movieQueries.getSelectionMoviesForTheaters).mockResolvedValue([
         {
           id: 1,
@@ -113,7 +119,7 @@ describe('MovieService', () => {
         { movie_id: 2, theater_id: 'C0002', id: 's3', theater: { id: 'C0002' } },
       ] as any);
 
-      const result = await movieService.getSelectionMoviesForWeek(7, '2026-03-11');
+      const result = await movieService.getSelectionMoviesForWeek(['C0001', 'C0002'], '2026-03-11');
 
       expect(movieQueries.getSelectionMoviesForTheaters).toHaveBeenCalledWith(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001', 'C0002'] });
       expect(showtimeQueries.getShowtimesForTheaters).toHaveBeenCalledWith(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001', 'C0002'] });
@@ -125,13 +131,12 @@ describe('MovieService', () => {
     });
 
     it('keeps a theater programming the movie even when no showtime matches it', async () => {
-      vi.mocked(selectionQueries.getSelection).mockResolvedValue([{ id: 'C0001' }] as any);
       vi.mocked(movieQueries.getSelectionMoviesForTheaters).mockResolvedValue([
         { id: 1, title: 'Film A', theaters: [{ id: 'C0001', isNewThisWeek: true }] },
       ] as any);
       vi.mocked(showtimeQueries.getShowtimesForTheaters).mockResolvedValue([] as any);
 
-      const result = await movieService.getSelectionMoviesForWeek(7, '2026-03-11');
+      const result = await movieService.getSelectionMoviesForWeek(['C0001'], '2026-03-11');
 
       expect(result[0].theaters).toHaveLength(1);
       expect(result[0].theaters[0].showtimes).toEqual([]);
@@ -141,9 +146,7 @@ describe('MovieService', () => {
 
   describe('getSelectionMoviesForDate', () => {
     it('returns an empty list without querying when the Selection is empty', async () => {
-      vi.mocked(selectionQueries.getSelection).mockResolvedValue([]);
-
-      const result = await movieService.getSelectionMoviesForDate(7, '2026-03-12', '2026-03-11');
+      const result = await movieService.getSelectionMoviesForDate([], '2026-03-12', '2026-03-11');
 
       expect(result).toEqual([]);
       expect(movieQueries.getSelectionMoviesForTheaters).not.toHaveBeenCalled();
@@ -151,7 +154,6 @@ describe('MovieService', () => {
     });
 
     it('scopes the date view to the Selection and keeps newness data', async () => {
-      vi.mocked(selectionQueries.getSelection).mockResolvedValue([{ id: 'C0001' }] as any);
       vi.mocked(movieQueries.getSelectionMoviesForTheaters).mockResolvedValue([
         { id: 1, title: 'Film A', theaters: [{ id: 'C0001', isNewThisWeek: true }] },
       ] as any);
@@ -159,7 +161,7 @@ describe('MovieService', () => {
         { movie_id: 1, theater_id: 'C0001', id: 's1', theater: { id: 'C0001' } },
       ] as any);
 
-      const result = await movieService.getSelectionMoviesForDate(7, '2026-03-12', '2026-03-11');
+      const result = await movieService.getSelectionMoviesForDate(['C0001'], '2026-03-12', '2026-03-11');
 
       expect(movieQueries.getSelectionMoviesForTheaters).toHaveBeenCalledWith(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'], date: '2026-03-12' });
       expect(showtimeQueries.getShowtimesForTheaters).toHaveBeenCalledWith(mockDb, { weekStart: '2026-03-11', theaterIds: ['C0001'], date: '2026-03-12' });

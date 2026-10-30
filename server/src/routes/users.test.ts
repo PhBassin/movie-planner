@@ -146,6 +146,16 @@ describe('User Management Routes', () => {
       expect(userQueries.getAllUsers).toHaveBeenCalledWith(db, { limit: 25, offset: 50 });
     });
 
+    it('should reject an offset beyond the maximum', async () => {
+      const response = await request(app)
+        .get('/api/users?offset=10001')
+        .set('Authorization', 'Bearer valid-admin-token');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Invalid offset parameter');
+      expect(userQueries.getAllUsers).not.toHaveBeenCalled();
+    });
+
     it('should return 500 on database error', async () => {
       vi.mocked(userQueries.getAllUsers).mockRejectedValue(new Error('Database error'));
 

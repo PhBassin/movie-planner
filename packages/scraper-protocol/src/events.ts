@@ -51,10 +51,15 @@ export type ProgressEvent =
  * by `memberId` to the Member's live SSE connections on `/api/me/notifications`.
  *
  * `reason` is set only on `failed` and is sanitized Member-facing copy — never
- * the scrape error type or HTTP status. `theaterId` is the shared catalog's
- * TEXT id (e.g. `C0013`).
+ * the scrape error type or HTTP status. `selectionRefusal` is set only on
+ * `succeeded_selection_full` and names which Selection limit refused the
+ * auto-add (ADR 0011 D2): the active quota of the Member's offer, or the
+ * 50-choice bound. `theaterId` is the shared catalog's TEXT id (e.g. `C0013`).
  */
 export type MemberNoticeOutcome = 'succeeded' | 'succeeded_selection_full' | 'failed';
+
+/** Which Selection limit refused an add (ADR 0011 D2). */
+export type SelectionRefusal = 'quota_reached' | 'choices_full';
 
 export interface MemberNotice {
   type: 'submission_resolved';
@@ -65,4 +70,5 @@ export interface MemberNotice {
   theaterName: string;
   outcome: MemberNoticeOutcome;
   reason?: string;
+  selectionRefusal?: SelectionRefusal;
 }

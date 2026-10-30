@@ -27,6 +27,7 @@ import reportsRouter from './routes/reports.js';
 import authRouter from './routes/auth.js';
 import settingsRouter from './routes/settings.js';
 import usersRouter from './routes/users.js';
+import membersRouter from './routes/members.js';
 import meRouter from './routes/me.js';
 import selectionRouter from './routes/selection.js';
 import submissionsRouter from './routes/submissions.js';
@@ -154,6 +155,7 @@ export function createApp(options: AppOptions = {}) {
   app.use('/api/reports', reportsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/users', usersRouter);
+  app.use('/api/members', membersRouter);
   app.use('/api/me/selection', selectionRouter);
   app.use('/api/me/submissions', submissionsRouter);
   app.use('/api/me/notifications', meNotificationsRouter);

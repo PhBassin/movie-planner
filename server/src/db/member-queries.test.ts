@@ -7,6 +7,9 @@ import {
   getMemberProfile,
   updateMemberAppearance,
   isPendingVerification,
+  deleteMemberRow,
+  getMemberAdminDetail,
+  listMembers,
   type MemberCredentialRow,
 } from './member-queries.js';
 
@@ -166,6 +169,32 @@ describe('Member Queries', () => {
     });
   });
 
+  describe('admin Member view', () => {
+    it('counts remembered choices apart from the stored total, by the effective active state', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await listMembers(mockDb, { limit: 10, offset: 0 }, { rememberedCountsAsActive: false });
+      await getMemberAdminDetail(mockDb, 7, { rememberedCountsAsActive: true });
+
+      const [listSql, listParams] = vi.mocked(mockDb.query).mock.calls[0];
+      expect(listSql).toContain('AND NOT (ms.active OR $3::boolean)) AS remembered_selection_count');
+      expect(listParams).toEqual([10, 0, false]);
+      const [detailSql, detailParams] = vi.mocked(mockDb.query).mock.calls[1];
+      expect(detailSql).toContain('AND NOT (ms.active OR $2::boolean)) AS remembered_selection_count');
+      expect(detailParams).toEqual([7, true]);
+    });
+
+    it('defaults to the current billing mode (disabled: nothing is remembered)', async () => {
+      vi.stubEnv('BILLING_PROVIDER', '');
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await getMemberAdminDetail(mockDb, 7);
+
+      expect(vi.mocked(mockDb.query).mock.calls[0][1]).toEqual([7, true]);
+      vi.unstubAllEnvs();
+    });
+  });
+
   describe('updateMemberAppearance', () => {
     it.each(['light', 'dark'] as const)('upserts the appearance to %s', async (appearance) => {
       vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
@@ -180,6 +209,25 @@ describe('Member Queries', () => {
         expect.stringContaining('ON CONFLICT (member_id) DO UPDATE'),
         expect.any(Array)
       );
+    });
+  });
+
+  describe('deleteMemberRow', () => {
+    it('deletes only a member-role row (role guard inside the statement)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
+
+      await expect(deleteMemberRow(mockDb, 7)).resolves.toBe(true);
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringMatching(/DELETE FROM users[\s\S]*WHERE id = \$1 AND role_id = \(SELECT id FROM roles WHERE name = 'member'\)/),
+        [7],
+      );
+    });
+
+    it('returns false when no Member row matched (missing or Staff id)', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await expect(deleteMemberRow(mockDb, 2)).resolves.toBe(false);
     });
   });
 });

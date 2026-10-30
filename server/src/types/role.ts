@@ -3,6 +3,8 @@
 // Canonical message for endpoints restricted to Member accounts; shared by
 // requireMember middleware and service-layer role guards.
 export const MEMBER_ONLY_ENDPOINT_MESSAGE = 'This endpoint is for member accounts';
+/** Answer for a suspended Member (login, and Member routes with a still-valid access token). */
+export const SUSPENDED_ACCOUNT_MESSAGE = 'Account suspended';
 
 export interface Role {
   id: number;
@@ -36,6 +38,7 @@ export interface PermissionCategoryLabel {
 // All possible permission strings (used for type safety)
 export type PermissionName =
   | 'users:list' | 'users:create' | 'users:update' | 'users:delete' | 'users:read'
+  | 'members:list' | 'members:read' | 'members:update' | 'members:delete'
   | 'scraper:trigger' | 'scraper:trigger_single'
   | 'scraper:schedules:list' | 'scraper:schedules:create' | 'scraper:schedules:update' | 'scraper:schedules:delete'
   | 'theaters:create' | 'theaters:update' | 'theaters:delete' | 'theaters:read'

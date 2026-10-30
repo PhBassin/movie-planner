@@ -1,11 +1,13 @@
 import express, { Response, NextFunction } from 'express';
 import type { ApiResponse } from '../types/api.js';
 import { requireAuth, requireMember, type AuthRequest } from '../middleware/auth.js';
-import { protectedLimiter } from '../middleware/rate-limit.js';
+import { authLimiter, protectedLimiter } from '../middleware/rate-limit.js';
 import { getMemberProfile, updateMemberAppearance } from '../db/member-queries.js';
 import { isAppearance } from '../types/user.js';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
-import { MAX_SELECTION_SIZE } from '../services/selection-service.js';
+import { SelectionService } from '../services/selection-service.js';
+import { MemberAccountService } from '../services/member-account-service.js';
+import { SessionService } from '../services/session-service.js';
 
 /**
  * `/api/me` — the authenticated Member's own profile (email, lifecycle
@@ -25,7 +27,15 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
             throw new ForbiddenError('This endpoint is for member accounts');
         }
 
-        const profile = await getMemberProfile(req.app.get('db'), req.user!.id);
+        const db = req.app.get('db');
+        // The usage is derived on every request from the Subscription (ADR
+        // 0011 D1), never from the token: `selectionCount` counts active
+        // choices against `selectionLimit`, the Entitlement quota. Independent
+        // of the profile read, so both run concurrently.
+        const [profile, usage] = await Promise.all([
+            getMemberProfile(db, req.user!.id),
+            new SelectionService(db).usage(req.user!.id),
+        ]);
         if (!profile) {
             throw new NotFoundError('User not found');
         }
@@ -41,8 +51,12 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
                     status: profile.status,
                     email_verified: profile.email_verified_at !== null,
                     appearance: profile.appearance,
-                    selectionCount: profile.selection_count,
-                    selectionLimit: MAX_SELECTION_SIZE,
+                    offer: usage.offer,
+                    selectionCount: usage.activeCount,
+                    selectionLimit: usage.selectionQuota,
+                    rememberedCount: usage.rememberedCount,
+                    choiceLimit: usage.choiceLimit,
+                    selectionOverQuota: usage.overQuota,
                     created_at: profile.created_at,
                 },
             },
@@ -76,6 +90,43 @@ router.put(
                 data: { id: req.user!.id, appearance },
             };
             res.json(response);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// GET /api/me/export - The Member's own data as one JSON document (RGPD
+// Article 20, ADR 0004). Non-destructive: the Session is the only gate.
+router.get(
+    '/export',
+    protectedLimiter,
+    requireAuth,
+    requireMember,
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+        try {
+            const data = await new MemberAccountService(req.app.get('db')).exportData(req.user!.id);
+            res.set('Cache-Control', 'no-store');
+            res.json({ success: true, data } satisfies ApiResponse);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// POST /api/me/delete - Member self-erasure (RGPD Article 17, ADR 0004):
+// immediate and irreversible, gated by password re-entry. Rides the auth
+// limiter like the other password-checking routes. Suspended Members never
+// reach it (requireMember) — their erasure is Admin-mediated.
+router.post(
+    '/delete',
+    authLimiter,
+    requireAuth,
+    requireMember,
+    async (req: AuthRequest, res: Response, next: NextFunction) => {
+        try {
+            const password = (req.body as { password?: unknown } | undefined)?.password;
+            await new SessionService(req.app.get('db'), res).eraseMemberAccount(req.user!.id, password);
         } catch (error) {
             next(error);
         }

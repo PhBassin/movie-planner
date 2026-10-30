@@ -34,18 +34,20 @@ The Member is the reason movie-planner exists; Staff exist to operate it for the
 
 `unverified` and `suspended` both block submission; only `suspended` also blocks login (an unverified Member may still log in to read and curate their Selection). The suspension check lives in `AuthService.login` and runs only after the password has matched, so the failure ordering cannot be used to enumerate suspended accounts.
 
+**Staff surface (issue #65).** The Admin oversight of the Member base lives at `/api/members` (`server/src/routes/members.ts`, `MemberAdminService`): list, view, **suspend**, **reinstate**, **delete**. Suspension is a single transaction — status flip plus the password-change Session revocation (`revokeAllUserTokens`) — so a suspended Member loses every refresh token at once. Because the access JWT is stateless, `requireMember` (`server/src/middleware/auth.ts`) re-reads the lifecycle row on every Member-scoped request and answers 401 for a suspended or deleted Member, so a still-valid access token stops working immediately (the client's refresh then fails and the session drops). Two transition rules keep the state machine honest: only an **active** Member can be suspended, and only a **suspended** Member can be reinstated (back to `active`). Suspending an `unverified` Member is rejected precisely because reinstatement restores `active` — the verified steady state — and must never bypass email verification; an abusive unverified Member is deleted instead. Deletion is the Admin-mediated erasure path (ADR 0004): cascades remove Member-owned data, never the Theaters they introduced. The surface is gated by the `members:list | read | update | delete` permission category, granted to the **admin** role only — operators keep no reach over Members. The Staff roster (`/api/users`, `UserService`) is Staff-only: its queries (`server/src/db/user-queries.ts`) never see or touch `member` rows, and it refuses to assign the `member` role, so `members:*` is the sole gate on Members.
+
 The Member's own profile is exposed at `GET /api/me` (`server/src/routes/me.ts` — email, lifecycle status, verification state, appearance) and the Appearance is updated at `PUT /api/me/appearance` (same file — invalid values rejected before any write); this is the seam the Selection and Appearance tickets extend.
 
 **What a Member is *not*:**
 - Not **Staff**. A Member cannot trigger a scrape, cannot manage other Users, cannot touch admin Settings. Since a User has exactly one Role, a person who is both a Member and Staff does so across two accounts — never one Member that is also Staff.
-- Not a **Subscriber**. "Subscriber" implies a paid / recurring relationship. movie-planner has no billing model as of this writing; "Member" is deliberately neutral about payment so the term does not lie ahead of the feature.
+- Not a **Subscriber**. "Subscriber" implies a paid / recurring relationship. movie-planner has no billing model as of this writing; "Member" is deliberately neutral about payment so the term does not lie ahead of the feature. The planned freemium offer (ADR 0011) keeps it that way: being premium is an **Entitlement** a Member holds through a **Subscription** (see Billing), not a different kind of User and not a Staff role.
 - Not the **source** of Theaters. A Member selects from — or requests additions to — the shared catalog that Staff curate and scrape. A Member does not own Theater rows; see Selection.
 
 ### Staff
 
 The collective term for the Users who **operate** the platform, as opposed to those who merely use it. Staff = the union of the `admin` and `operator` roles. "Staff" exists in the glossary primarily to draw a clean line against **Member**; it is not itself a single role.
 
-- **Admin** (`admin` role, system) — full access via the hardcoded permission bypass (`is_system_role === true && role_name === 'admin'`, enforced at `middleware/auth.ts:isAdminUser`). The French **"admin général"** is a *role description* for any holder of this role — not a distinct entity, sub-role, or flagged user. There is no singular owner/primary Admin in the model; multiple peer Admins are supported (a backup Admin is recommended), all with identical powers. An Admin owns the scraping pipeline, the catalog curation, the user roster, and every setting — all as peer Staff actions, no power reserved to a singular admin. See ADR 0007. The *first* admin comes into existence through the **Bootstrap admin** (see Database initialization), not via the staff-creation route.
+- **Admin** (`admin` role, system) — full access via the hardcoded permission bypass (`is_system_role === true && role_name === 'admin'`, enforced at `middleware/auth.ts:isAdminUser`). The French **"admin général"** is a *role description* for any holder of this role — not a distinct entity, sub-role, or flagged user. There is no singular owner/primary Admin in the model; multiple peer Admins are supported (a backup Admin is recommended), all with identical powers. An Admin owns the scraping pipeline, the catalog curation, the user roster, and every setting — all as peer Staff actions, no power reserved to a singular admin. The Admin also holds the exclusive Member-management surface (`members:*` permissions — see Member). See ADR 0007. The *first* admin comes into existence through the **Bootstrap admin** (see Database initialization), not via the staff-creation route.
 - **Operator** (`operator` role) — a scoped Staff role: may trigger scrapes and manage Theaters and reports, but not users or settings.
 
 Staff are created by an Admin (no self-registration), authenticate through the same Session mechanism as Members, and hold their permissions via the role-based permission model (the RBAC).
@@ -73,7 +75,18 @@ A Member's personal set of Theaters — the Theaters whose Showtimes that Member
 
 - **Adding an existing Theater to a Selection does not scrape.** The data is already shared; this is a private, side-effect-free mutation of the Member's homepage.
 - **Removing a Theater from a Selection is private.** It drops the Theater from that Member's homepage only; it never deletes the Theater from the catalog.
-- **Selection size is capped at 50 Theaters.** The cap counts only persisted Selection relationships; provisioning Theaters and pending TheaterSubmissions do not count. A new add at the cap is rejected with a conflict, while adding an already-selected Theater remains idempotent.
+- **Selection size is bounded by the Member's Entitlement** (ADR 0011, #97). Each stored choice is either:
+  - an **active choice** — counts toward the quota and feeds the personal Homepage;
+  - a **remembered choice** — kept but excluded from the Homepage (`member_selections.active = false`). It arises only when premium expires or at the freemium rollout, when the Member keeps 3 (the chooser, #100); a later premium reactivates it (#101).
+
+  The quota is the Member's **Entitlement**: 3 active choices free, 50 premium; while billing is disabled (`BILLING_PROVIDER=disabled`, production today) every Member keeps 50 and remembered choices count as active. That **effective active state** has one definition, `rememberedChoicesCountAsActive` (`server/src/billing/entitlement.ts`), passed to every query that reads a choice's flag as a `SelectionChoiceView` (`server/src/db/selection-queries.ts` → `effectiveActiveSql`): the Selection list, the quota counts, the projection, "Mes soumissions" `in_selection` (a remembered choice is not "in the Selection"; it is flagged `remembered` instead, so the page offers its reactivation) and the export. Stored choices are bounded at **50 in total**, active and remembered together. The cap counts persisted Selection rows only; provisioning Theaters and pending TheaterSubmissions do not count.
+
+  **One add policy** (`applySelectionAdd`, `server/src/services/selection-service.ts`) serves the manual add, the activation of a remembered choice, the dedup Selection add and the successful-submission auto-add, always under the Member lock (`lockMemberForSelection`) so concurrent adds cannot exceed the quota read in the same transaction. An already-active choice is idempotent and consumes no slot; a remembered one is activated while the active count is below quota; a new one needs the active count below quota **and** the total below 50, and is always stored active — never as remembered. A rejected add is a 409 whose `details` carry the reason (`quota_reached` | `choices_full`) and fresh usage, so a stale browser count recovers. A successful TheaterSubmission rejected by the policy is not auto-added (`succeeded_selection_full`, whose notice carries the same reason as `selectionRefusal`). Selection removal does not take the Member lock, so an activation whose remembered row vanished meanwhile is held to the new-choice rules instead of being reported as activated.
+- **Over-quota Selection** — a *derived* state, not a stored flag: more active choices than the current quota (after expiry, or at the rollout). Nothing is deactivated automatically and the catalog stays available; every personal projection returns no data (`overQuota: true`) until the Member is back within quota. The "Choisissez vos 3 cinémas" chooser that commits a subset is #100; until then the Member removes choices from the catalog page.
+
+The Member-facing usage (`offer`, active `selectionCount` against `selectionLimit`, `rememberedCount`, `choiceLimit`, `selectionOverQuota`) is derived on every `GET /api/me` (`SelectionService.usage`), never from the JWT. The paid-through state and the counts are read in **one statement**: `getSelectionCounts` (counts only, plus the targeted choice for the add policy) serves the usage and every add; `getSelectionSnapshot` adds the projected Theaters for a personal projection, so the over-quota check and the projected Theaters cannot come from different moments (D3). The admin Member view reports the stored total with its remembered part (`remembered_selection_count`), since the Member sees only the active count.
+
+"Active" here is about the Selection relationship, never the Theater lifecycle (`provisioning | active`).
 
 **What a Selection is *not*:**
 - Not a **copy** of Theater data. The shared catalog is the single source of truth; a Selection only points at rows.
@@ -86,15 +99,26 @@ A Member's act of introducing a Theater that is **not yet in the shared catalog*
 
 Two safeguards bound a TheaterSubmission, both domain-level policies (their thresholds are configuration, not glossary material):
 - **Deduplication.** If the submitted URL matches an existing Theater, no new Theater is created and no scrape fires — the submission degrades to adding that Theater to the submitter's Selection.
-- **Per-Member throttle.** Submissions of *new* Theaters are rate-limited per Member, to prevent abuse (scrape cost, exhaustion of the upstream source → 429 cascades).
+- **Per-Member throttle.** Submissions of *new* Theaters, and retries, are rate-limited per Member, to prevent abuse (scrape cost, exhaustion of the upstream source → 429 cascades).
 
 **Lifecycle.** A TheaterSubmission is asynchronous: it is *submitted* the moment the URL is accepted, then *pending* while its `add_theater` scrape runs, and it ends in exactly one of:
 - **succeeded** — the scrape populated the Theater. **On success, the Theater is automatically added to the submitter's Selection.** The Member who asked for the cinema gets it on their homepage; one gesture, one outcome. The one exception is a **full Selection**: when the submitter is at the Selection cap, the scrape still succeeds and the Theater still enters the catalog, but the auto-add is skipped and the Member is told to free a slot and add it from the catalog (surfaced as the `succeeded_selection_full` notice outcome below) — the cap itself stays a Selection-domain rule.
-- **failed** — the scrape produced no data. **A failed submission never reaches the submitter's Selection**; the failure is surfaced to the Member instead. The Theater row may remain in *provisioning* (see Theater lifecycle), and a later scrape or re-submission can still succeed.
+- **failed** — the scrape produced no data. **A failed submission never reaches the submitter's Selection**; the failure is surfaced to the Member instead. The Theater row remains in *provisioning* (see Theater lifecycle), and a **retry** can still succeed.
+
+**Attempt and retry (ADR 0010).** Each `theater_submissions` row is one **attempt**. Submitting the URL of a `provisioning` Theater is a **retry** when that Theater has at least one attempt and none is still pending: a new attempt (new row, new `add_theater` ScrapeJob) runs against the existing Theater row, and earlier attempts are kept. Any Member may retry, not only the first submitter; the retry counts toward their throttle and lands in *their* Selection on success. A retry scrapes the Theater row's stored URL. While an attempt is pending, or when the `provisioning` row was introduced by Staff (no attempt), the submission is rejected with a conflict; a Theater found `active` under the lock degrades to the dedup Selection add. The decision runs under a lock on the Theater row, so concurrent retries yield exactly one attempt (`lockTheaterForSubmission`, `countSubmissionAttempts` in `server/src/db/submission-queries.ts`).
+
+**Stale-pending expiry (ADR 0010).** An attempt whose scrape a worker **claimed** more than 30 minutes ago and that is still `running` will never go terminal on its own (the worker died mid-job). The reconciliation sweep marks that ScrapeReport `failed`, then resolves the attempt `failed` through the normal routine, making it retryable. The clock is the report's `claimed_at`, stamped by the worker when it starts the job: an attempt still queued is waiting, not stuck, and never expires (`STALE_PENDING_SUBMISSION_TIMEOUT_MS` in `server/src/services/submission-resolver.ts`, `expireStalePendingSubmissionReports`). Only submission-linked reports expire; Staff scrapes do not.
 
 Resolution is a **server-side** act (ADR 0005 sub-decision 7): the scraper stays a domain-agnostic worker, and the server — which joins the submission's `report_id` to the terminal ScrapeReport — writes the terminal status, performs the auto-add (or cap-block), and publishes the **Member notification**, in that order. A missed terminal event heals through **reconciliation** (startup + a slow periodic sweep) running the same routine idempotently. See `server/src/services/submission-resolver.ts` and ADR 0005.
 
 This makes the link to Selection explicit: a *successful* TheaterSubmission terminates in the submitter's Selection; adding an *existing* Theater to a Selection skips the submission entirely.
+
+**"Mes soumissions" (issue #120).** The Member's durable view of their own TheaterSubmissions, at `/submissions` (`client/src/pages/SubmissionsPage.tsx`), fed by `GET /api/me/submissions` (`server/src/routes/submissions.ts`, `listMemberSubmissionsByTheater` in `server/src/db/submission-queries.ts`). It shows **one row per Theater**: that Member's latest attempt for it, plus their attempt count. The page and its `total` are read in one statement; offset pages that overlap after the list shifts are collapsed to one row per Theater client-side. Its rows are:
+- `pending`: how long the attempt has been running.
+- `succeeded`: whether the Theater is **in the Member's Selection**. This is derived at read time from `member_selections`, never persisted, so it reflects later Selection removals. When the Theater is not in the Selection, the row offers to add it.
+- `failed`: the sanitized Member-facing reason (the notice copy, never scrape error details) and a **retry** under the retry rule above. If another Member's retry has since activated the Theater, the row reads like a `succeeded` one instead (in the Selection or not, with the add offer) and offers no retry: the catalog state wins over this Member's last attempt.
+
+A `provisioning` Theater is labelled by its submitted URL, never by its id placeholder name. The view has no delete or hide action: the rows back the throttle and abuse evidence, and only Member erasure removes them. Member notifications only invalidate it; React Query refetch-on-focus covers missed notices, and nothing polls.
 
 **What a TheaterSubmission is *not*:**
 - Not an **admin-gated request**. There is no approval queue and no waiting state imposed by Staff; the scrape fires on submission (subject only to dedup and throttle).
@@ -130,17 +154,19 @@ The request scope shared by the Selection movie and showtime queries is the
 `SelectionScope` (`server/src/db/showtime-queries.ts`): selected theaters,
 one cinema week, an optional single date.
 
+Only **active** choices feed the Homepage, never remembered ones: the route resolves the Theaters through `SelectionService.projection` before any movie query. While the Selection is **over-quota** (ADR 0011 D3) the movie and search projections return `overQuota: true` and no movies, and the Homepage shows an over-quota notice pointing to the catalog; the "Choisissez vos 3 cinémas" chooser that replaces it is planned in #100.
+
 **What a Homepage is not:**
 - Not the **catalog**. The catalog is shared and complete; the Homepage is personal and Selection-scoped. A non-selected Theater never appears on a Member's Homepage.
 - Not a **page for Visitors**. A Visitor has no Homepage; they see the catalog. The Homepage is one of the perks of becoming a Member.
-- Not a **submission status surface**. Pending or failed TheaterSubmissions are not shown on the Homepage; only resolved, active Selection content renders. Submission status lives elsewhere; the Homepage may carry only a transient **Member notification** of a submission's success or failure.
+- Not a **submission status surface**. Pending or failed TheaterSubmissions are not shown on the Homepage; only resolved, active Selection content renders. Submission status lives on **"Mes soumissions"** (see TheaterSubmission); the Homepage may carry only a transient **Member notification** of a submission's success or failure.
 
 ### Member notification
 
-A transient, best-effort push from the server to a Member's open SSE connection, telling them that a **TheaterSubmission** of theirs just resolved. A Member notification is the *ephemeral* counterpart to the durable outcome record: the **TheaterSubmission** row (surfaced on "Mes soumissions") is the source of truth that persists; the notification is the "it just happened" nudge for a Member who happens to be online. It rides the PostgreSQL `member:notices` `LISTEN/NOTIFY` channel (`NOTIFICATION_CHANNELS.memberNotices`), produced by the submission resolver (`server/src/services/submission-resolver.ts`) and routed by `member_id` to the Member's live SSE connections on `/api/me/notifications` (`server/src/routes/me-notifications.ts`). See ADR 0005 for the full model.
+A transient, best-effort push from the server to a Member's open SSE connection, telling them that a **TheaterSubmission** of theirs just resolved. A Member notification is the *ephemeral* counterpart to the durable outcome record: the **TheaterSubmission** row (surfaced on "Mes soumissions", see TheaterSubmission) is the source of truth that persists; the notification is the "it just happened" nudge for a Member who happens to be online. It rides the PostgreSQL `member:notices` `LISTEN/NOTIFY` channel (`NOTIFICATION_CHANNELS.memberNotices`), produced by the submission resolver (`server/src/services/submission-resolver.ts`) and routed by `member_id` to the Member's live SSE connections on `/api/me/notifications` (`server/src/routes/me-notifications.ts`). See ADR 0005 for the full model.
 
 - **Not an entity.** A notification carries no id, has no read/unread state, and is never persisted. A Member who was offline when a notification fired simply sees the outcome on "Mes soumissions" next visit — nothing is lost, because the submission row already recorded it durably.
-- **Three outcomes.** A notification fires for exactly the three async resolution outcomes of a TheaterSubmission: `succeeded`, `succeeded_selection_full` (the scrape worked but the Selection was full, so the cinema was not auto-added — a distinct outcome, since the Member must free a slot and add it from the catalog), and `failed`. **Throttle rejection and dedup downgrade are not notifications** — both resolve synchronously in the `POST` submission response.
+- **Three outcomes.** A notification fires for exactly the three async resolution outcomes of a TheaterSubmission: `succeeded`, `succeeded_selection_full` (the scrape worked but the Selection was full, so the cinema was not auto-added — a distinct outcome, since the Member must free a slot and add it from the catalog; its `selectionRefusal` names the limit, `quota_reached` or `choices_full`, ADR 0011 D2), and `failed`. **Throttle rejection and dedup downgrade are not notifications** — both resolve synchronously in the `POST` submission response.
 - **Auth-only email.** Notifications never go to email. The mailer (verification, password-reset) is reserved for auth; a submission outcome is not time-critical enough to push off-platform.
 - **Handshake-only auth, per-Member fan-out.** The SSE stream authenticates at connect time and stays open until the client closes it; revocation (suspension, password change) takes effect at the next auth boundary, as elsewhere. The server fans each notification to all of a Member's live connections (multi-device), up to a small per-Member concurrent cap.
 
@@ -154,22 +180,28 @@ A transient, best-effort push from the server to a Member's open SSE connection,
 
 The act of removing a Member's identity and Member-owned data from movie-planner — the **RGPD right to erasure** (Article 17) made operational. Member erasure is **self-service**: a Member may erase themselves without filing a ticket. Erasure is **immediate, hard, and terminal** — a single irreversible transition into the `deleted` state, with no soft-delete, grace window, or reactivation. It is gated by **password re-entry** (the Member's current password, verified server-side), because the Session's CSRF token alone cannot defend against a hijacked Session or a shared device.
 
-**What erasure removes.** The Member's identity and credentials, all their **Sessions** (via the existing refresh-token cascade), their **Selection**, their **Appearance**, and their **TheaterSubmission** rows. Concretely, the Member-owned tables (`member_selections`, `member_preferences`, `theater_submissions`) cascade on the Member's id.
+**Where it lives (issue #66).** `POST /api/me/delete` with `{ password }` (`server/src/routes/me.ts` → `SessionService.eraseMemberAccount` → `MemberAccountService.eraseSelf`, `server/src/services/member-account-service.ts`); the client entry point is the Member's account page (`/account`, `client/src/pages/AccountPage.tsx`). The password is verified before any lock; the suspension check is repeated under the users-row lock so a concurrent Admin suspension always wins, and the role-guarded `deleteMemberRow` performs the delete. A wrong password is a 403 (`Password is incorrect`), never a 401, so the client does not mistake it for an expired Session. On success the whole cookie surface is cleared. The audit log carries the Member id only.
+
+**What erasure removes.** The Member's identity and credentials, all their **Sessions** (via the existing refresh-token cascade), their **Selection**, their **Appearance**, and their **TheaterSubmission** rows. Concretely, the Member-owned tables (`member_selections`, `member_preferences`, `theater_submissions`) cascade on the Member's id. *Planned (ADR 0011 D13):* a paid Member's Subscription is cancelled immediately at the provider through the **Billing outbox**, so erasure never waits on the provider; the outbox row's pseudonymous subscription reference is the only residue until the provider confirms.
 
 **What erasure does not remove.** A **Theater** — whether `active` or still `provisioning` — that the Member introduced into the shared catalog. The submitter is not the owner (a Member does not own Theater rows); the catalog is single-source and Staff-curated, and a Member's departure must not change what cinemas exist. A failed submission's stale `provisioning` Theater therefore lingers until Staff clean it up operationally; that cleanup is a separate Staff concern, not coupled to erasure.
 
-**Suspended Members.** A suspended Member cannot log in (only `suspended` blocks login), so cannot reach the self-service erasure path; their erasure is **Admin-mediated** through the existing Admin deletion path. This is deliberate: a Member suspended for submission abuse would otherwise erase their TheaterSubmission history — the evidence of the abuse. The right is routed through Staff, not refused (Article 17(3)(e)/(b) covers the holding period during investigation).
+**Suspended Members.** A suspended Member cannot log in (only `suspended` blocks login), so cannot reach the self-service erasure path; their erasure is **Admin-mediated** through the Admin Member deletion (`DELETE /api/members/:id`). This is deliberate: a Member suspended for submission abuse would otherwise erase their TheaterSubmission history — the evidence of the abuse. The right is routed through Staff, not refused (Article 17(3)(e)/(b) covers the holding period during investigation).
 
 **Re-registration.** Because erasure is clean (no retained email hash or tombstone), the email is immediately reusable and a former Member may re-register — which also resets their **submission throttle** (see ADR 0003). This bypass is accepted on the threat model: the payoff is near-zero, re-registration re-imposes verification friction, and the upstream source's rate limiting is the hard backstop.
 
 **What Member erasure is not:**
 - Not **soft-delete**. There is no `deleted_at`, no recoverable window, no scheduled purge. "Deleted" means gone now.
 - Not **theater deletion**. Erasing a Member never removes a Theater; the two have separate cascade targets and separate owners (ADR 0001).
-- Not **Admin-only**. The inherited Admin deletion path remains (and is the only path for suspended Members), but an active or unverified Member can self-serve.
+- Not **Admin-only**. The Admin Member deletion path remains (and is the only path for suspended Members), but an active or unverified Member can self-serve.
 
 ### Member data export
 
 A read-only JSON document of a Member's personal data — the **RGPD right to data portability** (Article 20) made operational. The export contains the Member's account (`email`, `created_at`, status — never the password hash), their **Selection**, their **Appearance**, and their full **TheaterSubmission** history (each submission's url, status, timestamps, and resolved `theater_id`). It is the natural pair to Member erasure: "here is your data" before "here is the door."
+
+It is served at `GET /api/me/export` (`MemberAccountService.exportData`; `Cache-Control: no-store`) and downloaded from the account page as `movie-planner-data-<date>.json`. The Selection part lists every `member_selections` row whatever the Theater's status, each marked `active` or remembered by its effective state — always `active` while billing is disabled (`getSelectionForExport`), and submissions omit internal plumbing (`member_id`, `report_id` — `getSubmissionHistoryForExport`).
+
+*Planned (ADR 0011 D15, not shipped):* the export adds the Member's **Subscription** state, paid-through date and accepted **tariff version** (amount, currency) — never provider secrets or payment method details.
 
 The export is **Session-gated and ungated otherwise** — it is non-destructive, so it requires no password re-entry (unlike erasure). The submission history is included because submissions are the Member's own acts and are erased on deletion, making the export the only moment those records remain visible to them.
 
@@ -177,6 +209,42 @@ The export is **Session-gated and ungated otherwise** — it is non-destructive,
 - Not an **admin/audit report**. It is the Member's own data, served to the Member; it is not a Staff-facing dossier.
 - Not a **re-import / backup format**. It satisfies portability (a structured, machine-readable copy of the data the Member provided); it is not designed to seed another account.
 - Not a **substitute for erasure**. A Member who exports has not been erased; the two are independent operations.
+
+## Billing
+
+Decided in [ADR 0011](docs/adr/0011-billing-port-provider-deferred.md) for the freemium epic (#95); no payment provider is selected yet. **Shipped (#97):** the billing mode, the Entitlement derivation and the Subscription row it reads. Everything else in this section is still planned.
+
+### Entitlement
+
+What a Member may use beyond the free offer: today only the active-Selection quota (3 free / 50 premium). It is **derived** on every request from the Member's Subscription — premium while a non-terminal Subscription's paid-through instant is in the future — never read from the JWT or stored as a flag. Expiry therefore happens exactly at the boundary (compared with the database clock), with no sweep. While billing is disabled (`BILLING_PROVIDER=disabled`, the production default and the post-launch emergency fallback) every Member is entitled to 50 with no **offer** (`null`) and remembered choices count as active, without any write. `BILLING_PROVIDER=fake` applies the free/premium quotas for dev and tests; it is refused in production, and an unknown value is never silently treated as disabled: `resolveBillingMode` throws, so startup refuses it (`validateBillingConfiguration`) and so does any path that skipped that check. Home: `server/src/billing/entitlement.ts` (`entitlementFor`, `resolveBillingMode`, `rememberedChoicesCountAsActive`).
+
+**Offer** — the Member-facing name of the Entitlement's source: `free` or `premium`, or none while billing is disabled.
+
+**What an Entitlement is *not*:** not a Member lifecycle status (`unverified | active | suspended` is independent), not a Role or permission, not a gate on the catalog, Appearance, filters or submission safeguards.
+
+### Subscription
+
+A Member's recurring monthly payment relationship for premium. It references the **tariff version** the Member accepted and has its own state machine (`active`, `past_due`, cancellation scheduled, ended), separate from the Member's. A Subscription is **continuous** as long as it never ends: renewals and a payment recovered within the recovery window keep its price. While `past_due` the Member fixes their payment through a hosted **payment recovery** link, never a new checkout. Once ended, a later purchase is a **new** Subscription at the current tariff. At most one non-terminal Subscription and one open checkout per Member.
+
+*Shipped so far (#97):* the `subscriptions` table holds only what the Entitlement reads — `status` (`active | past_due | ended`), `paid_through`, at most one non-terminal row per Member, cascading on erasure (`paidThroughSubscriptionExistsSql`, `server/src/db/subscription-queries.ts`, read inside `getSelectionCounts` and `getSelectionSnapshot`). Nothing writes it yet outside test fixtures; checkout, tariff version and provider reference arrive with #99.
+
+**What a Subscription is *not*:** not the Member (a suspended Member may still have one, scheduled to end — ADR 0011 D12), not the provider's record (the local row is the source of truth the code reads; the provider is re-read to update it).
+
+### Tariff version
+
+An immutable, Admin-published monthly price (amount, currency, publisher, publication time). Publishing creates a new version; it never rewrites the version a continuous Subscription references. Only the current version can be chosen for a new checkout (#98).
+
+### `BillingProvider` port
+
+The server-side seam to the payment provider: publish a tariff, create a hosted checkout, create a hosted payment recovery for a `past_due` Subscription, read a subscription, schedule/undo/force cancellation (only from the Billing outbox job), verify incoming events. Planned home `server/src/billing/billing-provider.ts`. Adapters: `FakeBillingProvider` (dev/tests, refused in production), `DisabledBillingProvider` (production default), and the real provider later. Selected by `BILLING_PROVIDER`. Same role as the **Bus port**: role code depends on the interface, the vendor is the swappable part.
+
+### Billing event
+
+A verified notification from the provider (`eventId`, type, subscription reference). It is **a trigger, not state**: the service re-reads the subscription from the provider and applies that snapshot, idempotently by `eventId`. A **billing reconciliation** periodically re-reads non-terminal subscriptions. Events for an unknown reference (erased Member, ended Subscription) are ignored and never recreate anything.
+
+### Billing outbox
+
+A durable queue of provider commands written in the same transaction as the local decision that causes them: "schedule cancellation" at Member suspension, "undo cancellation" at reinstatement, "cancel now" at **Member erasure**. A retrying job sends them in order per subscription and deletes each row once the provider confirms, so suspension and erasure commit immediately even when the provider is down. A row holds only the opaque provider subscription reference — pseudonymous personal data, since the provider can link it to the person — and no email, name or payment data; after erasure it is the only residue, kept just until the provider confirms.
 
 ## Branding
 

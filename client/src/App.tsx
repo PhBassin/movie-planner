@@ -10,7 +10,9 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/forgot-password-page.js';
 import ResetPasswordPage from './pages/reset-password-page.js';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import AccountPage from './pages/AccountPage';
 import CinemasPage from './pages/CinemasPage.js';
+import SubmissionsPage from './pages/SubmissionsPage.js';
 import AdminPage from './pages/admin/AdminPage';
 import { AuthContext } from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthProvider';
@@ -128,6 +130,22 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ChangePasswordPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <ProtectedRoute>
+              <AccountPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/submissions"
+          element={
+            <ProtectedRoute>
+              <SubmissionsPage />
             </ProtectedRoute>
           }
         />

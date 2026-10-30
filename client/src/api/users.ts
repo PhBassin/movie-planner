@@ -118,9 +118,7 @@ export async function resetUserPassword(id: number, newPassword: string): Promis
  * @param id User ID
  */
 export async function deleteUser(id: number): Promise<void> {
-  const response = await apiClient.delete<ApiResponse<void>>(`/users/${id}`);
-
-  if (!response.success) {
-    throw new Error(response.error || 'Failed to delete user');
-  }
+  // 204 No Content: there is no envelope to inspect. Failures surface as
+  // ApiError from the client (non-2xx), so resolving means it was deleted.
+  await apiClient.delete(`/users/${id}`);
 }

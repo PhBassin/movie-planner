@@ -2,7 +2,7 @@ import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MemberNotifications, { useMemberNotifications } from './MemberNotifications.js';
+import MemberNotifications, { noticeToToast, useMemberNotifications } from './MemberNotifications.js';
 import { AuthContext, type User } from '../contexts/AuthContext.js';
 import * as memberApi from '../api/me.js';
 import type { MemberNotice } from '../types/index.js';
@@ -92,9 +92,11 @@ describe('MemberNotifications', () => {
     expect(toast).toHaveTextContent('UGC Opéra');
     expect(toast).toHaveTextContent('a rejoint votre Selection');
     expect(toast.getAttribute('data-kind')).toBe('success');
+    expect(screen.getByRole('link', { name: 'Mes soumissions' })).toHaveAttribute('href', '/submissions');
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['me'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['me', 'submissions'] });
   });
 
   it('points the cap-blocked toast at the cinemas list', async () => {
@@ -113,6 +115,24 @@ describe('MemberNotifications', () => {
     expect(toast).toHaveTextContent('Selection est pleine');
     expect(toast.getAttribute('data-kind')).toBe('cap-blocked');
     expect(screen.getByRole('link', { name: 'Voir les cinémas' })).toHaveAttribute('href', '/cinemas');
+    expect(screen.getByRole('link', { name: 'Mes soumissions' })).toHaveAttribute('href', '/submissions');
+  });
+
+  it.each([
+    ['quota_reached', 'autant de cinémas actifs que votre offre le permet'],
+    ['choices_full', 'Retirez un cinéma mémorisé'],
+  ] as const)('names the Selection limit that refused the auto-add (%s)', (selectionRefusal, copy) => {
+    const toast = noticeToToast({
+      type: 'submission_resolved',
+      submissionId: 9,
+      theaterId: 'C0013',
+      theaterName: 'UGC Opéra',
+      outcome: 'succeeded_selection_full',
+      selectionRefusal,
+    }, 1);
+
+    expect(toast.kind).toBe('cap-blocked');
+    expect(toast.message).toContain(copy);
   });
 
   it('shows only the sanitized reason on failure', async () => {
@@ -132,6 +152,7 @@ describe('MemberNotifications', () => {
     expect(toast).toHaveTextContent('Source injoignable');
     expect(toast).not.toHaveTextContent('C0013');
     expect(toast.getAttribute('data-kind')).toBe('error');
+    expect(screen.getByRole('link', { name: 'Mes soumissions' })).toHaveAttribute('href', '/submissions');
   });
 
   it('dismisses the toast on the close button', async () => {

@@ -9,10 +9,12 @@ import { AppError, ForbiddenError, ValidationError } from '../utils/errors.js';
 import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 
 const mockSubmit = vi.fn();
+const mockListForMember = vi.fn();
 
 vi.mock('../services/submission-service.js', () => ({
   SubmissionService: class {
     submit = mockSubmit;
+    listForMember = mockListForMember;
   },
 }));
 
@@ -126,5 +128,48 @@ describe('POST /api/me/submissions', () => {
 
     expect(response.status).toBe(403);
     expect(mockSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/me/submissions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the caller's page with default pagination", async () => {
+    const page = { items: [], total: 0, limit: 100, offset: 0 };
+    mockListForMember.mockResolvedValue(page);
+
+    const response = await request(app).get('/api/me/submissions');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, data: page });
+    expect(mockListForMember).toHaveBeenCalledWith(7, { limit: 100, offset: 0 });
+  });
+
+  it('passes limit/offset and clamps an oversized limit', async () => {
+    mockListForMember.mockResolvedValue({ items: [], total: 0, limit: 100, offset: 20 });
+
+    const response = await request(app).get('/api/me/submissions?limit=5000&offset=20');
+
+    expect(response.status).toBe(200);
+    expect(mockListForMember).toHaveBeenCalledWith(7, { limit: 100, offset: 20 });
+  });
+
+  it.each(['limit=0', 'limit=abc', 'offset=-1', 'offset=10001', 'limit=1.5'])(
+    'returns 400 for invalid pagination (%s)',
+    async (query) => {
+      const response = await request(app).get(`/api/me/submissions?${query}`);
+
+      expect(response.status).toBe(400);
+      expect(mockListForMember).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps Staff outside the Member list', async () => {
+    const response = await request(app).get('/api/me/submissions').set('x-test-role', 'admin');
+
+    expect(response.status).toBe(403);
+    expect(mockListForMember).not.toHaveBeenCalled();
   });
 });
