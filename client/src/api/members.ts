@@ -20,7 +20,10 @@ export interface MemberAdminView {
   status: MemberStatus;
   email_verified_at: string | null;
   appearance: 'light' | 'dark';
+  /** Every stored Selection choice, active and remembered together. */
   selection_count: number;
+  /** The remembered part of `selection_count` (always 0 while billing is disabled). */
+  remembered_selection_count: number;
   submission_count: number;
   created_at: string;
 }

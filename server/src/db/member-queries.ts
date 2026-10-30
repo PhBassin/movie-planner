@@ -1,5 +1,7 @@
 import { type DB, type DBQueryExecutor } from './index.js';
 import { type Appearance, type MemberStatus } from '../types/user.js';
+import { rememberedChoicesCountAsActive } from '../billing/entitlement.js';
+import { effectiveActiveSql, type SelectionChoiceView } from './selection-queries.js';
 
 /**
  * Member queries — the Member specialization of the shared User identity
@@ -32,7 +34,6 @@ export interface MemberProfileRow {
   status: MemberStatus;
   email_verified_at: string | null;
   appearance: Appearance;
-  selection_count: number;
   created_at: string;
 }
 
@@ -148,7 +149,6 @@ export async function getMemberProfile(
     `SELECT u.id, u.email, u.username, r.name AS role_name,
             u.status, u.email_verified_at,
             COALESCE(mp.appearance, 'light') AS appearance,
-            (SELECT COUNT(*)::int FROM member_selections ms WHERE ms.member_id = u.id) AS selection_count,
             u.created_at
      FROM users u
      JOIN roles r ON r.id = u.role_id
@@ -176,22 +176,37 @@ export interface MemberAdminRow {
   status: MemberStatus;
   email_verified_at: string | null;
   appearance: Appearance;
+  /** Every stored Selection choice, active and remembered together. */
   selection_count: number;
+  /**
+   * The remembered part of `selection_count` (ADR 0011 D2), by the effective
+   * active state — always 0 while billing is disabled (D6).
+   */
+  remembered_selection_count: number;
   submission_count: number;
   created_at: string;
 }
 
-const MEMBER_ADMIN_SELECT = `
+/** `viewParam` is the placeholder bound to `SelectionChoiceView.rememberedCountsAsActive`. */
+function memberAdminSelect(viewParam: string): string {
+  return `
   SELECT u.id, u.username, u.email, r.name AS role_name,
          u.status, u.email_verified_at,
          COALESCE(mp.appearance, 'light') AS appearance,
          (SELECT COUNT(*)::int FROM member_selections ms WHERE ms.member_id = u.id) AS selection_count,
+         (SELECT COUNT(*)::int FROM member_selections ms
+          WHERE ms.member_id = u.id AND NOT ${effectiveActiveSql(viewParam)}) AS remembered_selection_count,
          (SELECT COUNT(*)::int FROM theater_submissions ts WHERE ts.member_id = u.id) AS submission_count,
          u.created_at
   FROM users u
   JOIN roles r ON r.id = u.role_id
   LEFT JOIN member_preferences mp ON mp.member_id = u.id
 `;
+}
+
+function currentChoiceView(): SelectionChoiceView {
+  return { rememberedCountsAsActive: rememberedChoicesCountAsActive() };
+}
 
 /**
  * List Members (newest first) with their lifecycle state and Member-owned
@@ -200,15 +215,16 @@ const MEMBER_ADMIN_SELECT = `
 export async function listMembers(
   db: DB,
   options?: { limit?: number; offset?: number },
+  view: SelectionChoiceView = currentChoiceView(),
 ): Promise<MemberAdminRow[]> {
   const limit = options?.limit ?? 100;
   const offset = options?.offset ?? 0;
   const result = await db.query<MemberAdminRow>(
-    `${MEMBER_ADMIN_SELECT}
+    `${memberAdminSelect('$3')}
      WHERE r.name = 'member'
      ORDER BY u.created_at DESC
      LIMIT $1 OFFSET $2`,
-    [limit, offset],
+    [limit, offset, view.rememberedCountsAsActive],
   );
   return result.rows;
 }
@@ -221,11 +237,12 @@ export async function listMembers(
 export async function getMemberAdminDetail(
   db: DBQueryExecutor,
   memberId: number,
+  view: SelectionChoiceView = currentChoiceView(),
 ): Promise<MemberAdminRow | undefined> {
   const result = await db.query<MemberAdminRow>(
-    `${MEMBER_ADMIN_SELECT}
+    `${memberAdminSelect('$2')}
      WHERE u.id = $1 AND r.name = 'member'`,
-    [memberId],
+    [memberId, view.rememberedCountsAsActive],
   );
   return result.rows[0];
 }

@@ -13,8 +13,12 @@ export function memberProfileFixture(appearance: MemberProfile['appearance']): M
     status: 'active',
     email_verified: true,
     appearance,
+    offer: null,
     selectionCount: 0,
     selectionLimit: 50,
+    rememberedCount: 0,
+    choiceLimit: 50,
+    selectionOverQuota: false,
     created_at: '2024-01-01T00:00:00Z',
   };
 }

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthContext } from '../contexts/AuthContext.js';
 import { subscribeToMemberNotifications } from '../api/me.js';
-import { MEMBER_SUBMISSIONS_QUERY_KEY, ME_QUERY_KEY } from '../api/query-keys.js';
+import { MEMBER_SUBMISSIONS_QUERY_KEY } from '../api/query-keys.js';
+import { invalidateMemberSelection } from '../utils/selection.js';
 import type { MemberNotice } from '../types/index.js';
 
 /**
@@ -24,6 +25,22 @@ const SUBMISSIONS_ACTION = { label: 'Mes soumissions', to: '/submissions' };
 
 const TOAST_DURATION_MS = 8000;
 
+/**
+ * The cap-blocked copy names the limit that refused the auto-add, like the
+ * synchronous 409 does: the offer's active quota, or the 50 stored choices.
+ */
+function selectionFullMessage(notice: MemberNotice): string {
+  const inCatalog = `« ${notice.theaterName} » est dans le catalogue`;
+  switch (notice.selectionRefusal) {
+    case 'quota_reached':
+      return `${inCatalog}, mais votre Selection compte déjà autant de cinémas actifs que votre offre le permet. Libérez une place puis ajoutez-le depuis la liste des cinémas.`;
+    case 'choices_full':
+      return `${inCatalog}, mais vous avez déjà 50 cinémas enregistrés. Retirez un cinéma mémorisé puis ajoutez-le depuis la liste des cinémas.`;
+    default:
+      return `${inCatalog}, mais votre Selection est pleine. Libérez une place puis ajoutez-le depuis la liste des cinémas.`;
+  }
+}
+
 export function noticeToToast(notice: MemberNotice, id: number): MemberNotificationToast {
   switch (notice.outcome) {
     case 'succeeded':
@@ -37,7 +54,7 @@ export function noticeToToast(notice: MemberNotice, id: number): MemberNotificat
       return {
         id,
         kind: 'cap-blocked',
-        message: `« ${notice.theaterName} » est dans le catalogue, mais votre Selection est pleine. Libérez une place puis ajoutez-le depuis la liste des cinémas.`,
+        message: selectionFullMessage(notice),
         actions: [{ label: 'Voir les cinémas', to: '/cinemas' }, SUBMISSIONS_ACTION],
       };
     case 'failed':
@@ -69,9 +86,7 @@ export function useMemberNotifications() {
 
     const unsubscribe = subscribeToMemberNotifications((notice) => {
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['selection'] }),
-        queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ['selection-movies'] }),
+        invalidateMemberSelection(queryClient),
         queryClient.invalidateQueries({ queryKey: MEMBER_SUBMISSIONS_QUERY_KEY }),
       ]);
       counter.current += 1;

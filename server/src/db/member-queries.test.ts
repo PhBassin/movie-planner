@@ -8,6 +8,8 @@ import {
   updateMemberAppearance,
   isPendingVerification,
   deleteMemberRow,
+  getMemberAdminDetail,
+  listMembers,
   type MemberCredentialRow,
 } from './member-queries.js';
 
@@ -164,6 +166,32 @@ describe('Member Queries', () => {
       const result = await getMemberProfile(mockDb, 999);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('admin Member view', () => {
+    it('counts remembered choices apart from the stored total, by the effective active state', async () => {
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await listMembers(mockDb, { limit: 10, offset: 0 }, { rememberedCountsAsActive: false });
+      await getMemberAdminDetail(mockDb, 7, { rememberedCountsAsActive: true });
+
+      const [listSql, listParams] = vi.mocked(mockDb.query).mock.calls[0];
+      expect(listSql).toContain('AND NOT (ms.active OR $3::boolean)) AS remembered_selection_count');
+      expect(listParams).toEqual([10, 0, false]);
+      const [detailSql, detailParams] = vi.mocked(mockDb.query).mock.calls[1];
+      expect(detailSql).toContain('AND NOT (ms.active OR $2::boolean)) AS remembered_selection_count');
+      expect(detailParams).toEqual([7, true]);
+    });
+
+    it('defaults to the current billing mode (disabled: nothing is remembered)', async () => {
+      vi.stubEnv('BILLING_PROVIDER', '');
+      vi.mocked(mockDb.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+
+      await getMemberAdminDetail(mockDb, 7);
+
+      expect(vi.mocked(mockDb.query).mock.calls[0][1]).toEqual([7, true]);
+      vi.unstubAllEnvs();
     });
   });
 

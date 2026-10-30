@@ -2,6 +2,7 @@ import type { DB } from '../db/index.js';
 import { getMemberById, getMemberProfile, deleteMemberRow } from '../db/member-queries.js';
 import { getMemberLifecycle } from '../db/user-queries.js';
 import { getSelectionForExport, type SelectionExportRow } from '../db/selection-queries.js';
+import { rememberedChoicesCountAsActive } from '../billing/entitlement.js';
 import { getSubmissionHistoryForExport, type SubmissionExportRow } from '../db/submission-queries.js';
 import type { Appearance, MemberStatus } from '../types/user.js';
 import { comparePassword } from '../utils/password.js';
@@ -50,7 +51,9 @@ export class MemberAccountService {
       if (!profile || profile.role_name !== 'member') {
         throw new NotFoundError('Member not found');
       }
-      const selection = await getSelectionForExport(tx, memberId);
+      const selection = await getSelectionForExport(tx, memberId, {
+        rememberedCountsAsActive: rememberedChoicesCountAsActive(),
+      });
       const submissions = await getSubmissionHistoryForExport(tx, memberId);
       return { profile, selection, submissions };
     });

@@ -92,7 +92,7 @@ describe('MemberAccountService', () => {
       // One read-only snapshot for the whole document.
       expect(txClient.query).toHaveBeenCalledWith('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
       expect(memberQueries.getMemberProfile).toHaveBeenCalledWith(txClient, 7);
-      expect(selectionQueries.getSelectionForExport).toHaveBeenCalledWith(txClient, 7);
+      expect(selectionQueries.getSelectionForExport).toHaveBeenCalledWith(txClient, 7, { rememberedCountsAsActive: true });
       expect(submissionQueries.getSubmissionHistoryForExport).toHaveBeenCalledWith(txClient, 7);
     });
 

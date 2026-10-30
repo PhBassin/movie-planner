@@ -25,8 +25,10 @@ router.get(
 );
 
 // GET /api/me/selection/movies - Selection homepage: movies playing at the
-// Member's selected theaters for the current week (or a specific date),
-// carrying per-movie and per-theater newness for the New section.
+// Member's active choices for the current week (or a specific date),
+// carrying per-movie and per-theater newness for the New section. While the
+// Selection is over quota (ADR 0011 D3) no personal data is projected: the
+// response carries `overQuota: true` and no movies.
 router.get(
   '/movies',
   protectedLimiter,
@@ -41,14 +43,23 @@ router.get(
         return next(new ValidationError('Invalid date format. Use YYYY-MM-DD'));
       }
 
-      const movieService = new MovieService(req.app.get('db'));
-      const movies = dateParam
-        ? await movieService.getSelectionMoviesForDate(req.user!.id, dateParam, weekStart)
-        : await movieService.getSelectionMoviesForWeek(req.user!.id, weekStart);
+      const db = req.app.get('db');
+      const projection = await new SelectionService(db).projection(req.user!.id);
+      const movieService = new MovieService(db);
+      const movies = projection.overQuota
+        ? []
+        : dateParam
+          ? await movieService.getSelectionMoviesForDate(projection.theaterIds, dateParam, weekStart)
+          : await movieService.getSelectionMoviesForWeek(projection.theaterIds, weekStart);
 
       res.json({
         success: true,
-        data: { movies, weekStart, ...(dateParam && { date: dateParam }) },
+        data: {
+          movies,
+          weekStart,
+          ...(dateParam && { date: dateParam }),
+          ...(projection.overQuota && { overQuota: true }),
+        },
       } satisfies ApiResponse);
     } catch (error) {
       next(error);
@@ -68,8 +79,15 @@ router.get(
         return next(new ValidationError('Search query must be between 2 and 100 characters'));
       }
 
-      const movies = await new MovieService(req.app.get('db')).searchSelection(req.user!.id, query.trim(), 10);
-      res.json({ success: true, data: { movies, query: query.trim() } } satisfies ApiResponse);
+      const db = req.app.get('db');
+      const projection = await new SelectionService(db).projection(req.user!.id);
+      const movies = projection.overQuota
+        ? []
+        : await new MovieService(db).searchSelection(projection.theaterIds, query.trim(), 10);
+      res.json({
+        success: true,
+        data: { movies, query: query.trim(), ...(projection.overQuota && { overQuota: true }) },
+      } satisfies ApiResponse);
     } catch (error) {
       next(error);
     }

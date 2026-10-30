@@ -1,4 +1,4 @@
-import type { MemberNotice, MemberNoticeOutcome, ProgressEvent } from '@movie-planner/scraper-protocol';import type { DB } from '../db/index.js';
+import type { MemberNotice, MemberNoticeOutcome, ProgressEvent, SelectionRefusal } from '@movie-planner/scraper-protocol';import type { DB } from '../db/index.js';
 import {
   expireStalePendingSubmissionReports,
   getPendingSubmissionByReport,
@@ -8,14 +8,9 @@ import {
 } from '../db/submission-queries.js';
 import { getScrapeReport, type ScrapeReport } from '../db/report-queries.js';
 import { getTheaterById } from '../db/theater-queries.js';
-import {
-  getSelectionCount,
-  insertSelection,
-  isTheaterSelected,
-  lockMemberForSelection,
-} from '../db/selection-queries.js';
+import { lockMemberForSelection } from '../db/selection-queries.js';
 import { getBusProducer } from './bus-producer.js';
-import { MAX_SELECTION_SIZE } from './selection-service.js';
+import { applySelectionAdd } from './selection-service.js';
 import { FAILED_NOTICE_REASON } from './submission-service.js';
 import { NotFoundError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -169,16 +164,16 @@ export class SubmissionResolutionService {
           throw new NotFoundError(`Member not found: ${resolved.member_id}`);
         }
 
-        const alreadySelected = await isTheaterSelected(tx, resolved.member_id, resolved.theater_id);
-        if (!alreadySelected) {
-          const count = await getSelectionCount(tx, resolved.member_id);
-          if (count >= MAX_SELECTION_SIZE) {
-            // Cap-blocked: the scrape succeeded and the Theater is in the
-            // catalog, but the Selection is full — a distinct notice outcome
-            // (ADR 0005 sub-decision 6). The row stays `succeeded`.
-            return this.buildNotice(resolved, 'succeeded_selection_full', theater);
-          }
-          await insertSelection(tx, resolved.member_id, resolved.theater_id);
+        // The one Selection add policy (ADR 0011 D2/D4): a successful scrape
+        // at or above the Entitlement quota, or at 50 stored choices, is not
+        // auto-added — the scrape succeeded and the Theater is in the
+        // catalog, a distinct notice outcome (ADR 0005 sub-decision 6). The
+        // row stays `succeeded`.
+        const outcome = await applySelectionAdd(tx, resolved.member_id, resolved.theater_id);
+        if (outcome === 'quota_reached' || outcome === 'choices_full') {
+          // The refusal rides the notice so the toast explains which limit
+          // applies (the offer's active quota vs the 50-choice bound).
+          return this.buildNotice(resolved, 'succeeded_selection_full', theater, outcome);
         }
       }
 
@@ -200,6 +195,7 @@ export class SubmissionResolutionService {
     submission: TheaterSubmissionRow,
     outcome: MemberNoticeOutcome,
     theater: { name: string } | undefined,
+    selectionRefusal?: SelectionRefusal,
   ): MemberNotice {
     return {
       type: 'submission_resolved',
@@ -209,6 +205,7 @@ export class SubmissionResolutionService {
       theaterName: theater?.name ?? submission.theater_id,
       outcome,
       ...(outcome === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
+      ...(selectionRefusal ? { selectionRefusal } : {}),
     };
   }
 }

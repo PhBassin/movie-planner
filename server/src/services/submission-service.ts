@@ -15,6 +15,7 @@ import {
 import { getTheaterById } from '../db/theater-queries.js';
 import { addTheaterWithScrapeJob, enqueueAddTheaterScrape } from './theater-service.js';
 import { SelectionService } from './selection-service.js';
+import { rememberedChoicesCountAsActive } from '../billing/entitlement.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError, isUniqueViolation } from '../utils/errors.js';
 import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 import { cleanTheaterUrl, extractTheaterIdFromUrl, isValidAllocineUrl } from '../utils/url.js';
@@ -115,6 +116,8 @@ export interface MemberSubmissionView {
   attempts: number;
   theater: { id: string; status: 'provisioning' | 'active'; name?: string; city?: string | null };
   in_selection?: boolean;
+  /** Set (true) only for an active Theater stored as a remembered choice: re-adding it reactivates it. */
+  remembered?: true;
   reason?: string;
 }
 
@@ -140,6 +143,7 @@ export function toMemberSubmissionView(row: MemberSubmissionRow): MemberSubmissi
       ...(active ? { name: row.theater_name, city: row.theater_city } : {}),
     },
     ...(active ? { in_selection: row.in_selection } : {}),
+    ...(active && row.remembered ? { remembered: true as const } : {}),
     ...(row.status === 'failed' ? { reason: FAILED_NOTICE_REASON } : {}),
   };
 }
@@ -149,7 +153,9 @@ export class SubmissionService {
 
   /** The Member's "Mes soumissions" page: one item per Theater, newest attempt first. */
   async listForMember(memberId: number, page: { limit: number; offset: number }): Promise<MemberSubmissionPage> {
-    const { rows, total } = await listMemberSubmissionsByTheater(this.db, memberId, page);
+    const { rows, total } = await listMemberSubmissionsByTheater(this.db, memberId, page, {
+      rememberedCountsAsActive: rememberedChoicesCountAsActive(),
+    });
     return { items: rows.map(toMemberSubmissionView), total, ...page };
   }
 

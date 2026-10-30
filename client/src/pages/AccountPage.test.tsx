@@ -65,6 +65,10 @@ describe('AccountPage', () => {
       appearance: 'light',
       selectionCount: 0,
       selectionLimit: 10,
+      offer: null,
+      rememberedCount: 0,
+      choiceLimit: 50,
+      selectionOverQuota: false,
       created_at: '2026-01-01T00:00:00Z',
     });
   });

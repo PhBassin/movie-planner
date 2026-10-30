@@ -11,6 +11,7 @@ import { MEMBER_ONLY_ENDPOINT_MESSAGE } from '../types/role.js';
 const mockList = vi.fn();
 const mockAdd = vi.fn();
 const mockRemove = vi.fn();
+const mockProjection = vi.fn();
 
 const mockGetSelectionMoviesForWeek = vi.fn();
 const mockGetSelectionMoviesForDate = vi.fn();
@@ -29,6 +30,7 @@ vi.mock('../services/selection-service.js', () => ({
     list = mockList;
     add = mockAdd;
     remove = mockRemove;
+    projection = mockProjection;
   },
 }));
 
@@ -61,6 +63,7 @@ app.use(errorHandler);
 describe('Selection routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProjection.mockResolvedValue({ overQuota: false, theaterIds: ['C0001', 'C0002'] });
   });
 
   it('lists the authenticated Member Selection', async () => {
@@ -95,13 +98,15 @@ describe('Selection routes', () => {
     expect(mockRemove).toHaveBeenCalledWith(7, 'C0001');
   });
 
-  it('returns the service 409 unchanged at the HTTP boundary', async () => {
-    mockAdd.mockRejectedValue(new AppError('Selection contains 50 theaters; maximum is 50', 409));
+  it('returns the service 409 unchanged at the HTTP boundary, with the fresh usage', async () => {
+    const usage = { offer: 'free', activeCount: 3, rememberedCount: 0, selectionQuota: 3, choiceLimit: 50, overQuota: false };
+    mockAdd.mockRejectedValue(new AppError('Free offer allows 3 active theaters; premium allows up to 50', 409, [{ reason: 'quota_reached', usage }]));
 
     const response = await request(app).post('/api/me/selection/C0001');
 
     expect(response.status).toBe(409);
-    expect(response.body.error).toContain('50');
+    expect(response.body.error).toContain('3');
+    expect(response.body.details).toEqual([{ reason: 'quota_reached', usage }]);
   });
 
   it('keeps Staff outside the Member Selection routes', async () => {
@@ -126,7 +131,9 @@ describe('Selection routes', () => {
         { id: 1, title: 'Film A', isNewThisWeek: true, theaters: [] },
       ]);
       expect(response.body.data.weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(mockGetSelectionMoviesForWeek).toHaveBeenCalledWith(7, response.body.data.weekStart);
+      expect(mockProjection).toHaveBeenCalledWith(7);
+      expect(mockGetSelectionMoviesForWeek).toHaveBeenCalledWith(['C0001', 'C0002'], response.body.data.weekStart);
+      expect(response.body.data.overQuota).toBeUndefined();
     });
 
     it('serves the date variant through the date-scoped service method', async () => {
@@ -136,7 +143,18 @@ describe('Selection routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data.date).toBe('2026-03-12');
-      expect(mockGetSelectionMoviesForDate).toHaveBeenCalledWith(7, '2026-03-12', response.body.data.weekStart);
+      expect(mockGetSelectionMoviesForDate).toHaveBeenCalledWith(['C0001', 'C0002'], '2026-03-12', response.body.data.weekStart);
+      expect(mockGetSelectionMoviesForWeek).not.toHaveBeenCalled();
+    });
+
+    it('projects no personal data while the Selection is over quota (ADR 0011 D3)', async () => {
+      mockProjection.mockResolvedValue({ overQuota: true });
+
+      const response = await request(app).get('/api/me/selection/movies?date=2026-03-12');
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(expect.objectContaining({ movies: [], overQuota: true }));
+      expect(mockGetSelectionMoviesForDate).not.toHaveBeenCalled();
       expect(mockGetSelectionMoviesForWeek).not.toHaveBeenCalled();
     });
 
@@ -166,7 +184,17 @@ describe('Selection routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data.movies).toEqual([{ id: 1, title: 'Film A' }]);
-      expect(mockSearchSelection).toHaveBeenCalledWith(7, 'Film', 10);
+      expect(mockSearchSelection).toHaveBeenCalledWith(['C0001', 'C0002'], 'Film', 10);
+    });
+
+    it('returns no search results while the Selection is over quota', async () => {
+      mockProjection.mockResolvedValue({ overQuota: true });
+
+      const response = await request(app).get('/api/me/selection/movies/search?q=Film');
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({ movies: [], query: 'Film', overQuota: true });
+      expect(mockSearchSelection).not.toHaveBeenCalled();
     });
   });
 

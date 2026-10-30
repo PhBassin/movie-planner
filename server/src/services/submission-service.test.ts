@@ -359,6 +359,7 @@ describe('Mes soumissions view', () => {
     theater_name: 'C0013',
     theater_city: null,
     in_selection: false,
+    remembered: false,
   };
 
   it('never exposes a provisioning Theater placeholder name', () => {
@@ -407,6 +408,17 @@ describe('Mes soumissions view', () => {
     expect(view.theater).toMatchObject({ status: 'active', name: 'UGC Opéra' });
   });
 
+  it('marks a remembered choice of an active Theater, and omits the flag otherwise', () => {
+    const activeRow = { ...baseRow, status: 'succeeded' as const, theater_status: 'active' as const, theater_name: 'UGC Opéra' };
+
+    const remembered = toMemberSubmissionView({ ...activeRow, remembered: true });
+    expect(remembered.in_selection).toBe(false);
+    expect(remembered.remembered).toBe(true);
+
+    expect(toMemberSubmissionView(activeRow)).not.toHaveProperty('remembered');
+    expect(toMemberSubmissionView({ ...baseRow, remembered: true })).not.toHaveProperty('remembered');
+  });
+
   it('lists one page with its total', async () => {
     vi.mocked(listMemberSubmissionsByTheater).mockResolvedValue({ rows: [baseRow], total: 5 });
     const db = {} as DB;
@@ -414,6 +426,6 @@ describe('Mes soumissions view', () => {
     const page = await new SubmissionService(db).listForMember(7, { limit: 1, offset: 2 });
 
     expect(page).toEqual({ items: [toMemberSubmissionView(baseRow)], total: 5, limit: 1, offset: 2 });
-    expect(listMemberSubmissionsByTheater).toHaveBeenCalledWith(db, 7, { limit: 1, offset: 2 });
+    expect(listMemberSubmissionsByTheater).toHaveBeenCalledWith(db, 7, { limit: 1, offset: 2 }, { rememberedCountsAsActive: true });
   });
 });

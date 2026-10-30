@@ -5,7 +5,7 @@ import { authLimiter, protectedLimiter } from '../middleware/rate-limit.js';
 import { getMemberProfile, updateMemberAppearance } from '../db/member-queries.js';
 import { isAppearance } from '../types/user.js';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
-import { MAX_SELECTION_SIZE } from '../services/selection-service.js';
+import { SelectionService } from '../services/selection-service.js';
 import { MemberAccountService } from '../services/member-account-service.js';
 import { SessionService } from '../services/session-service.js';
 
@@ -27,7 +27,15 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
             throw new ForbiddenError('This endpoint is for member accounts');
         }
 
-        const profile = await getMemberProfile(req.app.get('db'), req.user!.id);
+        const db = req.app.get('db');
+        // The usage is derived on every request from the Subscription (ADR
+        // 0011 D1), never from the token: `selectionCount` counts active
+        // choices against `selectionLimit`, the Entitlement quota. Independent
+        // of the profile read, so both run concurrently.
+        const [profile, usage] = await Promise.all([
+            getMemberProfile(db, req.user!.id),
+            new SelectionService(db).usage(req.user!.id),
+        ]);
         if (!profile) {
             throw new NotFoundError('User not found');
         }
@@ -43,8 +51,12 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
                     status: profile.status,
                     email_verified: profile.email_verified_at !== null,
                     appearance: profile.appearance,
-                    selectionCount: profile.selection_count,
-                    selectionLimit: MAX_SELECTION_SIZE,
+                    offer: usage.offer,
+                    selectionCount: usage.activeCount,
+                    selectionLimit: usage.selectionQuota,
+                    rememberedCount: usage.rememberedCount,
+                    choiceLimit: usage.choiceLimit,
+                    selectionOverQuota: usage.overQuota,
                     created_at: profile.created_at,
                 },
             },

@@ -114,6 +114,7 @@ describe('System Queries', () => {
             { version: '007_theater_submissions.sql' },
             { version: '008_member_admin_permissions.sql' },
             { version: '009_scrape_report_claimed_at.sql' },
+            { version: '010_selection_entitlement.sql' },
           ],
         }),
       } as unknown as DB;
@@ -147,6 +148,7 @@ describe('System Queries', () => {
         { version: '007_theater_submissions.sql', status: 'pending' },
         { version: '008_member_admin_permissions.sql', status: 'pending' },
         { version: '009_scrape_report_claimed_at.sql', status: 'pending' },
+        { version: '010_selection_entitlement.sql', status: 'pending' },
       ]);
     });
 
@@ -184,6 +186,7 @@ describe('System Queries', () => {
         { version: '007_theater_submissions.sql', status: 'pending' },
         { version: '008_member_admin_permissions.sql', status: 'pending' },
         { version: '009_scrape_report_claimed_at.sql', status: 'pending' },
+        { version: '010_selection_entitlement.sql', status: 'pending' },
       ]);
     });
   });

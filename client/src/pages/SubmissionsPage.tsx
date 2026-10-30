@@ -8,11 +8,13 @@ import {
   getMemberProfile,
   getMemberSubmissions,
   submitTheater,
+  type MemberProfile,
   type MemberSubmission,
 } from '../api/me.js';
 import { MEMBER_SUBMISSIONS_QUERY_KEY, ME_QUERY_KEY } from '../api/query-keys.js';
 import { AuthContext } from '../contexts/AuthContext.js';
 import { ErrorMessage, LoadingSpinner } from '../components/ui/PageStates.js';
+import { invalidateMemberSelection, isSelectionConflict, selectionConflictMessage } from '../utils/selection.js';
 
 /** Items per "Voir plus" page. */
 export const SUBMISSIONS_PAGE_SIZE = 20;
@@ -31,7 +33,10 @@ const PENDING_LABEL_TICK_MS = 60_000;
  * French Member-facing copy for a failed "Réessayer" call. Server messages are
  * English, so they are never shown as-is.
  */
-function retryErrorMessage(error: Error): string {
+function retryErrorMessage(error: Error, profile: MemberProfile | undefined): string {
+  // A retry whose Theater is already active degrades to a Selection add,
+  // which can hit the quota: that 409 is not "already being added".
+  if (isSelectionConflict(error)) return selectionConflictMessage(error, profile);
   if (error instanceof ApiError) {
     if (error.status === 429) return 'Vous avez atteint la limite de propositions. Réessayez plus tard.';
     if (error.status === 409) return 'Ce cinéma est déjà en cours d’ajout.';
@@ -193,9 +198,9 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
 
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: MEMBER_SUBMISSIONS_QUERY_KEY }),
-    queryClient.invalidateQueries({ queryKey: ['selection'] }),
-    queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
+    invalidateMemberSelection(queryClient),
   ]);
+  const profile = () => queryClient.getQueryData<MemberProfile>(ME_QUERY_KEY);
 
   const addMutation = useMutation({
     mutationFn: () => addToSelection(theater.id),
@@ -203,10 +208,14 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
       setActionError(null);
       await refresh();
     },
-    onError: (error: Error) => {
-      setActionError(error instanceof ApiError && error.status === 409
-        ? 'Votre Sélection est pleine : retirez un cinéma avant d’ajouter celui-ci.'
-        : 'Impossible d’ajouter ce cinéma à votre Sélection.');
+    onError: async (error: Error) => {
+      if (isSelectionConflict(error)) {
+        // The server's usage beats a stale count: explain the limit, then reload.
+        setActionError(selectionConflictMessage(error, profile()));
+        await refresh();
+        return;
+      }
+      setActionError('Impossible d’ajouter ce cinéma à votre Sélection.');
     },
   });
 
@@ -216,7 +225,10 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
       setActionError(null);
       await refresh();
     },
-    onError: (error: Error) => setActionError(retryErrorMessage(error)),
+    onError: async (error: Error) => {
+      setActionError(retryErrorMessage(error, profile()));
+      if (isSelectionConflict(error)) await refresh();
+    },
   });
 
   return (
@@ -252,7 +264,9 @@ function SubmissionRow({ submission }: { submission: MemberSubmission }) {
             className="shrink-0 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-black transition hover:bg-yellow-500 disabled:opacity-50"
             data-testid="submission-add"
           >
-            {addMutation.isPending ? 'Ajout…' : 'Ajouter à ma Sélection'}
+            {addMutation.isPending
+              ? 'Ajout…'
+              : submission.remembered ? 'Réactiver dans ma Sélection' : 'Ajouter à ma Sélection'}
           </button>
         )}
         {canRetry && (
@@ -278,8 +292,10 @@ function SubmissionStateLabel({ submission }: { submission: MemberSubmission }) 
   if (submission.status === 'pending') return <PendingSince createdAt={submission.created_at} />;
   // An active Theater is in the catalog whatever this Member's last attempt did.
   if (submission.theater.status === 'active') {
-    return submission.in_selection
-      ? <span className="text-green-700">Ajouté à votre Sélection</span>
+    if (submission.in_selection) return <span className="text-green-700">Ajouté à votre Sélection</span>;
+    // A remembered choice is stored but excluded from the Homepage (ADR 0011 D2).
+    return submission.remembered
+      ? <span className="text-gray-700">Mémorisé : gardé dans vos choix, absent de votre page d’accueil</span>
       : <span className="text-gray-700">Ajouté au catalogue, pas dans votre Sélection</span>;
   }
   return <span className="text-red-700">Échec : {submission.reason ?? 'la soumission a échoué.'}</span>;

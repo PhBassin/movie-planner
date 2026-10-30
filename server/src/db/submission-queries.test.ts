@@ -90,11 +90,12 @@ describe('Submission queries', () => {
       theater_name: 'UGC',
       theater_city: null,
       in_selection: true,
+      remembered: false,
     };
     const db = { query: vi.fn().mockResolvedValue({ rows: [row] }) } as unknown as DB;
 
     const { total: _total, ...expected } = row;
-    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 })).resolves.toEqual({
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 }, { rememberedCountsAsActive: false })).resolves.toEqual({
       rows: [expected],
       total: 3,
     });
@@ -106,18 +107,21 @@ describe('Submission queries', () => {
     expect(sql).toContain('COUNT(*)::int AS total FROM latest');
     expect(sql).toContain('ms.member_id = $1');
     expect(sql).toContain('LIMIT $2 OFFSET $3');
-    expect(params).toEqual([7, 20, 40]);
+    // A remembered choice is not "in the Selection" (ADR 0011 D6).
+    expect(sql).toContain('(ms.theater_id IS NOT NULL AND (ms.active OR $4::boolean)) AS in_selection');
+    expect(sql).toContain('(ms.theater_id IS NOT NULL AND NOT (ms.active OR $4::boolean)) AS remembered');
+    expect(params).toEqual([7, 20, 40, false]);
   });
 
   it('keeps the total when the page is past the end', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ total: 4, id: null }] }) } as unknown as DB;
 
-    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 })).resolves.toEqual({ rows: [], total: 4 });
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 40 }, { rememberedCountsAsActive: false })).resolves.toEqual({ rows: [], total: 4 });
   });
 
   it('defaults the total to zero', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as DB;
 
-    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 0 })).resolves.toEqual({ rows: [], total: 0 });
+    await expect(listMemberSubmissionsByTheater(db, 7, { limit: 20, offset: 0 }, { rememberedCountsAsActive: false })).resolves.toEqual({ rows: [], total: 0 });
   });
 });

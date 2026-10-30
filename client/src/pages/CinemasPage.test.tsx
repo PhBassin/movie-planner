@@ -51,8 +51,9 @@ function renderPage(user: User | null = null) {
   const auth = user
     ? { ...visitorAuth, isAuthenticated: true, user }
     : visitorAuth;
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={auth}>
         <MemoryRouter>
@@ -61,6 +62,7 @@ function renderPage(user: User | null = null) {
       </AuthContext.Provider>
     </QueryClientProvider>,
   );
+  return { ...view, invalidateSpy };
 }
 
 describe('CinemasPage', () => {
@@ -77,6 +79,10 @@ describe('CinemasPage', () => {
       appearance: 'light',
       selectionCount: 0,
       selectionLimit: 50,
+      offer: null,
+      rememberedCount: 0,
+      choiceLimit: 50,
+      selectionOverQuota: false,
       created_at: '2026-01-01T00:00:00Z',
     });
     vi.mocked(memberApi.getSelection).mockResolvedValue([]);
@@ -102,7 +108,7 @@ describe('CinemasPage', () => {
       selected = true;
       return catalog[0];
     });
-    vi.mocked(memberApi.getSelection).mockImplementation(async () => (selected ? [catalog[0]] : []));
+    vi.mocked(memberApi.getSelection).mockImplementation(async () => (selected ? [{ ...catalog[0], active: true }] : []));
     vi.mocked(memberApi.getMemberProfile).mockImplementation(async () => ({
       id: 7,
       email: 'member@example.com',
@@ -113,16 +119,22 @@ describe('CinemasPage', () => {
       appearance: 'light',
       selectionCount: selected ? 1 : 0,
       selectionLimit: 50,
+      offer: null,
+      rememberedCount: 0,
+      choiceLimit: 50,
+      selectionOverQuota: false,
       created_at: '2026-01-01T00:00:00Z',
     }));
 
-    renderPage(member);
+    const { invalidateSpy } = renderPage(member);
     await screen.findByText('UGC Opéra');
     fireEvent.click(screen.getByTestId('add-selection-C0001'));
 
     await waitFor(() => expect(memberApi.addToSelection).toHaveBeenCalledWith('C0001', expect.anything()));
     expect(await screen.findByTestId('selected-C0001')).toBeInTheDocument();
-    expect(screen.getByText('1 / 50')).toBeInTheDocument();
+    expect(screen.getByTestId('selection-usage')).toHaveTextContent('1 / 50 actifs');
+    // The Homepage projection (and its cached `overQuota`) is reloaded too.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
   });
 
   it('disables adds proactively when the Selection is full', async () => {
@@ -136,6 +148,10 @@ describe('CinemasPage', () => {
       appearance: 'light',
       selectionCount: 50,
       selectionLimit: 50,
+      offer: null,
+      rememberedCount: 0,
+      choiceLimit: 50,
+      selectionOverQuota: false,
       created_at: '2026-01-01T00:00:00Z',
     });
 
@@ -143,20 +159,152 @@ describe('CinemasPage', () => {
 
     const addButton = await screen.findByTestId('add-selection-C0001');
     expect(addButton).toBeDisabled();
-    expect(screen.getByText('50 / 50')).toBeInTheDocument();
+    expect(screen.getByTestId('selection-usage')).toHaveTextContent('50 / 50 actifs');
+    // Billing disabled: no offer to explain.
+    expect(screen.queryByTestId('selection-offer')).not.toBeInTheDocument();
   });
 
   it('shows a 409 notice and refreshes the profile after a stale count', async () => {
     vi.mocked(memberApi.addToSelection).mockRejectedValue(
-      new ApiError('Selection contains 50 theaters; maximum is 50', 409),
+      new ApiError('Selection contains 50 active theaters; maximum is 50', 409, {
+        details: [{ reason: 'quota_reached', usage: { offer: null, selectionQuota: 50, choiceLimit: 50 } }],
+      }),
     );
 
     renderPage(member);
     await screen.findByText('UGC Opéra');
     fireEvent.click(screen.getByTestId('add-selection-C0001'));
 
-    expect(await screen.findByTestId('selection-toast')).toHaveTextContent('Selection contains 50 theaters');
+    expect(await screen.findByTestId('selection-toast')).toHaveTextContent('Votre Selection est pleine (50 cinémas actifs).');
     await waitFor(() => expect(memberApi.getMemberProfile).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(memberApi.getSelection).toHaveBeenCalledTimes(2));
+  });
+
+  describe('freemium quotas (ADR 0011)', () => {
+    const freeProfile = (overrides: Partial<memberApi.MemberProfile> = {}): memberApi.MemberProfile => ({
+      id: 7,
+      email: 'member@example.com',
+      username: 'member@example.com',
+      role_name: 'member',
+      status: 'active',
+      email_verified: true,
+      appearance: 'light',
+      offer: 'free',
+      selectionCount: 0,
+      selectionLimit: 3,
+      rememberedCount: 0,
+      choiceLimit: 50,
+      selectionOverQuota: false,
+      created_at: '2026-01-01T00:00:00Z',
+      ...overrides,
+    });
+
+    it('explains the free offer and disables new adds at the 3-theater quota', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ selectionCount: 3 }));
+
+      renderPage(member);
+
+      const addButton = await screen.findByTestId('add-selection-C0001');
+      expect(addButton).toBeDisabled();
+      expect(addButton).toHaveAttribute('title', 'Selection pleine (3 / 3 actifs)');
+      expect(screen.getByTestId('selection-usage')).toHaveTextContent('3 / 3 actifs');
+      expect(screen.getByTestId('selection-offer')).toHaveTextContent('Offre gratuite : 3 cinémas actifs. Premium : jusqu’à 50.');
+    });
+
+    it('shows the premium quota', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ offer: 'premium', selectionCount: 4, selectionLimit: 50 }));
+
+      renderPage(member);
+
+      expect(await screen.findByTestId('selection-offer')).toHaveTextContent('Premium : jusqu’à 50 cinémas actifs.');
+      expect(screen.getByTestId('add-selection-C0001')).toBeEnabled();
+    });
+
+    it('marks a remembered choice and reactivates it below quota', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ selectionCount: 1, rememberedCount: 1 }));
+      vi.mocked(memberApi.getSelection).mockResolvedValue([
+        { ...catalog[0], active: true },
+        { ...catalog[1], active: false },
+      ]);
+      vi.mocked(memberApi.addToSelection).mockResolvedValue(catalog[1]);
+
+      renderPage(member);
+
+      expect(await screen.findByTestId('remembered-C0002')).toHaveTextContent('Mémorisé');
+      expect(screen.getByTestId('selected-C0001')).toBeInTheDocument();
+      expect(screen.getByTestId('selection-remembered')).toHaveTextContent('+ 1 mémorisé');
+      expect(screen.getByTestId('remove-selection-C0002')).toBeInTheDocument();
+      const reactivate = screen.getByTestId('add-selection-C0002');
+      expect(reactivate).toHaveTextContent('Réactiver');
+      fireEvent.click(reactivate);
+      await waitFor(() => expect(memberApi.addToSelection).toHaveBeenCalledWith('C0002', expect.anything()));
+    });
+
+    it('cannot reactivate a remembered choice at quota', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ selectionCount: 3, rememberedCount: 1 }));
+      vi.mocked(memberApi.getSelection).mockResolvedValue([{ ...catalog[1], active: false }]);
+
+      renderPage(member);
+
+      expect(await screen.findByTestId('add-selection-C0002')).toBeDisabled();
+    });
+
+    it('blocks new choices at 50 stored choices but still allows reactivation', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ selectionCount: 2, rememberedCount: 48 }));
+      vi.mocked(memberApi.getSelection).mockResolvedValue([{ ...catalog[1], active: false }]);
+
+      renderPage(member);
+
+      const add = await screen.findByTestId('add-selection-C0001');
+      expect(add).toBeDisabled();
+      expect(add).toHaveAttribute('title', '50 cinémas déjà enregistrés');
+      expect(screen.getByTestId('add-selection-C0002')).toBeEnabled();
+    });
+
+    it('explains the free quota from the 409 details when the browser count was stale', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ offer: 'premium', selectionCount: 3, selectionLimit: 50 }));
+      vi.mocked(memberApi.addToSelection).mockRejectedValue(
+        new ApiError('Free offer allows 3 active theaters; premium allows up to 50', 409, {
+          success: false,
+          error: 'Free offer allows 3 active theaters; premium allows up to 50',
+          details: [{ reason: 'quota_reached', usage: { offer: 'free', selectionQuota: 3, choiceLimit: 50 } }],
+        }),
+      );
+
+      renderPage(member);
+      fireEvent.click(await screen.findByTestId('add-selection-C0001'));
+
+      expect(await screen.findByTestId('selection-toast')).toHaveTextContent(
+        'L’offre gratuite permet 3 cinémas actifs. Premium permet d’en suivre jusqu’à 50.',
+      );
+      await waitFor(() => expect(memberApi.getMemberProfile).toHaveBeenCalledTimes(2));
+    });
+
+    it('explains the 50-choice bound from the 409 details', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ selectionCount: 1 }));
+      vi.mocked(memberApi.addToSelection).mockRejectedValue(
+        new ApiError('Selection holds 50 choices', 409, {
+          details: [{ reason: 'choices_full', usage: { offer: 'free', selectionQuota: 3, choiceLimit: 50 } }],
+        }),
+      );
+
+      renderPage(member);
+      fireEvent.click(await screen.findByTestId('add-selection-C0001'));
+
+      expect(await screen.findByTestId('selection-toast')).toHaveTextContent(
+        'Vous avez déjà 50 cinémas enregistrés. Retirez un cinéma mémorisé pour en ajouter un autre.',
+      );
+    });
+
+    it('tells an over-quota Member how to get the Homepage back', async () => {
+      vi.mocked(memberApi.getMemberProfile).mockResolvedValue(freeProfile({ selectionCount: 5, selectionOverQuota: true }));
+
+      renderPage(member);
+
+      expect(await screen.findByTestId('selection-over-quota')).toHaveTextContent(
+        'Votre Selection compte 5 cinémas actifs, votre offre en permet 3.',
+      );
+    });
   });
 
   it('hides the submission form from Visitors', async () => {
@@ -206,6 +354,28 @@ describe('CinemasPage', () => {
     fireEvent.click(screen.getByTestId('submission-submit'));
 
     expect(await screen.findByTestId('selection-toast')).toHaveTextContent('déjà dans le catalogue');
+  });
+
+  it('explains a quota 409 on the dedup add in French and reloads the usage and Homepage projection', async () => {
+    vi.mocked(memberApi.submitTheater).mockRejectedValue(
+      new ApiError('Free offer allows 3 active theaters; premium allows up to 50', 409, {
+        details: [{ reason: 'quota_reached', usage: { offer: 'free', selectionQuota: 3, choiceLimit: 50 } }],
+      }),
+    );
+
+    const { invalidateSpy } = renderPage(member);
+    await screen.findByText('UGC Opéra');
+
+    fireEvent.change(screen.getByTestId('submission-url'), {
+      target: { value: 'https://www.allocine.fr/seance/salle_gen_csalle=C0001.html' },
+    });
+    fireEvent.click(screen.getByTestId('submission-submit'));
+
+    const toast = await screen.findByTestId('selection-toast');
+    expect(toast).toHaveTextContent('L’offre gratuite permet 3 cinémas actifs. Premium permet d’en suivre jusqu’à 50.');
+    expect(toast).not.toHaveTextContent('Free offer');
+    await waitFor(() => expect(memberApi.getMemberProfile).toHaveBeenCalledTimes(2));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['selection-movies'] });
   });
 
   it('surfaces submission rejections (throttle, unverified) in the toast', async () => {

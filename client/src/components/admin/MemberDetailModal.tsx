@@ -1,6 +1,7 @@
 import React from 'react';
 import type { MemberAdminView } from '../../api/members';
 import MemberStatusBadge from './MemberStatusBadge';
+import MemberSelectionCount from './MemberSelectionCount';
 import Button from '../ui/Button';
 
 interface MemberDetailModalProps {
@@ -77,7 +78,7 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             <DetailRow label="Email verified">
               {member.email_verified_at ? formatDate(member.email_verified_at) : 'Not verified'}
             </DetailRow>
-            <DetailRow label="Selection (cinemas)">{member.selection_count}</DetailRow>
+            <DetailRow label="Selection (cinemas)"><MemberSelectionCount member={member} /></DetailRow>
             <DetailRow label="Submissions">{member.submission_count}</DetailRow>
             <DetailRow label="Appearance">{member.appearance === 'dark' ? 'Dark' : 'Light'}</DetailRow>
             <DetailRow label="Member since">{formatDate(member.created_at)}</DetailRow>
