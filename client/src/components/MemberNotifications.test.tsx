@@ -2,7 +2,8 @@ import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MemberNotifications, { noticeToToast, useMemberNotifications } from './MemberNotifications.js';
+import MemberNotifications from './MemberNotifications.js';
+import { noticeToToast, useMemberNotifications } from '../hooks/useMemberNotifications.js';
 import { AuthContext, type User } from '../contexts/AuthContext.js';
 import * as memberApi from '../api/me.js';
 import type { MemberNotice } from '../types/index.js';

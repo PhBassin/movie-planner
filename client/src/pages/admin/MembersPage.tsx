@@ -38,7 +38,10 @@ const MembersPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Modal/dialog states
-  const [memberToView, setMemberToView] = useState<MemberAdminView | null>(null);
+  // Track the open detail modal by id so it always shows the freshest row
+  // (and closes if that Member disappears from the page after a refetch).
+  const [memberToViewId, setMemberToViewId] = useState<number | null>(null);
+  const memberToView = memberToViewId === null ? null : members.find((m) => m.id === memberToViewId) ?? null;
   const [memberToSuspend, setMemberToSuspend] = useState<MemberAdminView | null>(null);
   const [memberToDelete, setMemberToDelete] = useState<MemberAdminView | null>(null);
   const [isSwitchingStatus, setIsSwitchingStatus] = useState(false);
@@ -69,15 +72,9 @@ const MembersPage: React.FC = () => {
   }, [offset]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the fetcher sets its own loading state (candidate for react-query)
     fetchMembers();
   }, [fetchMembers]);
-
-  // After the list refetch, sync the open detail modal with the fresh rows
-  useEffect(() => {
-    setMemberToView((current) =>
-      current ? members.find((m) => m.id === current.id) ?? null : current,
-    );
-  }, [members]);
 
   const handleSuspend = async (memberId: number) => {
     try {
@@ -113,7 +110,7 @@ const MembersPage: React.FC = () => {
       setDeleteError(null);
       await deleteMemberApi(memberId);
       setMemberToDelete(null);
-      setMemberToView(null);
+      setMemberToViewId(null);
       await fetchMembers();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete member');
@@ -224,7 +221,7 @@ const MembersPage: React.FC = () => {
                       <LinkButton
                         onClick={() => {
                           setReinstateError(null);
-                          setMemberToView(member);
+                          setMemberToViewId(member.id);
                         }}
                         data-testid={`view-member-${member.id}`}
                       >
@@ -299,17 +296,17 @@ const MembersPage: React.FC = () => {
         <MemberDetailModal
           member={memberToView}
           onClose={() => {
-            setMemberToView(null);
+            setMemberToViewId(null);
             setReinstateError(null);
           }}
           onSuspend={(member) => {
             setMemberToSuspend(member);
-            setMemberToView(null);
+            setMemberToViewId(null);
           }}
           onReinstate={handleReinstate}
           onDelete={(member) => {
             setMemberToDelete(member);
-            setMemberToView(null);
+            setMemberToViewId(null);
           }}
           canUpdate={canUpdate}
           canDelete={canDelete}

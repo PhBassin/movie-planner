@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import SubmissionsPage, { pendingSinceLabel, SUBMISSIONS_PAGE_SIZE } from './SubmissionsPage.js';
+import SubmissionsPage from './SubmissionsPage.js';
+import { pendingSinceLabel, SUBMISSIONS_PAGE_SIZE } from '../utils/submissions.js';
 import { AuthContext, type User } from '../contexts/AuthContext.js';
 import * as memberApi from '../api/me.js';
 import * as authApi from '../api/auth.js';

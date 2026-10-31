@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useMovieQuery } from './useMovieQuery.js';
 import * as clientApi from '../api/client.js';
+import type { MovieWithShowtimes } from '../types/index.js';
 
 vi.mock('../api/client', () => ({
   getMovieById: vi.fn(),
@@ -51,7 +52,7 @@ describe('useMovieQuery', () => {
       source_url: 'https://example.com',
       theaters: [],
     };
-    vi.mocked(clientApi.getMovieById).mockResolvedValue(movie as any);
+    vi.mocked(clientApi.getMovieById).mockResolvedValue(movie as MovieWithShowtimes);
 
     const { result } = renderHook(() => useMovieQuery('1'), {
       wrapper: createWrapper(),

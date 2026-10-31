@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import MoviePage from './MoviePage';
 import * as clientApi from '../api/client';
+import type { MovieWithShowtimes } from '../types';
 
 vi.mock('../api/client', () => ({
   getMovieById: vi.fn(),
@@ -41,7 +42,7 @@ describe('MoviePage', () => {
       source_url: 'https://example.com/film/1',
       trailer_url: 'https://www.allocine.fr/video/player_gen_cmedia=1&cfilm=1.html',
       theaters: [],
-    } as any);
+    } as MovieWithShowtimes);
 
     renderPage('/movie/1');
 
@@ -60,7 +61,7 @@ describe('MoviePage', () => {
       actors: ['Acteur Test'],
       source_url: 'https://example.com/film/1',
       theaters: [],
-    } as any);
+    } as MovieWithShowtimes);
 
     renderPage('/movie/1');
 

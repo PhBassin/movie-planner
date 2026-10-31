@@ -36,9 +36,7 @@ export async function getUsers(params?: {
   limit?: number;
   offset?: number
 }): Promise<UserPublic[]> {
-  const response = await apiClient.get<ApiResponse<UserPublic[]>>('/users', {
-    ...params as any,
-  });
+  const response = await apiClient.get<ApiResponse<UserPublic[]>>('/users', { ...params });
 
   if (!response.success || !response.data) {
     throw new Error(response.error || 'Failed to fetch users');

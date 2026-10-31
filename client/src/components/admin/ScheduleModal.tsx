@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { ScrapeSchedule } from '../../types/index.js';
 import {
   parseCronToSimple,
@@ -52,68 +52,60 @@ function cronPartsToState(parts: CronParts): SimpleScheduleState {
   };
 }
 
-function useSimpleSchedule(initialCron?: string) {
-  const [state, setState] = useState<SimpleScheduleState>(DEFAULT_SIMPLE_STATE);
+function simpleStateFromCron(cron: string): SimpleScheduleState {
+  const parsed = parseCronToSimple(cron);
+  return parsed ? cronPartsToState(parsed) : DEFAULT_SIMPLE_STATE;
+}
+
+function useSimpleSchedule(initialCron: string) {
+  const [state, setState] = useState<SimpleScheduleState>(() => simpleStateFromCron(initialCron));
 
   const syncFromCron = useCallback((cron: string) => {
-    const parsed = parseCronToSimple(cron);
-    setState(parsed ? cronPartsToState(parsed) : DEFAULT_SIMPLE_STATE);
+    setState(simpleStateFromCron(cron));
   }, []);
-
-  useEffect(() => {
-    if (initialCron !== undefined) syncFromCron(initialCron);
-  }, [initialCron, syncFromCron]);
 
   const cron = useMemo(() => buildCron(state.frequency, state.hour, state.minute, state.weekdays, state.monthDay), [state]);
 
   return { state, setState, cron, syncFromCron };
 }
 
-const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, onSave, schedule }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [cronExpression, setCronExpression] = useState('0 3 * * 3');
-  const [enabled, setEnabled] = useState(true);
+const DEFAULT_CRON = '0 3 * * 3';
+
+/**
+ * The form is remounted on every open (and per schedule) so its state is
+ * initialised from props instead of being reset by an effect.
+ */
+const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, ...props }) =>
+  isOpen ? <ScheduleModalContent key={props.schedule?.id ?? 'new'} {...props} /> : null;
+
+const ScheduleModalContent: React.FC<Omit<ScheduleModalProps, 'isOpen'>> = ({ onClose, onSave, schedule }) => {
+  const [name, setName] = useState(schedule?.name ?? '');
+  const [description, setDescription] = useState(schedule?.description || '');
+  // Only edited directly in advanced mode; simple mode derives it from `simple.cron`.
+  const [advancedCron, setAdvancedCron] = useState(schedule?.cron_expression ?? DEFAULT_CRON);
+  const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
   const [errors, setErrors] = useState<{ name?: string; cron?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
 
-  const simple = useSimpleSchedule();
+  const simple = useSimpleSchedule(schedule?.cron_expression ?? DEFAULT_CRON);
+  const cronExpression = mode === 'simple' ? simple.cron : advancedCron;
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (schedule) {
-      setName(schedule.name);
-      setDescription(schedule.description || '');
-      setCronExpression(schedule.cron_expression);
-      setEnabled(schedule.enabled);
-      simple.syncFromCron(schedule.cron_expression);
-    } else {
-      setName('');
-      setDescription('');
-      setCronExpression('0 3 * * 3');
-      setEnabled(true);
-      simple.syncFromCron('0 3 * * 3');
-    }
-    setErrors({});
-    setSubmitError(null);
-    setMode('simple');
-  }, [schedule, isOpen]);
-
-  useEffect(() => {
-    if (mode === 'simple') setCronExpression(simple.cron);
-  }, [simple.cron, mode]);
+  const handleModeChange = (next: 'simple' | 'advanced') => {
+    // Advanced mode starts from the expression the simple editor was showing.
+    if (mode === 'simple' && next === 'advanced') setAdvancedCron(simple.cron);
+    setMode(next);
+  };
 
   const handlePresetClick = (cron: string) => {
-    setCronExpression(cron);
+    setAdvancedCron(cron);
     simple.syncFromCron(cron);
     setMode('simple');
   };
 
   const handleCronChange = (value: string) => {
-    setCronExpression(value);
-    if (mode === 'simple') simple.syncFromCron(value);
+    setAdvancedCron(value);
   };
 
   const toggleWeekday = (day: number) => {
@@ -121,8 +113,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, onSave, 
     const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort();
     simple.setState({ ...simple.state, weekdays: next });
   };
-
-  if (!isOpen) return null;
 
   const handleClose = () => {
     if (isSubmitting) return;
@@ -173,7 +163,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, onSave, 
 
             <ScheduleEditor
               mode={mode}
-              onChangeMode={setMode}
+              onChangeMode={handleModeChange}
               cronExpression={cronExpression}
               onCronChange={handleCronChange}
               simple={simple.state}
