@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { TheaterCreate } from '../../../api/theaters';
 import { validateSmartUrl, type SmartFormErrors } from './validation.js';
-import { FormActions, inputClass } from './FormActions.js';
+import { FormActions } from './FormActions.js';
+import { inputClass } from './inputClass.js';
 
 interface SmartAddFormProps {
   isSubmitting: boolean;

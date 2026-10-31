@@ -44,7 +44,7 @@ export default function ScrapeButton({
 
       // Reset success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err && typeof err === 'object' && ('status' in err || 'data' in err)) {
         const apiError = err as import('../api/client').ApiError;
         if (apiError.status === 409) {

@@ -108,8 +108,6 @@ export function useReportsData(): UseReportsDataResult {
       detailsQuery.isLoading,
       isLoading,
       errorMessage,
-      resumeMutation.isPending,
-      resumeMutation.error,
       resumeMutation,
       setSearchParams,
       showDetails,

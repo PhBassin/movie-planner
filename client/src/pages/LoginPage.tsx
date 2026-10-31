@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { AuthContext } from '../contexts/AuthContext';
+import { AuthContext, type User } from '../contexts/AuthContext';
+import type { ApiResponse } from '../types';
 import apiClient from '../api/client';
 import { NO_SESSION } from '../api/auth';
 
@@ -31,9 +32,9 @@ const LoginPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const response = await apiClient.post<any>('/auth/login', { username, password }, NO_SESSION);
+            const response = await apiClient.post<ApiResponse<{ user: User }>>('/auth/login', { username, password }, NO_SESSION);
 
-            if (response.success) {
+            if (response.success && response.data) {
                 // API returns { success: true, data: { token, user } }
                 const { user } = response.data;
                 login(user);

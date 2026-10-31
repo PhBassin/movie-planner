@@ -32,6 +32,7 @@ const SchedulesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the fetcher sets its own loading state (candidate for react-query)
     fetchSchedules();
   }, [fetchSchedules]);
 

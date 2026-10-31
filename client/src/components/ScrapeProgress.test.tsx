@@ -17,7 +17,7 @@ const completedSummary = {
   total_showtimes: 10,
   total_dates: 7,
   duration_ms: 5000,
-  errors: [] as any[],
+  errors: [],
 };
 
 function renderWithState(mockUseScrapeProgress: ReturnType<typeof vi.fn>, state: ProgressState) {

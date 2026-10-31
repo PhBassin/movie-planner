@@ -10,7 +10,8 @@ interface ShowtimeListProps {
 
 function ShowtimeList({ showtimes, movie, theater }: ShowtimeListProps) {
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  // The open popover's anchor, captured on click so render never reads a ref.
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
 
   const versionEntries = useMemo(() => {
     const byVersion = showtimes.reduce((acc, showtime) => {
@@ -27,7 +28,8 @@ function ShowtimeList({ showtimes, movie, theater }: ShowtimeListProps) {
     return Object.entries(byVersion);
   }, [showtimes]);
 
-  const handleToggle = useCallback((key: string) => {
+  const handleToggle = useCallback((key: string, anchor: HTMLButtonElement) => {
+    anchorRef.current = anchor;
     setOpenKey(prev => (prev === key ? null : key));
   }, []);
 
@@ -50,17 +52,12 @@ function ShowtimeList({ showtimes, movie, theater }: ShowtimeListProps) {
             {versionShowtimes.map((showtime) => {
               const key = `${version}-${showtime.time}-${showtime.id}`;
               const isOpen = openKey === key;
-              const anchorRef = { current: buttonRefs.current.get(key) ?? null };
 
               return (
                 <div key={key} className="relative">
                   <button
                     type="button"
-                    ref={(el) => {
-                      if (el) buttonRefs.current.set(key, el);
-                      else buttonRefs.current.delete(key);
-                    }}
-                    onClick={() => handleToggle(key)}
+                    onClick={(e) => handleToggle(key, e.currentTarget)}
                     aria-haspopup="menu"
                     aria-expanded={isOpen}
                     className={`px-3 py-1 rounded text-sm font-medium transition active:scale-95 cursor-pointer ${

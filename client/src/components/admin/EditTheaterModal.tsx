@@ -28,9 +28,11 @@ interface EditTheaterModalProps {
   onSave: (id: string, updates: TheaterUpdate) => Promise<void>;
 }
 
-const EditTheaterModal: React.FC<EditTheaterModalProps> = ({ isOpen, theater, onClose, onSave }) => {
-  if (!isOpen) return null;
+const EditTheaterModal: React.FC<EditTheaterModalProps> = ({ isOpen, ...props }) =>
+  isOpen ? <EditTheaterModalContent {...props} /> : null;
 
+// Split out so the form hook is never called conditionally (rules-of-hooks).
+const EditTheaterModalContent: React.FC<Omit<EditTheaterModalProps, 'isOpen'>> = ({ theater, onClose, onSave }) => {
   const {
     name, setName,
     url, setUrl,

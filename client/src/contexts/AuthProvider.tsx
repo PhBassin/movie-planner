@@ -11,7 +11,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const savedUser = localStorage.getItem('user');
         return savedUser ? JSON.parse(savedUser) : null;
     });
-    const [sessionChecked, setSessionChecked] = useState(false);
+    // Nothing to validate without a stored user: the session is known to be absent.
+    const [sessionChecked, setSessionChecked] = useState(() => user === null);
 
     useEffect(() => {
         localStorage.removeItem('token');
@@ -49,10 +50,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 }
             }
         }
-        if (user) {
+        // Mount-time check of the stored user (same source as the `user` initialiser).
+        if (localStorage.getItem('user') !== null) {
             validateSession();
-        } else {
-            setSessionChecked(true);
         }
         return () => { cancelled = true; };
     }, []);

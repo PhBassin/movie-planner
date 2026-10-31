@@ -70,7 +70,7 @@ describe('MovieCard', () => {
   });
 
   it('toggles the schedule view on button click', () => {
-    renderCard(makeMovie({ theaters: [{ id: 't1', name: 'Cinéma A', showtimes: [] }] as any }));
+    renderCard(makeMovie({ theaters: [{ id: 't1', name: 'Cinéma A', showtimes: [] }] as MovieWithShowtimes['theaters'] }));
 
     expect(screen.queryByTestId('theater-showtimes-mock')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Voir les horaires/i }));

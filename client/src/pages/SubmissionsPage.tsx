@@ -15,16 +15,7 @@ import { MEMBER_SUBMISSIONS_QUERY_KEY, ME_QUERY_KEY } from '../api/query-keys.js
 import { AuthContext } from '../contexts/AuthContext.js';
 import { ErrorMessage, LoadingSpinner } from '../components/ui/PageStates.js';
 import { invalidateMemberSelection, isSelectionConflict, selectionConflictMessage } from '../utils/selection.js';
-
-/** Items per "Voir plus" page. */
-export const SUBMISSIONS_PAGE_SIZE = 20;
-
-/** "En cours depuis X min" for a pending attempt, from its `created_at`. */
-export function pendingSinceLabel(createdAt: string, now: number = Date.now()): string {
-  const minutes = Math.floor((now - new Date(createdAt).getTime()) / 60_000);
-  if (minutes < 1) return 'En cours depuis moins d’une minute';
-  return `En cours depuis ${minutes} min`;
-}
+import { pendingSinceLabel, SUBMISSIONS_PAGE_SIZE } from '../utils/submissions.js';
 
 /** How often a pending row re-renders its "En cours depuis" label (no fetch). */
 const PENDING_LABEL_TICK_MS = 60_000;

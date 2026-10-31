@@ -7,7 +7,8 @@ import ColorsTab from '../../components/admin/ColorsTab';
 import TypographyTab from '../../components/admin/TypographyTab';
 import FooterTab from '../../components/admin/FooterTab';
 import EmailTab from '../../components/admin/EmailTab';
-import { SettingsTabs, type SettingsTabId, SETTINGS_TABS } from '../../components/admin/settings/SettingsTabs';
+import { SettingsTabs } from '../../components/admin/settings/SettingsTabs';
+import { SETTINGS_TABS, type SettingsTabId } from '../../components/admin/settings/tabs';
 import { SettingsFooter } from '../../components/admin/settings/SettingsFooter';
 import { useSettingsForm } from '../../hooks/useSettingsForm';
 

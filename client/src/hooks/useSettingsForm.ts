@@ -60,10 +60,12 @@ export function useSettingsForm(): UseSettingsFormResult {
     refreshAdminSettings();
   }, [refreshAdminSettings]);
 
-  // Update form data when settings load
-  useEffect(() => {
+  // Reset the form when settings (re)load: adjusted during render rather than in an effect
+  const [loadedSettings, setLoadedSettings] = useState(adminSettings);
+  if (adminSettings !== loadedSettings) {
+    setLoadedSettings(adminSettings);
     setFormData(getInitialFormData(adminSettings));
-  }, [adminSettings]);
+  }
 
   // Auto-dismiss "success" status
   useEffect(() => {
